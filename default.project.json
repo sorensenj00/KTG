@@ -1,0 +1,77 @@
+{
+  "name": "KillToGrow",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "GameLoop": {
+        "$path": "src/ReplicatedStorage/GameLoop"
+      },
+      "Blaster": {
+        "$path": "src/ReplicatedStorage/Blaster",
+        "$ignoreUnknownInstances": true,
+        "Remotes": {
+          "$className": "Folder",
+          "Shoot": { "$className": "RemoteEvent" },
+          "Reload": { "$className": "RemoteEvent" },
+          "ReplicateShot": { "$className": "RemoteEvent" },
+          "Killfeed": { "$className": "RemoteEvent" },
+          "YeetCannonFire": { "$className": "RemoteEvent" },
+          "Killstreak": { "$className": "RemoteEvent" },
+          "DamageNumber": { "$className": "RemoteEvent" },
+          "GiantFootstep": { "$className": "RemoteEvent" },
+          "GiantFootstepShake": { "$className": "RemoteEvent" },
+          "PurchaseUpgrade": { "$className": "RemoteFunction" },
+          "UpdateMetaStats": { "$className": "RemoteEvent" }
+        }
+      },
+      "Utility": {
+        "$path": "src/ReplicatedStorage/Utility"
+      }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "GameLoop": {
+        "$path": "src/ServerScriptService/GameLoop"
+      },
+      "Blaster": {
+        "$path": "src/ServerScriptService/Blaster"
+      },
+      "Utility": {
+        "$path": "src/ServerScriptService/Utility"
+      },
+      "Admin": {
+        "$path": "src/ServerScriptService/Admin"
+      }
+    },
+
+    "StarterGui": {
+      "$className": "StarterGui",
+      
+      "OverheadUI": {
+        "$path": "src/StarterGui/OverheadUI"
+      },
+      
+      "PlayerHUD": {  
+        "$path": "src/StarterGui/PlayerHUD"
+      },
+      
+      "AdminPanel": {
+        "$path": "src/StarterGui/AdminPanel"
+      },
+      
+      "Killfeed": {
+        "$path": "src/StarterGui/Killfeed"
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$path": "src/StarterPlayer/StarterPlayerScripts"
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+# Roblox compiled files
+*.rbxl
+*.rbxlx
+
+# Test files
+test.rbxl
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
