@@ -223,7 +223,22 @@ function BotController.Start()
 		if botData[bot].LastShot and (now - botData[bot].LastShot < 0.2) then
 			return
 		end
-		botData[bot].LastShot = now
+		
+		-- === HUMANIZED AIMING: Reaction Delay ===
+		-- Bot needs time to "notice" the target before shooting
+		if botData[bot].Target ~= target then
+			-- New target detected, start reaction timer
+			botData[bot].Target = target
+			botData[bot].TargetAcquiredTime = now
+			botData[bot].MissCount = 0
+			return -- Don't shoot immediately
+		end
+		
+		-- Check if reaction time has passed (0.2-0.4 seconds)
+		local reactionTime = 0.2 + math.random() * 0.2
+		if now - (botData[bot].TargetAcquiredTime or 0) < reactionTime then
+			return -- Still reacting, don't shoot yet
+		end
 
 		-- Aim Logic: Calculate from bot's Head to target's HumanoidRootPart
 		local origin = bot.Head.Position
@@ -233,6 +248,28 @@ function BotController.Start()
 		end
 
 		local targetPos = targetRootPart.Position
+		
+		-- 1. Line of Sight Check (Prevent shooting through walls)
+		local losDirection = (targetPos - origin)
+		local losDistance = losDirection.Magnitude
+		local losParams = RaycastParams.new()
+		losParams.FilterType = Enum.RaycastFilterType.Exclude
+		losParams.FilterDescendantsInstances = {bot, target}
+		losParams.IgnoreWater = true
+		
+		local losResult = Workspace:Raycast(origin, losDirection.Unit * losDistance, losParams)
+		if losResult then
+			-- Obstructed by something that isn't the bot or the target
+			-- Increment miss count or just return
+			botData[bot].MissCount = (botData[bot].MissCount or 0) + 1
+			if botData[bot].MissCount > 10 then
+				-- Reset target if we can't see/hit it for too long
+				botData[bot].Target = nil
+				botData[bot].MissCount = 0
+			end
+			return
+		end
+
 		local botLevel = bot:GetAttribute("Level") or 1
 		local isGiant = botLevel > 20
 
@@ -265,11 +302,34 @@ function BotController.Start()
 			end
 		end
 
-		-- Add slight inaccuracy based on distance
-		local inaccuracy = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * (dist / 50)
+		-- === HUMANIZED AIMING: Dynamic Inaccuracy ===
+	-- Base spread: worse at range, better up close
+	-- INCREASED: Made 3x worse to make bots dodge-able
+	local baseSpread = math.clamp(dist / 33, 0.3, 6.0) -- 0.3 at close, 6.0 at 200+ studs
+	
+	-- Movement penalty: bot is less accurate while moving/strafing
+	-- INCREASED: Made 2x worse
+	local humanoid = bot:FindFirstChild("Humanoid")
+	local movementPenalty = 0
+	if humanoid and humanoid.MoveDirection.Magnitude > 0.1 then
+		movementPenalty = 2.0 -- Add 2.0 spread while moving (was 1.0)
+	end
+	
+	-- Total spread
+	local totalSpread = baseSpread + movementPenalty
+	
+	-- Apply random spread in 3D
+	local inaccuracy = Vector3.new(
+		(math.random() - 0.5) * 2,
+		(math.random() - 0.5) * 2,
+		(math.random() - 0.5) * 2
+	) * totalSpread
 
 		local finalDirection = (direction * dist + inaccuracy).Unit
 		local rayDir = finalDirection * 300 -- Range
+
+		-- Update last shot time
+		botData[bot].LastShot = now
 
 		-- Fire
 		local result = castRays(bot, origin, { rayDir }, 1)
@@ -282,8 +342,10 @@ function BotController.Start()
 		)
 
 		-- Damage
+		local hitSomething = false
 		for _, hit in ipairs(result) do
 			if hit.taggedHumanoid then
+				hitSomething = true
 				local baseDamage = 10
 				local victimChar = hit.taggedHumanoid.Parent
 				hit.taggedHumanoid:TakeDamage(baseDamage) -- Base damage
@@ -295,6 +357,17 @@ function BotController.Start()
 					eliminatedEvent:Fire(nil, bot, hit.taggedHumanoid.Parent, tool)
 					ProgressionManager.AddXP(bot, 50)
 				end
+			end
+		end
+		
+		if hitSomething then
+			botData[bot].MissCount = 0
+		else
+			botData[bot].MissCount = (botData[bot].MissCount or 0) + 1
+			if botData[bot].MissCount > 10 then
+				-- Reset target if we keep missing
+				botData[bot].Target = nil
+				botData[bot].MissCount = 0
 			end
 		end
 	end
@@ -398,21 +471,104 @@ function BotController.Start()
 			local ranges = getBotRanges(bot)
 			local enemy, orb = scanSurroundings(bot, root.Position, ranges.Detect)
 
+			-- === PRIORITY: Orbs over Combat ===
+			-- If there's an orb within 50 studs, prioritize it over fighting
+			if orb then
+				local orbDist = (orb.Position - root.Position).Magnitude
+				if orbDist < 50 then
+					-- ORB COLLECTION MODE: Prioritize orbs
+					hum:MoveTo(orb.Position)
+					data.NextDecision = now + 0.3
+					
+					-- Still shoot at enemies if they're VERY close (< 20 studs) while collecting orbs
+					if enemy then
+						local enemyRoot = enemy:FindFirstChild("HumanoidRootPart")
+						if enemyRoot then
+							local enemyDist = (enemyRoot.Position - root.Position).Magnitude
+							if enemyDist < 20 then
+								shootAt(bot, enemy)
+							end
+						end
+					end
+					continue
+				end
+			end
+
 			if enemy then
 				-- ATTACK STATE: Move to enemy and shoot
 				local enemyRoot = enemy:FindFirstChild("HumanoidRootPart")
 				if not enemyRoot then
 					continue
 				end
+				
+				-- === HUMANIZED BEHAVIOR: Retreat when low health ===
+				local healthPercent = hum.Health / hum.MaxHealth
+				if healthPercent < 0.3 then
+					-- Low health! Try to retreat and find cover
+					-- Move away from enemy
+					local awayFromEnemy = (root.Position - enemyRoot.Position).Unit
+					local retreatPos = root.Position + awayFromEnemy * 30
+					
+					-- Try to path to retreat position
+					hum:MoveTo(retreatPos)
+					
+					-- Still shoot while retreating (suppressive fire)
+					shootAt(bot, enemy)
+					
+					-- Force next decision soon to re-evaluate
+					data.NextDecision = now + 0.5
+					continue
+				end
 
 				-- Combat Spacing: Maintain distance from enemy
 				local toEnemy = (enemyRoot.Position - root.Position)
 				local distance = toEnemy.Magnitude
+			
+			-- Initialize strafe direction if not set
+			if not data.StrafeDirection then
+				data.StrafeDirection = math.random() > 0.5 and 1 or -1
+				data.NextStrafeChange = now + math.random(2, 4)
+			end
+			
+			-- Randomly change strafe direction every 2-4 seconds
+			if now >= data.NextStrafeChange then
+				data.StrafeDirection = -data.StrafeDirection
+				data.NextStrafeChange = now + math.random(2, 4)
+			end
 
-				if distance < 15 then
-					-- Too close, stop moving or back up slightly
-					-- Don't move closer, but still shoot
+			if distance < 15 then
+				-- CLOSE RANGE: Strafe/circle around enemy while maintaining distance
+				local forward = toEnemy.Unit
+				local right = Vector3.new(-forward.Z, 0, forward.X) -- Perpendicular vector
+				
+				-- Strafe movement: move perpendicular to enemy direction
+				-- REDUCED: Was 12, now 6 - less desync for better hit detection
+				local strafeOffset = right * (6 * data.StrafeDirection)
+				local targetPos = root.Position + strafeOffset
+				
+				-- Add slight forward/backward component randomly for more dynamic movement
+				local fbOffset = math.random(-3, 3)
+				targetPos = targetPos + forward * fbOffset
+				
+				hum:MoveTo(targetPos)
+			elseif distance < 30 then
+				-- MEDIUM RANGE: Advance while strafing
+				local forward = toEnemy.Unit
+				local right = Vector3.new(-forward.Z, 0, forward.X)
+				
+				-- Move toward enemy with some lateral movement
+				-- REDUCED: Was 8, now 5 - less desync for better hit detection
+				local strafeOffset = right * (5 * data.StrafeDirection)
+				local targetPos = enemyRoot.Position + strafeOffset
+				
+				-- Check if path is clear
+				if checkPathClear(bot, root.Position, targetPos, enemy) then
+					hum:MoveTo(targetPos)
 				else
+					-- Path blocked, just strafe
+					hum:MoveTo(root.Position + strafeOffset)
+				end
+			else
 					-- Check if path to enemy is clear
 					local pathClear = checkPathClear(bot, root.Position, enemyRoot.Position, enemy)
 
@@ -438,9 +594,8 @@ function BotController.Start()
 				-- Always try to shoot (shooting uses its own raycast that handles obstacles)
 				shootAt(bot, enemy)
 
-				-- Face target
-				root.CFrame =
-					CFrame.new(root.Position, Vector3.new(enemyRoot.Position.X, root.Position.Y, enemyRoot.Position.Z))
+				-- Note: Removed instant CFrame snap - bots now continue moving while shooting
+				-- This makes combat more dynamic and visually appealing
 
 				data.NextDecision = now + 0.1 -- Update 10 times a second during combat
 			else

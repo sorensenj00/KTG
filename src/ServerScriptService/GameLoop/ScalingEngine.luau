@@ -87,52 +87,16 @@ function ScalingEngine.ResizeCharacter(character: Model, level: number)
 	local finalMaxHealth = baseMaxHealth * healthMult
 	local finalWalkSpeed = baseWalkSpeed * speedMult
 
-	-- 2. Scale Humanoid (R15 Standard Method)
-	-- We create the NumberValues if they are missing (fixing custom bot templates)
-	local scaleValues = {
-		"BodyHeightScale",
-		"BodyWidthScale",
-		"BodyDepthScale",
-		"HeadScale",
-	}
+	-- 2. Scale Character Uniformly
+	-- We use ScaleTo which handles all parts, attachments, joints, and Humanoid properties (HipHeight) automatically.
+	-- This ensures the model is scaled uniformly without distortion.
+	character:ScaleTo(sizeMultiplier)
 
-	for _, scaleName in ipairs(scaleValues) do
-		local val = humanoid:FindFirstChild(scaleName)
-
-		if not val then
-			val = Instance.new("NumberValue")
-			val.Name = scaleName
-			val.Parent = humanoid
-		end
-
-		if val:IsA("NumberValue") then
-			val.Value = sizeMultiplier
-		end
-	end
-
-	-- 3. Apply scaled HipHeight using sanitized BaseHipHeight
-	humanoid.HipHeight = baseHipHeight * sizeMultiplier
-
-	-- 4. Stats Application
+	-- 3. Stats Application
 	humanoid.MaxHealth = finalMaxHealth
-	-- Heal up if this is their first spawn/scale (Level 1 check heuristic)
-	if humanoid.Health > finalMaxHealth or (humanoid.Health < finalMaxHealth and level <= 1) then
-		humanoid.Health = finalMaxHealth
-	end
+	-- Always heal to full on resize/level up
+	humanoid.Health = finalMaxHealth
 	humanoid.WalkSpeed = finalWalkSpeed
-
-	-- 5. Scale Tools (Visual Only)
-	for _, tool in ipairs(character:GetChildren()) do
-		if tool:IsA("Tool") then
-			local handle = tool:FindFirstChild("Handle")
-			if handle then
-				if not tool:GetAttribute("BaseSize") then
-					tool:SetAttribute("BaseSize", handle.Size)
-				end
-				handle.Size = tool:GetAttribute("BaseSize") * sizeMultiplier
-			end
-		end
-	end
 
 	-- 6. Star Mode Visuals (Titan Level)
 	if level >= ScalingConfig.MAX_LEVEL then

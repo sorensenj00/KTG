@@ -24,16 +24,7 @@ local BotSpawner = {}
 local SPAWN_COUNT = GameConfig.Performance.MaxBots
 local RESPAWN_DELAY = 3
 
--- Helper to ensure Bots folder exists in Workspace
-local function getBotsFolder()
-	local folder = Workspace:FindFirstChild("Bots")
-	if not folder then
-		folder = Instance.new("Folder")
-		folder.Name = "Bots"
-		folder.Parent = Workspace
-	end
-	return folder
-end
+-- Bots spawn directly in Workspace (no folder)
 
 -- Helper to get random X/Z coordinates on Baseplate
 local function getRandomSpawnXZ()
@@ -102,6 +93,13 @@ local function spawnBot()
 
 	bot.PrimaryPart = rootPart
 
+	-- === FIX 4: Reset Pivot Offset ===
+	-- If the model's Pivot is offset from the RootPart (e.g. 500 studs down), 
+	-- spawning it at the ground will place the body 500 studs in the sky.
+	-- This forces the Pivot to match the RootPart exactly.
+	rootPart.PivotOffset = CFrame.new()
+	
+
 	-- === FIX 1: Unanchor EVERYTHING ===
 	-- Just unanchoring rootPart isn't enough if the template has anchored Head/Limbs
 	for _, desc in ipairs(bot:GetDescendants()) do
@@ -110,57 +108,97 @@ local function spawnBot()
 			desc.CanCollide = true
 		end
 	end
-
-	bot.Parent = getBotsFolder()
-
-	-- Apply Scaling
+	
+	-- === IMPORTANT: Apply Scaling BEFORE Workspace ===
+	-- Scaling the bot before it enters physics simulation prevents joints from breaking
 	ScalingEngine.ResizeCharacter(bot, level)
-	task.wait() -- Allow scaling to apply
+	task.wait(0.1) -- Allow scaling to fully apply
+	
+	-- NOW parent to Workspace with correct scale
+	bot.Parent = Workspace
+	task.wait(0.05) -- Let physics initialize
 
 	-- Calculate Position
 	local targetX, targetZ = getRandomSpawnXZ()
 
-	-- === FIX 2: Improved Raycast Filtering ===
-	-- Ignore Orbs, Visuals, and other Bots to prevent spawning on top of them
-	local rayOrigin = Vector3.new(targetX, 500, targetZ) -- Lowered from 1000 to save perf
+	-- === FIX 2: Improved Raycast with Penetration ===
+	-- We use a loop to ignore invisible parts (like sky barriers) that might be in MapVisuals
+	local function castRayToGround(origin, dir)
+		local ignoreList = { bot }
+		if Workspace:FindFirstChild("Orbs") then
+			table.insert(ignoreList, Workspace.Orbs)
+		end
+		if Workspace:FindFirstChild("Bots") then
+			table.insert(ignoreList, Workspace.Bots)
+		end
+		-- Note: We intentionally DO NOT ignore MapVisuals/MapInteractables initially
+		-- We want to hit them, but filter out the invisible ones below
+
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		rayParams.FilterDescendantsInstances = ignoreList
+
+		local result = Workspace:Raycast(origin, dir, rayParams)
+		local attempts = 0
+		
+		-- Penetration Loop: If we hit something invisible, ignore it and try again
+		while result and attempts < 10 do
+			if result.Instance.Transparency >= 0.95 then
+				-- Hit invisible part (likely barrier/trigger), add to ignore and retry
+				table.insert(ignoreList, result.Instance)
+				rayParams.FilterDescendantsInstances = ignoreList
+				result = Workspace:Raycast(origin, dir, rayParams)
+				attempts += 1
+			else
+				-- Hit visible part! Stop here.
+				break
+			end
+		end
+		
+		return result
+	end
+
+	local rayOrigin = Vector3.new(targetX, 500, targetZ)
 	local rayDirection = Vector3.new(0, -1000, 0)
-
-	local ignoreList = { bot }
-	if Workspace:FindFirstChild("Orbs") then
-		table.insert(ignoreList, Workspace.Orbs)
-	end
-	if Workspace:FindFirstChild("MapVisuals") then
-		table.insert(ignoreList, Workspace.MapVisuals)
-	end
-	if Workspace:FindFirstChild("MapInteractables") then
-		table.insert(ignoreList, Workspace.MapInteractables)
-	end
-	if Workspace:FindFirstChild("Bots") then
-		table.insert(ignoreList, Workspace.Bots)
-	end
-
-	local rayParams = RaycastParams.new()
-	rayParams.FilterDescendantsInstances = ignoreList
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
-	local rayResult = Workspace:Raycast(rayOrigin, rayDirection, rayParams)
+	
+	local rayResult = castRayToGround(rayOrigin, rayDirection)
 
 	if rayResult then
+
 		local hipHeight = humanoid.HipHeight
 		-- Spawn slightly above the hit position
 		local spawnPos = rayResult.Position + Vector3.new(0, hipHeight + 2, 0)
-		bot:SetPrimaryPartCFrame(CFrame.new(spawnPos))
+		bot:PivotTo(CFrame.new(spawnPos))
 	else
-		-- Fallback: Reset to center if void
+		-- Fallback: Use Baseplate height if available, otherwise default
+		local fallbackY = 50
+		
+		-- Try to find ground height from Baseplate
+		local baseplate = Workspace:FindFirstChild("Baseplate") or Workspace:FindFirstChild("Map")
+		if baseplate then
+			if baseplate:IsA("Model") then
+				-- Try to find a part inside
+				local part = baseplate:FindFirstChildWhichIsA("BasePart", true)
+				if part then
+					fallbackY = part.Position.Y + (part.Size.Y / 2)
+				else
+					fallbackY = baseplate:GetPivot().Position.Y
+				end
+			elseif baseplate:IsA("BasePart") then
+				fallbackY = baseplate.Position.Y + (baseplate.Size.Y / 2)
+			end
+		end
+		
+		warn(string.format("BotSpawner: Raycast failed for bot %s at X=%.1f, Z=%.1f - using fallback Y=%.1f", bot.Name, targetX, targetZ, fallbackY))
 		local hipHeight = humanoid.HipHeight
-		bot:SetPrimaryPartCFrame(CFrame.new(targetX, 50 + hipHeight, targetZ))
+		bot:PivotTo(CFrame.new(targetX, fallbackY + hipHeight + 2, targetZ))
 	end
 
 	-- === FIX 3: Force Physics Wakeup ===
 	-- Sometimes parts sleep in the air. This forces them to react to gravity.
 	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 	task.delay(0.5, function()
-		if rootPart and rootPart:IsA("BasePart") then
+		if rootPart and rootPart:IsA("BasePart") and rootPart:IsDescendantOf(Workspace) then
 			rootPart:SetNetworkOwner(nil)
 		end
 		-- Reset to running so they can move
@@ -179,10 +217,106 @@ local function spawnBot()
 end
 
 function BotSpawner.Start()
-	print("--- Starting BotSpawner ---")
+
+	
+	-- Wait for Baseplate to ensure world geometry is loaded
+	-- This prevents raycast failures that cause bots to spawn in the sky
+	local baseplate = Workspace:WaitForChild("Baseplate", 30)
+	if not baseplate then
+		warn("BotSpawner: Baseplate not found after 30 seconds! Bots may spawn incorrectly.")
+	else
+
+	end
+	
 	for _ = 1, SPAWN_COUNT do
 		spawnBot()
 		task.wait(0.1)
+	end
+	
+	-- Spawn Display Bots
+	BotSpawner.SpawnDisplayBots()
+end
+
+function BotSpawner.SpawnDisplayBots()
+	-- Get random position
+	local targetX, targetZ = getRandomSpawnXZ()
+	
+	-- Raycast to find ground height
+	local function castRayToGround(origin, dir)
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		rayParams.FilterDescendantsInstances = {Workspace:FindFirstChild("Bots"), Workspace:FindFirstChild("Orbs")}
+		
+		local result = Workspace:Raycast(origin, dir, rayParams)
+		return result
+	end
+	
+	local rayOrigin = Vector3.new(targetX, 500, targetZ)
+	local rayDirection = Vector3.new(0, -1000, 0)
+	local rayResult = castRayToGround(rayOrigin, rayDirection)
+	
+	local startPos
+	if rayResult then
+		startPos = rayResult.Position
+	else
+		warn("BotSpawner: Could not find ground for display bots, using default height")
+		startPos = Vector3.new(targetX, 5, targetZ)
+	end
+
+	local levels = {1, 5, 15, 30}
+	local spacing = 15
+	-- Center the line around the random position
+	local lineStartX = startPos.X - ((#levels - 1) * spacing) / 2
+	local lineZ = startPos.Z
+	
+	print(string.format("🎨 Spawning Display Bots at Random Location: %.1f, %.1f, %.1f", startPos.X, startPos.Y, startPos.Z))
+	
+	for i, level in ipairs(levels) do
+		local template = ServerStorage:FindFirstChild("TrainingBot")
+		if not template then break end
+		
+		local bot = template:Clone()
+		bot.Name = "DisplayBot_Lv" .. level
+		
+		bot:SetAttribute("Level", level)
+		bot:SetAttribute("XP", 0)
+		bot:SetAttribute("SpawnTime", Workspace:GetServerTimeNow())
+		
+		-- DO NOT add "BotAI" tag so they don't move/shoot
+		CollectionService:AddTag(bot, "DisplayBot")
+		
+		local humanoid = bot:WaitForChild("Humanoid")
+		local rootPart = bot:WaitForChild("HumanoidRootPart")
+		
+		-- Reset Pivot to ensure consistent spawning
+		rootPart.PivotOffset = CFrame.new()
+		
+		-- Scale BEFORE parenting
+		ScalingEngine.ResizeCharacter(bot, level)
+		task.wait(0.1)
+		
+		bot.Parent = Workspace
+		
+		-- Position in a line
+		local xPos = lineStartX + (i - 1) * spacing
+		
+		-- Raycast again for each bot to ensure they are on ground (in case of uneven terrain)
+		local botRayOrigin = Vector3.new(xPos, 500, lineZ)
+		local botRayResult = castRayToGround(botRayOrigin, rayDirection)
+		local groundY = botRayResult and botRayResult.Position.Y or startPos.Y
+		
+		-- Add extra buffer for large bots to prevent clipping
+		-- HipHeight * 1.2 + fixed buffer
+		local spawnY = groundY + (humanoid.HipHeight * 1.1) + 4
+		
+		bot:PivotTo(CFrame.new(xPos, spawnY, lineZ) * CFrame.Angles(0, math.rad(180), 0)) -- Face forward
+		
+		-- Make completely still
+		for _, part in ipairs(bot:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Anchored = true
+			end
+		end
 	end
 end
 

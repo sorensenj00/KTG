@@ -35,19 +35,20 @@ local damageNumberRemote = remotes:WaitForChild("DamageNumber")
 -- Object pool for damage number labels
 local labelPool = {}
 local activeLabels = {}
-local MAX_CONCURRENT_DAMAGE_NUMBERS = 5
+local MAX_CONCURRENT_DAMAGE_NUMBERS = 50 -- Increased from 5 to 50
 
 -- Animation constants
 local FLOAT_DURATION = 1.0
 local FLOAT_DISTANCE = 50 -- pixels
-local DRIFT_RANGE = 30 -- pixels horizontal drift
-local FADE_START = 0.3 -- start fading after this time
+local DRIFT_RANGE = 60 -- Increased drift range
+local FADE_START = 0.5 -- start fading later
 
 -- Color constants
 local COLORS = {
 	NORMAL = Color3.fromRGB(255, 255, 255), -- White
 	KILL = Color3.fromRGB(255, 215, 0), -- Gold
 	HIGH_DAMAGE = Color3.fromRGB(255, 100, 100), -- Light red
+	CRITICAL = Color3.fromRGB(255, 50, 50), -- Deep Red
 	HEALING = Color3.fromRGB(0, 255, 0), -- Green
 }
 
@@ -115,12 +116,9 @@ local function showDamageNumber(damage: number, worldPosition: Vector3, isKill: 
 	local screenPoint, onScreen = camera:WorldToViewportPoint(worldPosition)
 
 	if not onScreen then
-		print("⚠️ Damage number off-screen, skipping")
 		returnLabel(label)
 		return
 	end
-
-	print("✅ Damage number on-screen at", screenPoint.X, screenPoint.Y)
 
 	-- Check if this is healing (negative damage)
 	local isHealing = damage < 0
@@ -143,6 +141,8 @@ local function showDamageNumber(damage: number, worldPosition: Vector3, isKill: 
 	label.Text = damageText
 
 	-- Style based on healing, kill, or damage amount
+	local isCritical = absoluteValue >= 100
+	
 	if isHealing then
 		label.TextColor3 = Color3.fromRGB(0, 255, 100) -- NEON GREEN
 		label.TextSize = 26
@@ -150,6 +150,10 @@ local function showDamageNumber(damage: number, worldPosition: Vector3, isKill: 
 	elseif isKill then
 		label.TextColor3 = COLORS.KILL
 		label.TextSize = 32
+		label.TextStrokeColor3 = Color3.fromRGB(100, 0, 0)
+	elseif isCritical then
+		label.TextColor3 = COLORS.CRITICAL
+		label.TextSize = 30
 		label.TextStrokeColor3 = Color3.fromRGB(100, 0, 0)
 	elseif damage >= 50 then
 		label.TextColor3 = COLORS.HIGH_DAMAGE
@@ -165,28 +169,32 @@ local function showDamageNumber(damage: number, worldPosition: Vector3, isKill: 
 	label.TextTransparency = 0
 	label.TextStrokeTransparency = 0.3
 
-	-- Set initial position
-	label.Position = UDim2.fromOffset(screenPoint.X, screenPoint.Y)
+	-- Set initial position with slight random offset to prevent perfect stacking
+	local random = Random.new()
+	local startOffsetX = (random:NextNumber() - 0.5) * 20
+	local startOffsetY = (random:NextNumber() - 0.5) * 20
+	
+	label.Position = UDim2.fromOffset(screenPoint.X + startOffsetX, screenPoint.Y + startOffsetY)
 	label.Visible = true
 
 	-- Random horizontal drift
-	local random = Random.new()
 	local driftAmount = (random:NextNumber() - 0.5) * DRIFT_RANGE
-	local endX = screenPoint.X + driftAmount
-	local endY = screenPoint.Y - FLOAT_DISTANCE
+	local endX = screenPoint.X + startOffsetX + driftAmount
+	local endY = screenPoint.Y + startOffsetY - FLOAT_DISTANCE
 
 	-- Create animation
 	local startTime = tick()
 	local labelData = {
 		label = label,
-		startX = screenPoint.X,
-		startY = screenPoint.Y,
+		startX = screenPoint.X + startOffsetX,
+		startY = screenPoint.Y + startOffsetY,
 		endX = endX,
 		endY = endY,
 		startTime = startTime,
 		isHealing = isHealing,
 		absoluteValue = absoluteValue,
 		isKill = isKill,
+		isCritical = isCritical,
 	}
 
 	table.insert(activeLabels, labelData)
@@ -243,12 +251,15 @@ local function showDamageNumber(damage: number, worldPosition: Vector3, isKill: 
 		else
 			scale = 1
 		end
+		
 		-- Calculate base text size (accounting for healing)
 		local baseTextSize = 24
 		if labelData.isHealing then
 			baseTextSize = 26
 		elseif labelData.isKill then
 			baseTextSize = 32
+		elseif labelData.isCritical then
+			baseTextSize = 30
 		elseif labelData.absoluteValue >= 50 then
 			baseTextSize = 28
 		end

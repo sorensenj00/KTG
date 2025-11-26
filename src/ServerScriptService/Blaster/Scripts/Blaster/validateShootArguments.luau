@@ -5,16 +5,16 @@ local validateNumber = require(ServerScriptService.Utility.TypeValidation.valida
 local validateCFrame = require(ServerScriptService.Utility.TypeValidation.validateCFrame)
 local validateSimpleTable = require(ServerScriptService.Utility.TypeValidation.validateSimpleTable)
 
-local function taggedValidator(instance: any): boolean
+local function taggedValidator(instance)
 	return validateInstance(instance, "Humanoid")
 end
 
 local function validateShootArguments(
-	timestamp: number,
-	blaster: Tool,
-	origin: CFrame,
-	tagged: { [string]: Humanoid }
-): boolean
+	timestamp,
+	blaster,
+	origin,
+	tagged
+)
 	if not validateNumber(timestamp) then
 		return false
 	end

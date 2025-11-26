@@ -18,14 +18,14 @@ ScalingConfig.HEALTH_EXPONENT = 2.5
 
 -- Size (0.75 to 4.5)
 ScalingConfig.MIN_SIZE = 0.75
-ScalingConfig.MAX_SIZE = 20
+ScalingConfig.MAX_SIZE = 12.0
 ScalingConfig.GROWTH_EXPONENT = 3.0
 
 -- Speed Constants
 -- Level 1: Very Fast (120) - Agile, hard to hit
 -- Level 30: Heavy (85) - Slower relative to size, but still covers distance
 ScalingConfig.SPEED_AT_LEVEL_1 = 120
-ScalingConfig.SPEED_AT_LEVEL_30 = 85
+ScalingConfig.SPEED_AT_LEVEL_30 = 50
 
 -- Visuals
 ScalingConfig.STAR_MODE_COLOR = Color3.fromRGB(255, 170, 0)

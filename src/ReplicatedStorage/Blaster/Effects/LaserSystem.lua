@@ -36,7 +36,7 @@ local COLOR_GLOW = ColorSequence.new({
 })
 ]]
 
-local function createLaserBeam(startPosition: Vector3, endPosition: Vector3)
+local function createLaserBeam(startPosition, endPosition)
 	-- 1. Create Container
 	local container = Instance.new("Part")
 	container.Name = "LaserFX"

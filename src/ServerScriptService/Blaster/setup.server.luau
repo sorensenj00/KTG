@@ -21,12 +21,13 @@ else
 end
 
 -- Load the Blaster Handler (Phase 4 refactor)
-local handler = blasterFolder:FindFirstChild("Handler")
-if handler then
-	require(handler)
-	print("✅ Blaster Setup: Handler loaded")
-else
-	warn("❌ Blaster Setup: Handler.lua not found!")
-end
+-- Load the Blaster Handler (Phase 4 refactor)
+-- local handler = blasterFolder:FindFirstChild("Handler")
+-- if handler then
+-- 	require(handler)
+-- 	print("✅ Blaster Setup: Handler loaded")
+-- else
+-- 	warn("❌ Blaster Setup: Handler.lua not found!")
+-- end
 
 return nil

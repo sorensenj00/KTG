@@ -22,7 +22,7 @@ MetaConfig.Upgrades = {
 		Description = "Increases damage dealt by 1% per level.",
 		Tier = 1,
 		BaseCost = 100,
-		CostMultiplier = 1.2,
+		CostExponent = 1.5,
 		Increment = 0.01,
 		MaxLevel = 50,
 	},
@@ -31,7 +31,7 @@ MetaConfig.Upgrades = {
 		Description = "Increases max health by 1% per level.",
 		Tier = 1,
 		BaseCost = 100,
-		CostMultiplier = 1.2,
+		CostExponent = 1.5,
 		Increment = 0.01,
 		MaxLevel = 50,
 	},
@@ -40,7 +40,7 @@ MetaConfig.Upgrades = {
 		Description = "Increases movement speed by 0.5% per level.",
 		Tier = 1,
 		BaseCost = 200,
-		CostMultiplier = 1.3,
+		CostExponent = 1.6,
 		Increment = 0.005,
 		MaxLevel = 20,
 	},
@@ -51,7 +51,7 @@ MetaConfig.Upgrades = {
 		Description = "Increases weapon magazine capacity by 5% per level.",
 		Tier = 2,
 		BaseCost = 600,
-		CostMultiplier = 1.4,
+		CostExponent = 1.7,
 		Increment = 0.05,
 		MaxLevel = 10,
 	},
@@ -62,7 +62,7 @@ MetaConfig.Upgrades = {
 		Description = "Heal for 5% of damage dealt per level.",
 		Tier = 3,
 		BaseCost = 2000,
-		CostMultiplier = 2.0,
+		CostExponent = 2.0,
 		Increment = 0.05,
 		MaxLevel = 5,
 	},
@@ -71,7 +71,7 @@ MetaConfig.Upgrades = {
 		Description = "Start every life at Level 2 instead of Level 1.",
 		Tier = 3,
 		BaseCost = 5000,
-		CostMultiplier = 2.0,
+		CostExponent = 2.0,
 		Increment = 1,
 		MaxLevel = 1,
 	},
@@ -82,7 +82,7 @@ MetaConfig.Upgrades = {
 		Description = "Explode on death, dealing 50% max health damage per level.",
 		Tier = 4,
 		BaseCost = 10000,
-		CostMultiplier = 2.0,
+		CostExponent = 2.2,
 		Increment = 0.5,
 		MaxLevel = 5,
 	},
@@ -112,8 +112,11 @@ function MetaConfig.GetCost(stat: string, level: number): number
 		return math.huge
 	end
 
-	-- Exponential cost: BaseCost * (CostMultiplier ^ level)
-	return upgrade.BaseCost * (upgrade.CostMultiplier ^ level)
+	-- Polynomial cost: BaseCost * (level ^ CostExponent)
+	-- Note: level 0 -> cost 0 (technically), but we usually buy level 1.
+	-- If level is 0 (first purchase), we treat it as buying level 1.
+	local targetLevel = level + 1
+	return math.floor(upgrade.BaseCost * (targetLevel ^ upgrade.CostExponent))
 end
 
 -- Calculate the multiplier for a specific upgrade at a given level

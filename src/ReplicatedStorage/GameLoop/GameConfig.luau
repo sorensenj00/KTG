@@ -90,23 +90,6 @@ GameConfig.Meta = {
 	StartingBiomass = 0,
 }
 
--- === SCALING ===
-
-GameConfig.Scaling = {
-
-	MinSize = 0.75,
-
-	MaxSize = 4.5,
-
-	SpeedAtLevel1 = 120,
-
-	SpeedAtLevel30 = 85,
-
-	HealthBase = 100,
-
-	HealthExponent = 2.5,
-}
-
 -- === ZONES ===
 
 GameConfig.Zones = {

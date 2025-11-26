@@ -91,7 +91,7 @@ local function getRandomSpawnPosition()
 
 	local yPos = 10 -- Default height
 	if rayResult then
-		yPos = rayResult.Position.Y + 5 -- 5 studs above ground
+		yPos = rayResult.Position.Y + 1 -- 1 stud above ground (easier to collect)
 	end
 
 	return Vector3.new(targetX, yPos, targetZ)
@@ -157,6 +157,16 @@ local function spawnOrb()
 	orb.Color = selectedTier.Color
 	orb:SetAttribute("XPValue", selectedTier.XP)
 
+	-- Create invisible hitbox for easier pickup (3x the orb size)
+	local hitbox = Instance.new("Part")
+	hitbox.Name = "Hitbox"
+	hitbox.Size = selectedTier.Size * 3 -- 3x larger for forgiving pickup
+	hitbox.Transparency = 1 -- Invisible
+	hitbox.CanCollide = false
+	hitbox.Anchored = true
+	hitbox.CastShadow = false
+	hitbox.Parent = orb
+
 	-- Position using helper
 	orb.Position = getRandomSpawnPosition()
 	orb.Parent = getOrbsFolder()
@@ -184,12 +194,16 @@ local function spawnOrb()
 			local floatOffset = math.sin(elapsed * 2) * 1
 			orb.Position = Vector3.new(orb.Position.X, startY + floatOffset, orb.Position.Z)
 			orb.Orientation = Vector3.new(0, elapsed * 60, 0) -- Rotate
+			-- Keep hitbox centered on orb
+			if hitbox and hitbox.Parent then
+				hitbox.CFrame = orb.CFrame
+			end
 		end)
 	end)
 
-	-- Touch detection
+	-- Touch detection on the larger hitbox for easier pickup
 	local collected = false
-	orb.Touched:Connect(function(hit)
+	hitbox.Touched:Connect(function(hit)
 		if collected or not orb.Parent then
 			return
 		end

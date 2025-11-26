@@ -1,19 +1,18 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local castRays = require(ServerScriptService.Utility.castRays)
 local canPlayerDamageHumanoid = require(ServerScriptService.Utility.canPlayerDamageHumanoid)
 
 local DIRECTION_BUFFER_CONSTANT = 10
 local WALL_DISTANCE_BUFFER_CONSTANT = 5
 
 local function validateTag(
-	player: Player,
-	taggedHumanoid: Humanoid,
-	position: Vector3,
-	direction: Vector3,
-	rayResult: castRays.RayResult
-): boolean
+	player,
+	taggedHumanoid,
+	position,
+	direction,
+	rayResult
+)
 	-- Make sure the player is actually allowed to damage this humanoid. No team killing!
 	if not canPlayerDamageHumanoid(player, taggedHumanoid) then
 		return false

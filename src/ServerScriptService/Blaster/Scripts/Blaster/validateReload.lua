@@ -2,7 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Constants = require(ReplicatedStorage.Blaster.Constants)
 
-local function validateReload(player: Player, blaster: Tool): boolean
+local function validateReload(player, blaster)
 	local character = player.Character
 	if not character then
 		return false

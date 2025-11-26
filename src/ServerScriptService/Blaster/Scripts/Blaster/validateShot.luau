@@ -7,7 +7,7 @@ local TIMESTAMP_BUFFER_CONSTANT = 1
 local POSITION_BUFFER_CONSTANT = 5
 local POSITION_BUFFER_FACTOR = 0.4
 
-local function validateShot(player: Player, timestamp: number, blaster: Tool, origin: CFrame): boolean
+local function validateShot(player: Player, timestamp: number, blaster: Tool, origin: CFrame)
 	-- Validate timestamp
 	local now = Workspace:GetServerTimeNow()
 	if timestamp > now then

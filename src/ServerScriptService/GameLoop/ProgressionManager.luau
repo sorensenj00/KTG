@@ -73,18 +73,40 @@ local function initializePlayer(player: Player)
 	if not player:GetAttribute("XP") then
 		player:SetAttribute("XP", 0)
 	end
+	if not player:GetAttribute("Kills") then
+		player:SetAttribute("Kills", 0)
+	end
 
 	local stats = player:FindFirstChild("leaderstats") or Instance.new("Folder")
 	stats.Name = "leaderstats"
 	stats.Parent = player
 
+	-- Size (Primary Stat for Leaderboard)
+	local sizeVal = stats:FindFirstChild("Size") or Instance.new("IntValue")
+	sizeVal.Name = "Size"
+	sizeVal.Value = player:GetAttribute("Level")
+	sizeVal.Parent = stats
+
+	-- Kills
+	local killsVal = stats:FindFirstChild("Kills") or Instance.new("IntValue")
+	killsVal.Name = "Kills"
+	killsVal.Value = player:GetAttribute("Kills")
+	killsVal.Parent = stats
+
+	-- Level (Hidden or Secondary)
 	local lvl = stats:FindFirstChild("Level") or Instance.new("IntValue")
 	lvl.Name = "Level"
 	lvl.Value = player:GetAttribute("Level")
 	lvl.Parent = stats
 
 	player:GetAttributeChangedSignal("Level"):Connect(function()
-		lvl.Value = player:GetAttribute("Level")
+		local newLevel = player:GetAttribute("Level")
+		lvl.Value = newLevel
+		sizeVal.Value = newLevel -- Size maps directly to Level
+	end)
+
+	player:GetAttributeChangedSignal("Kills"):Connect(function()
+		killsVal.Value = player:GetAttribute("Kills")
 	end)
 
 	-- Setup reactive scaling via attribute signals
@@ -133,6 +155,7 @@ function ProgressionManager.AddXP(target: Instance, amount: number)
 	-- Track Session XP for meta-progression (only for players)
 	if isPlayer and target:IsA("Player") then
 		MetaProgressionManager.AddSessionXP(target, amount)
+		MetaProgressionManager.AddBiomassFromXP(target, amount)
 	end
 
 	if levelsGained > 0 then
@@ -240,6 +263,10 @@ function ProgressionManager.Start()
 							xpAmount = ScalingConfig.GetXPReward(victimLevel)
 						end
 						ProgressionManager.AddXP(killer, xpAmount)
+
+						-- Increment Kill Count
+						local currentKills = killer:GetAttribute("Kills") or 0
+						killer:SetAttribute("Kills", currentKills + 1)
 					end
 
 					-- Award XP to all players who damaged the victim (equal to damage dealt)
@@ -273,12 +300,9 @@ function ProgressionManager.Start()
 	-- =====================================================
 	-- Setup reactive scaling for bots via CollectionService tag events
 	CollectionService:GetInstanceAddedSignal("BotAI"):Connect(function(bot)
-		-- Wait for bot to be fully initialized
-		task.wait(0.1)
-
 		local lastKnownLevel = bot:GetAttribute("Level") or 1
 
-		-- Setup attribute changed signal for this bot
+		-- Setup attribute changed signal for this bot (fires when bot levels up)
 		bot:GetAttributeChangedSignal("Level"):Connect(function()
 			local newLevel = bot:GetAttribute("Level") or 1
 			if newLevel ~= lastKnownLevel then
@@ -289,10 +313,7 @@ function ProgressionManager.Start()
 			end
 		end)
 
-		-- Initial enforcement for existing bots
-		if bot:FindFirstChild("Humanoid") and bot.Humanoid.Health > 0 then
-			enforceEntityStats(bot, bot)
-		end
+		-- Note: No initial enforcement here as bots are already scaled correctly in BotSpawner
 	end)
 
 	-- Setup scaling for existing bots

@@ -24,8 +24,8 @@ screenGui.Parent = playerGui
 
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 250, 0, 385) -- Increased height for new button
-frame.Position = UDim2.new(0.05, 0, 0.5, -192.5) -- Adjusted to center vertically
+frame.Size = UDim2.new(0, 250, 0, 455) -- Increased height for bot controls
+frame.Position = UDim2.new(0.05, 0, 0.5, -227.5) -- Adjusted to center vertically
 frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 frame.BorderSizePixel = 0
 frame.Active = true -- Allow input
@@ -125,15 +125,49 @@ local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 6)
 btnCorner.Parent = setLevelBtn
 
+-- Bot Controls
+local botContainer = Instance.new("Frame")
+botContainer.Size = UDim2.new(1, 0, 0, 35)
+botContainer.BackgroundTransparency = 1
+botContainer.LayoutOrder = 3
+botContainer.Parent = frame
+
+local selectBotBtn = Instance.new("TextButton")
+selectBotBtn.Text = "Select Bot"
+selectBotBtn.Size = UDim2.new(0.48, 0, 1, 0)
+selectBotBtn.Position = UDim2.new(0, 0, 0, 0)
+selectBotBtn.BackgroundColor3 = Color3.fromRGB(180, 100, 0)
+selectBotBtn.TextColor3 = Color3.new(1, 1, 1)
+selectBotBtn.Font = Enum.Font.GothamBold
+selectBotBtn.TextSize = 13
+selectBotBtn.Parent = botContainer
+local selectCorner = Instance.new("UICorner")
+selectCorner.CornerRadius = UDim.new(0, 6)
+selectCorner.Parent = selectBotBtn
+
+local setBotLevelBtn = Instance.new("TextButton")
+setBotLevelBtn.Text = "Set Bot Lvl"
+setBotLevelBtn.Size = UDim2.new(0.48, 0, 1, 0)
+setBotLevelBtn.Position = UDim2.new(0.52, 0, 0, 0)
+setBotLevelBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 100)
+setBotLevelBtn.TextColor3 = Color3.new(1, 1, 1)
+setBotLevelBtn.Font = Enum.Font.GothamBold
+setBotLevelBtn.TextSize = 13
+setBotLevelBtn.Parent = botContainer
+local setBotCorner = Instance.new("UICorner")
+setBotCorner.CornerRadius = UDim.new(0, 6)
+setBotCorner.Parent = setBotLevelBtn
+
 -- Buttons
-local addXPBtn = createButton("+1000 XP", 3)
-local addGlobalXPBtn = createButton("+1000 GlobalXP", 4)
-local godModeBtn = createButton("God Mode: OFF", 5)
-local infAmmoBtn = createButton("Inf Ammo: OFF", 6)
+local addXPBtn = createButton("+1000 XP", 4)
+local addGlobalXPBtn = createButton("+1000 GlobalXP", 5)
+local godModeBtn = createButton("God Mode: OFF", 6)
+local infAmmoBtn = createButton("Inf Ammo: OFF", 7)
 
 -- Logic
 local godMode = false
 local infAmmo = false
+local selectedBot = nil
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	-- if processed then return end -- Don't ignore processed here so we can open it even if something else is focused,
@@ -169,6 +203,60 @@ UserInputService.InputBegan:Connect(function(input, processed)
 			end
 		end
 	end
+end)
+
+-- Select nearest bot
+selectBotBtn.MouseButton1Click:Connect(function()
+	local char = player.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then
+		print("❌ No character found")
+		return
+	end
+	
+	local myPos = char.HumanoidRootPart.Position
+	local closestBot = nil
+	local closestDist = math.huge
+	
+	local CollectionService = game:GetService("CollectionService")
+	for _, bot in ipairs(CollectionService:GetTagged("BotAI")) do
+		if bot:IsA("Model") and bot:FindFirstChild("HumanoidRootPart") then
+			local dist = (bot.HumanoidRootPart.Position - myPos).Magnitude
+			if dist < closestDist then
+				closestDist = dist
+				closestBot = bot
+			end
+		end
+	end
+	
+	if closestBot then
+		selectedBot = closestBot
+		local botLevel = selectedBot:GetAttribute("Level") or 1
+		selectBotBtn.Text = string.format("%s (Lv%d)", selectedBot.Name, botLevel)
+		selectBotBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+		print("✅ Selected bot:", selectedBot.Name, "Level:", botLevel, "Distance:", math.floor(closestDist))
+	else
+		print("❌ No bots found nearby")
+	end
+end)
+
+-- Set selected bot's level
+setBotLevelBtn.MouseButton1Click:Connect(function()
+	if not selectedBot or not selectedBot.Parent then
+		print("❌ No bot selected or bot was destroyed")
+		selectBotBtn.Text = "Select Bot"
+		selectBotBtn.BackgroundColor3 = Color3.fromRGB(180, 100, 0)
+		selectedBot = nil
+		return
+	end
+	
+	local lvl = tonumber(levelInput.Text)
+	if not lvl then
+		print("❌ Invalid level input")
+		return
+	end
+	
+	print("🤖 Setting bot", selectedBot.Name, "to level", lvl)
+	remotes.SetBotLevel:FireServer(selectedBot, lvl)
 end)
 
 setLevelBtn.MouseButton1Click:Connect(function()

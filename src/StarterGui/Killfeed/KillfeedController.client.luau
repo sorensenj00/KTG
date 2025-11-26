@@ -60,14 +60,14 @@ local function createKillfeedUI()
 end
 
 -- Create a single killfeed entry
-local function createEntry(killerName, killerLevel, killerIsBot, victimName, victimLevel, victimIsBot)
+local function createEntry(killerName, killerLevel, killerIsBot, victimName, victimLevel, victimIsBot, actionText, actionColor)
 	local entryFrame = Instance.new("Frame")
 	entryFrame.Name = "KillfeedEntry"
-	entryFrame.Size = UDim2.new(0, 380, 0, 32)
-	entryFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-	entryFrame.BackgroundTransparency = 0.4
-	entryFrame.BorderSizePixel = 1
-	entryFrame.BorderColor3 = Color3.fromRGB(100, 100, 100)
+	entryFrame.Size = UDim2.new(0, 0, 0, 35) -- Height fixed, width auto
+	entryFrame.AutomaticSize = Enum.AutomaticSize.X
+	entryFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	entryFrame.BackgroundTransparency = 1 -- Fully transparent initially
+	entryFrame.BorderSizePixel = 0
 	entryFrame.Parent = entriesContainer
 
 	-- Corner radius for modern look
@@ -78,16 +78,16 @@ local function createEntry(killerName, killerLevel, killerIsBot, victimName, vic
 	-- Horizontal layout for entry content
 	local horizontalLayout = Instance.new("UIListLayout")
 	horizontalLayout.FillDirection = Enum.FillDirection.Horizontal
-	horizontalLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	horizontalLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	horizontalLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 	horizontalLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	horizontalLayout.Padding = UDim.new(0, 4)
+	horizontalLayout.Padding = UDim.new(0, 8) -- Increased padding between elements
 	horizontalLayout.Parent = entryFrame
 
 	-- Padding
 	local padding = Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, 8)
-	padding.PaddingRight = UDim.new(0, 8)
+	padding.PaddingLeft = UDim.new(0, 12)
+	padding.PaddingRight = UDim.new(0, 12)
 	padding.PaddingTop = UDim.new(0, 4)
 	padding.PaddingBottom = UDim.new(0, 4)
 	padding.Parent = entryFrame
@@ -95,22 +95,26 @@ local function createEntry(killerName, killerLevel, killerIsBot, victimName, vic
 	-- Killer Name
 	local killerNameLabel = Instance.new("TextLabel")
 	killerNameLabel.Name = "KillerName"
-	killerNameLabel.Size = UDim2.new(0, 120, 1, 0) -- Fixed width, will truncate if needed
+	killerNameLabel.Size = UDim2.new(0, 0, 1, 0) -- Auto width
+	killerNameLabel.AutomaticSize = Enum.AutomaticSize.X
 	killerNameLabel.BackgroundTransparency = 1
 	killerNameLabel.Text = killerName
 	killerNameLabel.TextColor3 = killerIsBot and COLORS.KillerBot or COLORS.KillerPlayer
-	killerNameLabel.TextSize = 16
-	killerNameLabel.Font = Enum.Font.GothamBold
+	killerNameLabel.TextSize = 20
+	killerNameLabel.Font = Enum.Font.LuckiestGuy
+	if not pcall(function() killerNameLabel.Font = Enum.Font.LuckiestGuy end) then
+		killerNameLabel.Font = Enum.Font.GothamBlack
+	end
 	killerNameLabel.TextStrokeTransparency = 0
 	killerNameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	killerNameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	killerNameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	killerNameLabel.Parent = entryFrame
 
 	-- Killer Level
 	local killerLevelLabel = Instance.new("TextLabel")
 	killerLevelLabel.Name = "KillerLevel"
-	killerLevelLabel.Size = UDim2.new(0, 40, 1, 0) -- Fixed width for "LvXX"
+	killerLevelLabel.Size = UDim2.new(0, 0, 1, 0) -- Auto width
+	killerLevelLabel.AutomaticSize = Enum.AutomaticSize.X
 	killerLevelLabel.BackgroundTransparency = 1
 	killerLevelLabel.Text = "Lv" .. tostring(killerLevel)
 	killerLevelLabel.TextColor3 = COLORS.Level
@@ -124,12 +128,16 @@ local function createEntry(killerName, killerLevel, killerIsBot, victimName, vic
 	-- Separator
 	local separatorLabel = Instance.new("TextLabel")
 	separatorLabel.Name = "Separator"
-	separatorLabel.Size = UDim2.new(0, 20, 1, 0) -- Fixed width for arrow
+	separatorLabel.Size = UDim2.new(0, 0, 1, 0) -- Auto width
+	separatorLabel.AutomaticSize = Enum.AutomaticSize.X
 	separatorLabel.BackgroundTransparency = 1
-	separatorLabel.Text = "→"
-	separatorLabel.TextColor3 = COLORS.Separator
-	separatorLabel.TextSize = 16
-	separatorLabel.Font = Enum.Font.GothamBold
+	separatorLabel.Text = actionText or "oofed"
+	separatorLabel.TextColor3 = actionColor or COLORS.Separator
+	separatorLabel.TextSize = 20
+	separatorLabel.Font = Enum.Font.LuckiestGuy
+	if not pcall(function() separatorLabel.Font = Enum.Font.LuckiestGuy end) then
+		separatorLabel.Font = Enum.Font.GothamBlack
+	end
 	separatorLabel.TextStrokeTransparency = 0
 	separatorLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	separatorLabel.Parent = entryFrame
@@ -137,22 +145,26 @@ local function createEntry(killerName, killerLevel, killerIsBot, victimName, vic
 	-- Victim Name
 	local victimNameLabel = Instance.new("TextLabel")
 	victimNameLabel.Name = "VictimName"
-	victimNameLabel.Size = UDim2.new(0, 120, 1, 0) -- Fixed width, will truncate if needed
+	victimNameLabel.Size = UDim2.new(0, 0, 1, 0) -- Auto width
+	victimNameLabel.AutomaticSize = Enum.AutomaticSize.X
 	victimNameLabel.BackgroundTransparency = 1
 	victimNameLabel.Text = victimName
 	victimNameLabel.TextColor3 = victimIsBot and COLORS.VictimBot or COLORS.VictimPlayer
-	victimNameLabel.TextSize = 16
-	victimNameLabel.Font = Enum.Font.GothamBold
+	victimNameLabel.TextSize = 20
+	victimNameLabel.Font = Enum.Font.LuckiestGuy
+	if not pcall(function() victimNameLabel.Font = Enum.Font.LuckiestGuy end) then
+		victimNameLabel.Font = Enum.Font.GothamBlack
+	end
 	victimNameLabel.TextStrokeTransparency = 0
 	victimNameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	victimNameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	victimNameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	victimNameLabel.Parent = entryFrame
 
 	-- Victim Level
 	local victimLevelLabel = Instance.new("TextLabel")
 	victimLevelLabel.Name = "VictimLevel"
-	victimLevelLabel.Size = UDim2.new(0, 40, 1, 0) -- Fixed width for "LvXX"
+	victimLevelLabel.Size = UDim2.new(0, 0, 1, 0) -- Auto width
+	victimLevelLabel.AutomaticSize = Enum.AutomaticSize.X
 	victimLevelLabel.BackgroundTransparency = 1
 	victimLevelLabel.Text = "Lv" .. tostring(victimLevel)
 	victimLevelLabel.TextColor3 = COLORS.Level
@@ -176,7 +188,7 @@ local function removeEntry(entryData, index)
 
 	-- Cancel existing timer if any (safely)
 	if entryData.timer then
-		local success, err = pcall(function()
+		local success, _err = pcall(function()
 			task.cancel(entryData.timer)
 		end)
 		if not success then
@@ -219,8 +231,18 @@ end
 
 -- Add new killfeed entry
 local function addKillEntry(killerName, killerLevel, killerIsBot, victimName, victimLevel, victimIsBot)
+	-- Determine Action Text and Color
+	local actionText = "oofed"
+	local actionColor = COLORS.Separator
+	
+	-- Titan (Level 30+) vs Mouse (Level <= 5)
+	if killerLevel >= 30 and victimLevel <= 5 then
+		actionText = "STOMPED"
+		actionColor = Color3.fromRGB(255, 0, 0) -- Red
+	end
+
 	-- Create entry
-	local entryFrame = createEntry(killerName, killerLevel, killerIsBot, victimName, victimLevel, victimIsBot)
+	local entryFrame = createEntry(killerName, killerLevel, killerIsBot, victimName, victimLevel, victimIsBot, actionText, actionColor)
 
 	-- Set initial transparency for fade-in
 	entryFrame.BackgroundTransparency = 1
@@ -244,10 +266,11 @@ local function addKillEntry(killerName, killerLevel, killerIsBot, victimName, vi
 	end
 
 	-- Fade in animation
+	-- Fade in animation (Text only, background stays transparent)
 	local fadeInTween = TweenService:Create(
 		entryFrame,
 		TweenInfo.new(FADE_IN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ BackgroundTransparency = 0.4, BorderSizePixel = 1 }
+		{ BackgroundTransparency = 1, BorderSizePixel = 0 } -- Keep transparent
 	)
 
 	-- Fade in all text labels

@@ -175,14 +175,18 @@ local function onPlayerDeath(player: Player)
 	local sessionKills = playerData[player].SessionKills or 0
 	local sessionXP = playerData[player].SessionXP or 0
 
-	-- Calculate GXP from kills
+	-- Calculate GXP from kills (Kill Bonus)
 	local gxpFromKills = sessionKills * MetaConfig.GXP_PER_KILL
 
-	-- Calculate GXP from session XP
-	local gxpFromXP = math.floor(sessionXP * MetaConfig.SESSION_XP_TO_GXP_RATIO)
+	-- Note: Session XP is now converted to GXP in real-time via AddBiomassFromXP,
+	-- so we don't convert it again here to avoid double-dipping.
+	local gxpFromXP = 0 
 
-	-- Total GXP earned
-	local totalGXPEarned = gxpFromKills + gxpFromXP
+	-- Total GXP earned (Just the kill bonus now)
+	local totalGXPEarned = gxpFromKills
+	
+	-- We still want to show the Session XP on the death screen for info
+	-- But the "Earned" amount will be just the kill bonus.
 
 	if totalGXPEarned > 0 then
 		playerData[player].GlobalXP = playerData[player].GlobalXP + totalGXPEarned
@@ -192,11 +196,9 @@ local function onPlayerDeath(player: Player)
 			player.Name,
 			"earned",
 			totalGXPEarned,
-			"GXP (",
+			"GXP Bonus (",
 			gxpFromKills,
-			"from kills,",
-			gxpFromXP,
-			"from XP). Total GXP:",
+			"from kills). Total GXP:",
 			playerData[player].GlobalXP,
 			"Biomass:",
 			playerData[player].Biomass
@@ -232,6 +234,29 @@ function MetaProgressionManager.AddSessionXP(player: Player, amount: number)
 		return
 	end
 	playerData[player].SessionXP = (playerData[player].SessionXP or 0) + amount
+end
+
+-- Public API: Add Biomass from XP (Real-time)
+function MetaProgressionManager.AddBiomassFromXP(player: Player, xpAmount: number)
+	if not playerData[player] then
+		return
+	end
+	
+	local gxpAmount = math.floor(xpAmount * MetaConfig.SESSION_XP_TO_GXP_RATIO)
+	if gxpAmount > 0 then
+		playerData[player].GlobalXP = (playerData[player].GlobalXP or 0) + gxpAmount
+		playerData[player].Biomass = (playerData[player].Biomass or 0) + gxpAmount
+		
+		-- Notify client immediately
+		if updateMetaStatsRemote then
+			updateMetaStatsRemote:FireClient(
+				player,
+				playerData[player].GlobalXP,
+				playerData[player].Upgrades,
+				playerData[player].Biomass
+			)
+		end
+	end
 end
 
 -- Public API: Add GlobalXP (and Biomass)

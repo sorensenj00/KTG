@@ -20,6 +20,7 @@ local function createEvent(name)
 end
 
 local setLevelEvent = createEvent("SetLevel")
+local setBotLevelEvent = createEvent("SetBotLevel")
 local addXPEvent = createEvent("AddXP")
 local addGlobalXPEvent = createEvent("AddGlobalXP")
 local toggleGodModeEvent = createEvent("ToggleGodMode")
@@ -42,6 +43,24 @@ setLevelEvent.OnServerEvent:Connect(function(player, targetLevel)
 	if player.Character then
 		ScalingEngine.ResizeCharacter(player.Character, targetLevel)
 	end
+end)
+
+-- Set Bot Level
+setBotLevelEvent.OnServerEvent:Connect(function(player, targetBot, targetLevel)
+	if typeof(targetLevel) ~= "number" then return end
+	if not targetBot or not targetBot:IsA("Model") then
+		warn("❌ Invalid bot")
+		return
+	end
+	
+	targetLevel = math.clamp(math.floor(targetLevel), 1, 999)
+	
+	print("👮 Admin:", player.Name, "set bot", targetBot.Name, "to level", targetLevel)
+	
+	targetBot:SetAttribute("Level", targetLevel)
+	targetBot:SetAttribute("XP", 0)
+	
+	ScalingEngine.ResizeCharacter(targetBot, targetLevel)
 end)
 
 -- Add XP
