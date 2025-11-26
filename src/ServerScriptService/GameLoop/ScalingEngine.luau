@@ -93,13 +93,23 @@ function ScalingEngine.ResizeCharacter(character: Model, level: number)
 	character:ScaleTo(sizeMultiplier)
 
 	-- 3. Stats Application
+	-- 3. Stats Application
+	local oldMaxHealth = humanoid.MaxHealth
 	humanoid.MaxHealth = finalMaxHealth
-	-- Always heal to full on resize/level up
-	humanoid.Health = finalMaxHealth
+	
+	-- Proportional Health Scaling
+	if oldMaxHealth > 0 and oldMaxHealth ~= finalMaxHealth then
+		local healthRatio = humanoid.Health / oldMaxHealth
+		humanoid.Health = finalMaxHealth * healthRatio
+	else
+		-- Initial spawn or invalid state, heal to full
+		humanoid.Health = finalMaxHealth
+	end
+	
 	humanoid.WalkSpeed = finalWalkSpeed
 
 	-- 6. Star Mode Visuals (Titan Level)
-	if level >= ScalingConfig.MAX_LEVEL then
+	if math.floor(level) >= ScalingConfig.MAX_LEVEL then
 		for _, child in ipairs(character:GetChildren()) do
 			if child:IsA("BasePart") and child.Name ~= "HumanoidRootPart" then
 				child.Color = ScalingConfig.STAR_MODE_COLOR

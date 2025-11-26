@@ -62,31 +62,27 @@ function BlasterController:canReload(): boolean
 	return self:isHumanoidAlive() and self.equipped and self.ammo < magazineSize and not self.reloading
 end
 function BlasterController:recoil()
-	local recoilMin = self.blaster:GetAttribute(Constants.RECOIL_MIN_ATTRIBUTE)
-	local recoilMax = self.blaster:GetAttribute(Constants.RECOIL_MAX_ATTRIBUTE)
-	local xDif = recoilMax.X - recoilMin.X
-	local yDif = recoilMax.Y - recoilMin.Y
-	local x = recoilMin.X + random:NextNumber() * xDif
-	local y = recoilMin.Y + random:NextNumber() * yDif
+	-- Use cached values (optimized)
+	local xDif = self.recoilMax.X - self.recoilMin.X
+	local yDif = self.recoilMax.Y - self.recoilMin.Y
+	local x = self.recoilMin.X + random:NextNumber() * xDif
+	local y = self.recoilMin.Y + random:NextNumber() * yDif
 	local recoil = Vector2.new(math.rad(-x), math.rad(y))
 	CameraRecoiler.recoil(recoil)
 end
 function BlasterController:shoot()
-	local spread = self.blaster:GetAttribute(Constants.SPREAD_ATTRIBUTE)
-	local raysPerShot = self.blaster:GetAttribute(Constants.RAYS_PER_SHOT_ATTRIBUTE)
-	local range = self.blaster:GetAttribute(Constants.RANGE_ATTRIBUTE)
-	local rayRadius = self.blaster:GetAttribute(Constants.RAY_RADIUS_ATTRIBUTE)
+	-- Use cached weapon stats (optimized)
 	self.viewModelController:playShootAnimation()
 	self.characterAnimationController:playShootAnimation()
 	self:recoil()
 	self.ammo -= 1
 	local now = Workspace:GetServerTimeNow()
 	local origin = camera.CFrame
-	local rayDirections = getRayDirections(origin, raysPerShot, math.rad(spread), now)
+	local rayDirections = getRayDirections(origin, self.raysPerShot, math.rad(self.spread), now)
 	for index, direction in rayDirections do
-		rayDirections[index] = direction * range
+		rayDirections[index] = direction * self.range
 	end
-	local rayResults = castRays(player, origin.Position, rayDirections, rayRadius)
+	local rayResults = castRays(player, origin.Position, rayDirections, self.rayRadius)
 	-- Rather than passing the entire table of rayResults to the server, we'll pass the shot origin and a list of tagged humanoids.
 	-- The server will then recalculate the ray directions from the origin and validate the tagged humanoids.
 	-- Strings are used for the indices since non-contiguous arrays do not get passed over the network correctly.
@@ -186,6 +182,15 @@ function BlasterController:equip()
 	-- Resync ammo and reloading values
 	self.ammo = self.blaster:GetAttribute(Constants.AMMO_ATTRIBUTE)
 	self.reloading = self.blaster:GetAttribute(Constants.RELOADING_ATTRIBUTE)
+	
+	-- Cache static weapon stats (optimization - eliminates ~40 lookups/sec during sustained fire)
+	self.spread = self.blaster:GetAttribute(Constants.SPREAD_ATTRIBUTE)
+	self.raysPerShot = self.blaster:GetAttribute(Constants.RAYS_PER_SHOT_ATTRIBUTE)
+	self.range = self.blaster:GetAttribute(Constants.RANGE_ATTRIBUTE)
+	self.rayRadius = self.blaster:GetAttribute(Constants.RAY_RADIUS_ATTRIBUTE)
+	self.recoilMin = self.blaster:GetAttribute(Constants.RECOIL_MIN_ATTRIBUTE)
+	self.recoilMax = self.blaster:GetAttribute(Constants.RECOIL_MAX_ATTRIBUTE)
+	
 	-- Resync aim assist values
 	self.range = self.blaster:GetAttribute(Constants.AIM_ASSIST_RANGE_ATTRIBUTE)
 	self.fov = self.blaster:GetAttribute(Constants.AIM_ASSIST_FOV_ATTRIBUTE)

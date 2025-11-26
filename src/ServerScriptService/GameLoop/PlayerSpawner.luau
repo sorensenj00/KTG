@@ -11,9 +11,13 @@ function PlayerSpawner.Start()
 
 	-- Re-using similar logic to BotSpawner for consistency
 	local function getRandomSpawnPosition(playerLevel: number?)
+		-- Attempt to find the map/baseplate by common names
 		local baseplate = Workspace:FindFirstChild("Baseplate")
+			or Workspace:FindFirstChild("Map")
+			or Workspace:FindFirstChild("Ground")
+
 		local pos = Vector3.new(0, 10, 0)
-		local size = Vector3.new(100, 1, 100) -- Default fallback
+		local size = Vector3.new(2048, 1, 2048) -- Default fallback
 
 		if baseplate then
 			if baseplate:IsA("Model") then
@@ -34,18 +38,31 @@ function PlayerSpawner.Start()
 		-- Random offset within baseplate (leaving a margin)
 		local x = math.random(-halfSizeX + 20, halfSizeX - 20)
 		local z = math.random(-halfSizeZ + 20, halfSizeZ - 20)
+		
+		local targetX = pos.X + x
+		local targetZ = pos.Z + z
 
 		-- Calculate spawn height based on player size
-		-- For large players, we need to spawn them higher to prevent clipping
 		local level = playerLevel or 1
 		local sizeMultiplier = ScalingConfig.GetSizeMultiplier(level)
-		-- Standard R15 character height is ~5 studs, so scaled height is ~5 * sizeMultiplier
-		-- We spawn at: baseplate top + half player height + clearance margin
 		local playerHeight = 5 * sizeMultiplier
-		local clearanceMargin = 10 -- Safety margin in studs
-		local spawnHeight = pos.Y + size.Y / 2 + (playerHeight / 2) + clearanceMargin
+		local clearanceMargin = 5 -- Safety margin in studs
 
-		return Vector3.new(pos.X + x, spawnHeight, pos.Z + z)
+		-- Raycast to find exact floor height (prevents spawning on roof of map models)
+		local rayOrigin = Vector3.new(targetX, 500, targetZ)
+		local rayDirection = Vector3.new(0, -1000, 0)
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		rayParams.FilterDescendantsInstances = {Workspace:FindFirstChild("Bots"), Workspace:FindFirstChild("Orbs"), Workspace:FindFirstChild("Players")}
+		
+		local rayResult = Workspace:Raycast(rayOrigin, rayDirection, rayParams)
+		local spawnY = pos.Y + size.Y / 2 + (playerHeight / 2) + clearanceMargin -- Fallback
+
+		if rayResult then
+			spawnY = rayResult.Position.Y + (playerHeight / 2) + clearanceMargin
+		end
+
+		return Vector3.new(targetX, spawnY, targetZ)
 	end
 
 	local function onCharacterAdded(character)
@@ -68,6 +85,8 @@ function PlayerSpawner.Start()
 
 	local function onPlayerAdded(player)
 		player.CharacterAdded:Connect(onCharacterAdded)
+		-- Initial spawn since AutoLoads is off
+		player:LoadCharacter()
 	end
 
 	Players.PlayerAdded:Connect(onPlayerAdded)

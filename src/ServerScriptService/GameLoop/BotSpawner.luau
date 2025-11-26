@@ -91,6 +91,11 @@ local function spawnBot()
 		return
 	end
 
+	-- Disable ALL default Roblox UI (health bar and name display)
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	humanoid.NameDisplayDistance = 0
+
 	bot.PrimaryPart = rootPart
 
 	-- === FIX 4: Reset Pivot Offset ===
@@ -219,13 +224,25 @@ end
 function BotSpawner.Start()
 
 	
-	-- Wait for Baseplate to ensure world geometry is loaded
+	-- Wait for Baseplate/Map to ensure world geometry is loaded
 	-- This prevents raycast failures that cause bots to spawn in the sky
-	local baseplate = Workspace:WaitForChild("Baseplate", 30)
-	if not baseplate then
-		warn("BotSpawner: Baseplate not found after 30 seconds! Bots may spawn incorrectly.")
-	else
+	local mapObject = nil
+	local startTime = os.clock()
+	while os.clock() - startTime < 30 do
+		mapObject = Workspace:FindFirstChild("Baseplate") 
+			or Workspace:FindFirstChild("Map") 
+			or Workspace:FindFirstChild("Ground")
+		
+		if mapObject then
+			break
+		end
+		task.wait(1)
+	end
 
+	if not mapObject then
+		warn("BotSpawner: Map/Baseplate not found after 30 seconds! Bots may spawn incorrectly.")
+	else
+		print("BotSpawner: Found map object: " .. mapObject.Name)
 	end
 	
 	for _ = 1, SPAWN_COUNT do
@@ -287,6 +304,11 @@ function BotSpawner.SpawnDisplayBots()
 		
 		local humanoid = bot:WaitForChild("Humanoid")
 		local rootPart = bot:WaitForChild("HumanoidRootPart")
+		
+		-- Disable ALL default Roblox UI (health bar and name display)
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+		humanoid.NameDisplayDistance = 0
 		
 		-- Reset Pivot to ensure consistent spawning
 		rootPart.PivotOffset = CFrame.new()

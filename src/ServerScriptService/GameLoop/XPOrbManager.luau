@@ -25,10 +25,15 @@ end
 local XPOrbManager = {}
 
 -- Configuration
-local SPAWN_INTERVAL = 0.5
+local SPAWN_INTERVAL = 0.25
 local ORB_LIFETIME = 45
-local MAX_ORBS = 300
+local MAX_ORBS = 600
 local POOL_SIZE = 50
+local MAGNET_RADIUS = 50
+local MIN_MAGNET_SPEED = 10
+local MAX_MAGNET_SPEED = 80
+local FLOAT_AMPLITUDE = 1.5 -- Max height deviation
+local FLOAT_SPEED = 2 -- Speed of floating animation
 
 -- Helper to ensure Orbs folder exists in Workspace
 local function getOrbsFolder()
@@ -91,7 +96,7 @@ local function getRandomSpawnPosition()
 
 	local yPos = 10 -- Default height
 	if rayResult then
-		yPos = rayResult.Position.Y + 1 -- 1 stud above ground (easier to collect)
+		yPos = rayResult.Position.Y -- Return exact ground height
 	end
 
 	return Vector3.new(targetX, yPos, targetZ)
@@ -104,7 +109,9 @@ local function getOrb()
 		orb = Instance.new("Part")
 		orb.Name = "XPOrb"
 		orb.Shape = Enum.PartType.Ball
-		orb.Material = Enum.Material.Neon
+		orb.Material = Enum.Material.Glass -- Changed to Glass for better visuals
+		orb.Transparency = 0.4 -- Translucent
+		orb.Reflectance = 0.3 -- Shiny
 		orb.Anchored = true
 		orb.CanCollide = false
 		orb.CastShadow = false
@@ -168,20 +175,51 @@ local function spawnOrb()
 	hitbox.Parent = orb
 
 	-- Position using helper
-	orb.Position = getRandomSpawnPosition()
+	local spawnPos = getRandomSpawnPosition()
+	-- Adjust Y to sit perfectly on top of the ground
+	orb.Position = Vector3.new(spawnPos.X, spawnPos.Y + (orb.Size.Y / 2), spawnPos.Z)
 	orb.Parent = getOrbsFolder()
+
+	-- Add PointLight for glow
+	local light = Instance.new("PointLight")
+	light.Color = selectedTier.Color
+	light.Range = selectedTier.Size.Y * 1.5
+	light.Brightness = 2
+	light.Parent = orb
+
+	-- Add Sparkle Particles
+	local particles = Instance.new("ParticleEmitter")
+	particles.Name = "Sparkles"
+	particles.Texture = "rbxassetid://1266170131" -- Generic sparkle texture
+	particles.Color = ColorSequence.new(selectedTier.Color)
+	particles.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.5),
+		NumberSequenceKeypoint.new(1, 0)
+	})
+	particles.Lifetime = NumberRange.new(0.5, 1)
+	particles.Rate = 20
+	particles.Speed = NumberRange.new(2, 5)
+	particles.SpreadAngle = Vector2.new(360, 360)
+	particles.Drag = 2
+	particles.LightEmission = 1
+	particles.Parent = orb
 
 	-- Add to active list
 	table.insert(activeOrbs, orb)
 
 	-- Simplified animation
-	local startY = orb.Position.Y
+	-- Base Y is ground + half size + amplitude (so lowest point is touching ground)
+	local groundY = spawnPos.Y
+	local currentBaseY = groundY + (orb.Size.Y / 2) + FLOAT_AMPLITUDE
+	
 	task.spawn(function()
 		local elapsed = 0
 		local connection
+		local upgradeCount = 0
 		connection = game:GetService("RunService").Heartbeat:Connect(function(dt)
 			elapsed = elapsed + dt
-			if elapsed > ORB_LIFETIME or not orb.Parent then
+			
+			if not orb.Parent then
 				connection:Disconnect()
 				local index = table.find(activeOrbs, orb)
 				if index then
@@ -190,13 +228,70 @@ local function spawnOrb()
 				returnOrb(orb)
 				return
 			end
-			-- Simple float animation
-			local floatOffset = math.sin(elapsed * 2) * 1
-			orb.Position = Vector3.new(orb.Position.X, startY + floatOffset, orb.Position.Z)
-			orb.Orientation = Vector3.new(0, elapsed * 60, 0) -- Rotate
-			-- Keep hitbox centered on orb
-			if hitbox and hitbox.Parent then
-				hitbox.CFrame = orb.CFrame
+
+			-- Check for upgrade
+			if elapsed > ORB_LIFETIME * (upgradeCount + 1) then
+				upgradeCount += 1
+				
+				-- Upgrade stats
+				orb.Size = orb.Size * 1.5
+				
+				-- Recalculate base Y for new size
+				currentBaseY = groundY + (orb.Size.Y / 2) + FLOAT_AMPLITUDE
+
+				if hitbox then
+					hitbox.Size = hitbox.Size * 1.5
+				end
+				
+				-- Update light
+				local light = orb:FindFirstChild("PointLight")
+				if light then
+					light.Range = orb.Size.Y * 1.5
+				end
+				
+				local currentXP = orb:GetAttribute("XPValue") or 100
+				orb:SetAttribute("XPValue", currentXP * 2)
+			end
+
+			-- Magnet Effect
+			local closestPlayer = nil
+			local closestDist = MAGNET_RADIUS
+			
+			for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+				if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+					local dist = (player.Character.HumanoidRootPart.Position - orb.Position).Magnitude
+					if dist < closestDist then
+						closestDist = dist
+						closestPlayer = player
+					end
+				end
+			end
+
+			if closestPlayer and closestPlayer.Character then
+				-- Move towards player
+				local targetPos = closestPlayer.Character.HumanoidRootPart.Position
+				local direction = (targetPos - orb.Position).Unit
+				
+				-- Variable speed based on distance (closer = faster)
+				local speedAlpha = 1 - math.clamp(closestDist / MAGNET_RADIUS, 0, 1)
+				local currentSpeed = MIN_MAGNET_SPEED + (MAX_MAGNET_SPEED - MIN_MAGNET_SPEED) * speedAlpha
+				
+				orb.Position = orb.Position + direction * currentSpeed * dt
+				orb.Orientation = Vector3.new(0, elapsed * 360, 0) -- Spin faster when magnetized
+				
+				-- Update hitbox
+				if hitbox and hitbox.Parent then
+					hitbox.CFrame = orb.CFrame
+				end
+			else
+				-- Floating animation
+				local floatOffset = math.sin(elapsed * FLOAT_SPEED) * FLOAT_AMPLITUDE
+				orb.Position = Vector3.new(orb.Position.X, currentBaseY + floatOffset, orb.Position.Z)
+				orb.Orientation = Vector3.new(0, elapsed * 60, 0) -- Rotate
+				-- Keep hitbox centered on orb
+				if hitbox and hitbox.Parent then
+					hitbox.CFrame = orb.CFrame
+				end
 			end
 		end)
 	end)
@@ -243,7 +338,9 @@ function XPOrbManager.Start()
 		local orb = Instance.new("Part")
 		orb.Name = "XPOrb"
 		orb.Shape = Enum.PartType.Ball
-		orb.Material = Enum.Material.Neon
+		orb.Material = Enum.Material.Glass
+		orb.Transparency = 0.4
+		orb.Reflectance = 0.3
 		orb.Anchored = true
 		orb.CanCollide = false
 		orb.CastShadow = false

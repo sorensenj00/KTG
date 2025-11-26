@@ -23,6 +23,7 @@ local purchaseUpgradeRemote
 local updateMetaStatsRemote
 local requestMetaDataRemote
 local showDeathSummaryRemote
+local requestRespawnRemote
 
 -- Helper to get all upgrade stat names from config
 local function getAllUpgradeNames()
@@ -207,11 +208,6 @@ local function onPlayerDeath(player: Player)
 		-- Save to DataStore
 		savePlayerData(player)
 
-		-- Notify client with death summary
-		if showDeathSummaryRemote then
-			showDeathSummaryRemote:FireClient(player, sessionKills, sessionXP, totalGXPEarned)
-		end
-
 		-- Notify client with updated stats
 		if updateMetaStatsRemote then
 			updateMetaStatsRemote:FireClient(
@@ -221,6 +217,11 @@ local function onPlayerDeath(player: Player)
 				playerData[player].Biomass
 			)
 		end
+	end
+
+	-- Notify client with death summary (ALWAYS show this, even if 0 GXP earned)
+	if showDeathSummaryRemote then
+		showDeathSummaryRemote:FireClient(player, sessionKills, sessionXP, totalGXPEarned)
 	end
 
 	-- Reset session data
@@ -454,6 +455,20 @@ local function setupRemotes()
 		showDeathSummaryRemote.Parent = remotesFolder
 		print("✅ Created ShowDeathSummary RemoteEvent")
 	end
+
+	-- RequestRespawn RemoteEvent
+	requestRespawnRemote = remotesFolder:FindFirstChild("RequestRespawn")
+	if not requestRespawnRemote then
+		requestRespawnRemote = Instance.new("RemoteEvent")
+		requestRespawnRemote.Name = "RequestRespawn"
+		requestRespawnRemote.Parent = remotesFolder
+		print("✅ Created RequestRespawn RemoteEvent")
+	end
+	
+	requestRespawnRemote.OnServerEvent:Connect(function(player)
+		print("🔄 Respawn requested for", player.Name)
+		player:LoadCharacter()
+	end)
 end
 
 function MetaProgressionManager.Start()

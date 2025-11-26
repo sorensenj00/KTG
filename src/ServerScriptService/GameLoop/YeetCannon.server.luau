@@ -37,17 +37,12 @@ local playerStates = {}
 -- === HELPERS ===
 local function findAllYeetCannons()
 	local cannons = {}
-	-- Wait for at least one cannon to spawn
-	local firstCannon = Workspace:WaitForChild("YeetCannon", 10)
-	if firstCannon then
-		table.insert(cannons, firstCannon)
-	end
 	
-	-- Find all other numbered cannons
-	for i = 2, 10 do -- Check up to 10 cannons
-		local cannon = Workspace:FindFirstChild("YeetCannon_" .. i)
-		if cannon then
-			table.insert(cannons, cannon)
+	-- Iterate through ALL children of Workspace to find anything that looks like a YeetCannon
+	-- This handles "YeetCannon", "YeetCannon (2)", "YeetCannon_2", etc.
+	for _, child in ipairs(Workspace:GetChildren()) do
+		if child:IsA("Model") and string.match(child.Name, "^YeetCannon") then
+			table.insert(cannons, child)
 		end
 	end
 	

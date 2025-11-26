@@ -501,24 +501,6 @@ function BotController.Start()
 					continue
 				end
 				
-				-- === HUMANIZED BEHAVIOR: Retreat when low health ===
-				local healthPercent = hum.Health / hum.MaxHealth
-				if healthPercent < 0.3 then
-					-- Low health! Try to retreat and find cover
-					-- Move away from enemy
-					local awayFromEnemy = (root.Position - enemyRoot.Position).Unit
-					local retreatPos = root.Position + awayFromEnemy * 30
-					
-					-- Try to path to retreat position
-					hum:MoveTo(retreatPos)
-					
-					-- Still shoot while retreating (suppressive fire)
-					shootAt(bot, enemy)
-					
-					-- Force next decision soon to re-evaluate
-					data.NextDecision = now + 0.5
-					continue
-				end
 
 				-- Combat Spacing: Maintain distance from enemy
 				local toEnemy = (enemyRoot.Position - root.Position)
