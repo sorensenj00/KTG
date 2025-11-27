@@ -404,7 +404,7 @@ end
 
 -- === CLIENT REPLICATION ===
 -- Draws lasers for OTHER players
-local function onReplicateShotEvent(blaster: Tool, position: Vector3, rayResults: { any })
+local function processSingleShot(blaster: Tool, position: Vector3, rayResults: { any })
 	if not blaster or not blaster:IsDescendantOf(game) then
 		return
 	end
@@ -448,6 +448,23 @@ local function onReplicateShotEvent(blaster: Tool, position: Vector3, rayResults
 	end
 
 	drawRayResults(position, rayResults)
+end
+
+local function onReplicateShotEvent(dataPacket)
+	-- dataPacket is now a list of shots: { {tool, origin, results}, ... }
+	-- Or fallback to single shot for backward compatibility if needed, but we controlled the server change.
+
+	if type(dataPacket) == "table" and #dataPacket > 0 then
+		if dataPacket[1].tool then
+			-- It is a list of shots
+			for _, shotData in ipairs(dataPacket) do
+				processSingleShot(shotData.tool, shotData.origin, shotData.results)
+			end
+		else
+			-- Assume legacy single shot format? No, we replaced the server logic completely.
+			-- If we receive something else, it's likely a malformed packet or mixed version.
+		end
+	end
 end
 
 function BlasterController.Start()

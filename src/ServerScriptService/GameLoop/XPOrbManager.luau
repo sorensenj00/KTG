@@ -1,6 +1,6 @@
 --[[
     Module: XPOrbManager
-    Description: Manages spawning and lifecycle of XP orbs using object pooling.
+    Description: Manages spawning and lifecycle of Biomass orbs using object pooling.
     
     Dependencies:
     - Workspace
@@ -312,12 +312,12 @@ local function spawnOrb()
 			local xpValue = orb:GetAttribute("XPValue") or 100
 
 			if player then
-				getProgressionManager().AddXP(player, xpValue)
+				getProgressionManager().AddBiomass(player, xpValue)
 			else
 				-- Check for bot
 				local CollectionService = game:GetService("CollectionService")
 				if CollectionService:HasTag(character, "BotAI") then
-					getProgressionManager().AddXP(character, xpValue)
+					getProgressionManager().AddBiomass(character, xpValue)
 				end
 			end
 
@@ -328,6 +328,120 @@ local function spawnOrb()
 			returnOrb(orb)
 		end
 	end)
+end
+
+-- PUBLIC API: Spawn specific number of orbs at a location (for death drops)
+function XPOrbManager.SpawnDrop(position: Vector3, totalXP: number)
+	if totalXP <= 0 then return end
+
+	-- Determine orb count/size based on totalXP
+	-- Instead of 1 giant orb, spawn a cluster of smaller ones for satisfaction
+	local orbCount = math.clamp(math.ceil(totalXP / 100), 1, 10)
+	local xpPerOrb = math.floor(totalXP / orbCount)
+
+	for i = 1, orbCount do
+		if countOrbs() >= MAX_ORBS then
+			local oldest = table.remove(activeOrbs, 1)
+			if oldest then returnOrb(oldest) end
+		end
+
+		local orb = getOrb()
+		-- Determine visual tier based on value
+		local tier = ORB_TIERS[1]
+		if xpPerOrb >= 2000 then tier = ORB_TIERS[4]
+		elseif xpPerOrb >= 500 then tier = ORB_TIERS[3]
+		elseif xpPerOrb >= 250 then tier = ORB_TIERS[2]
+		end
+
+		orb.Size = tier.Size
+		orb.Color = tier.Color
+		orb:SetAttribute("XPValue", xpPerOrb)
+
+		-- Explosion/Scatter effect
+		local offset = Vector3.new(math.random(-10, 10), math.random(5, 15), math.random(-10, 10))
+		orb.Position = position + Vector3.new(0, 5, 0) -- Start high
+		orb.Parent = getOrbsFolder()
+
+		-- Create hitbox
+		local hitbox = Instance.new("Part")
+		hitbox.Name = "Hitbox"
+		hitbox.Size = tier.Size * 3
+		hitbox.Transparency = 1
+		hitbox.CanCollide = false
+		hitbox.Anchored = true
+		hitbox.CastShadow = false
+		hitbox.Parent = orb
+
+		table.insert(activeOrbs, orb)
+
+		-- Physics-like scatter animation (manual tween/lerp since anchored)
+		local targetPos = position + Vector3.new(math.random(-15, 15), 1, math.random(-15, 15))
+
+		-- Simple parabola animation
+		task.spawn(function()
+			local t = 0
+			local duration = 0.5
+			local startPos = orb.Position
+
+			while t < 1 and orb.Parent do
+				t = t + 0.1
+				local linear = startPos:Lerp(targetPos, t)
+				local height = math.sin(t * math.pi) * 10 -- Arc
+				orb.Position = linear + Vector3.new(0, height, 0)
+				if hitbox.Parent then hitbox.CFrame = orb.CFrame end
+				task.wait(0.03)
+			end
+
+			-- Start lifetime timer after landing
+			task.delay(ORB_LIFETIME, function()
+				if orb.Parent then
+					local index = table.find(activeOrbs, orb)
+					if index then table.remove(activeOrbs, index) end
+					returnOrb(orb)
+				end
+			end)
+
+			-- Start floating animation
+			local floatY = orb.Position.Y
+			local elapsed = 0
+			local connection
+			connection = game:GetService("RunService").Heartbeat:Connect(function(dt)
+				elapsed = elapsed + dt
+				if not orb.Parent then connection:Disconnect() return end
+				orb.Position = Vector3.new(orb.Position.X, floatY + math.sin(elapsed*2), orb.Position.Z)
+				orb.Orientation = Vector3.new(0, elapsed*60, 0)
+				if hitbox.Parent then hitbox.CFrame = orb.CFrame end
+			end)
+		end)
+
+		-- Touch Logic (Copied from spawnOrb to ensure consistency)
+		local collected = false
+		hitbox.Touched:Connect(function(hit)
+			if collected or not orb.Parent then return end
+			local character = hit.Parent
+			local humanoid = character:FindFirstChild("Humanoid")
+			if humanoid and humanoid.Health > 0 then
+				collected = true
+
+				-- Award XP
+				local player = game:GetService("Players"):GetPlayerFromCharacter(character)
+				local xpValue = orb:GetAttribute("XPValue") or 100
+
+				if player then
+					getProgressionManager().AddBiomass(player, xpValue)
+				else
+					local CollectionService = game:GetService("CollectionService")
+					if CollectionService:HasTag(character, "BotAI") then
+						getProgressionManager().AddBiomass(character, xpValue)
+					end
+				end
+
+				local index = table.find(activeOrbs, orb)
+				if index then table.remove(activeOrbs, index) end
+				returnOrb(orb)
+			end
+		end)
+	end
 end
 
 function XPOrbManager.Start()

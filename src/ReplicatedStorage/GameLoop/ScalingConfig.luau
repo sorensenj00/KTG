@@ -7,6 +7,9 @@ ScalingConfig.UPDATE_INTERVAL = 2 -- Update more frequently to catch stage trans
 ScalingConfig.MAX_LEVEL = 30
 ScalingConfig.XP_BASE_REQ = 100
 ScalingConfig.XP_EXPONENT = 2.1 -- Slightly easier leveling to reach mid-game
+-- Renaming XP to Biomass for clarity in usage, though math is same
+ScalingConfig.BIOMASS_BASE_REQ = 150
+ScalingConfig.BIOMASS_EXPONENT = 2.2
 
 -- Kill Rewards
 ScalingConfig.KILL_BASE_REWARD = 50
@@ -20,6 +23,20 @@ ScalingConfig.HEALTH_GROWTH_FACTOR = 1.125
 -- Speed Constants
 ScalingConfig.SPEED_AT_LEVEL_1 = 100 -- Very Fast (Mouse) - Updated to 100 per request
 ScalingConfig.SPEED_AT_LEVEL_30 = 10 -- Very Slow (Titan)
+-- Health
+ScalingConfig.HEALTH_BASE = 100
+ScalingConfig.HEALTH_EXPONENT = 2.5
+
+-- Size (0.75 to 12.0)
+ScalingConfig.MIN_SIZE = 0.75
+ScalingConfig.MAX_SIZE = 12.0
+ScalingConfig.GROWTH_EXPONENT = 3.0
+
+-- Speed Constants
+-- Level 1: Very Fast (120) - Agile, hard to hit
+-- Level 30: Heavy (50) - Slower relative to size, but still covers distance
+ScalingConfig.SPEED_AT_LEVEL_1 = 120
+ScalingConfig.SPEED_AT_LEVEL_30 = 50
 
 -- Visuals
 ScalingConfig.STAR_MODE_COLOR = Color3.fromRGB(255, 50, 50) -- Red for Titan Boss
@@ -37,7 +54,7 @@ ScalingConfig.MAX_SIZE = 20.0
 -- Formulas
 
 function ScalingConfig.GetXPRequired(level: number): number
-	return math.floor(ScalingConfig.XP_BASE_REQ * math.pow(level, ScalingConfig.XP_EXPONENT))
+	return math.floor(ScalingConfig.BIOMASS_BASE_REQ * math.pow(level, ScalingConfig.BIOMASS_EXPONENT))
 end
 
 function ScalingConfig.GetXPReward(victimLevel: number): number

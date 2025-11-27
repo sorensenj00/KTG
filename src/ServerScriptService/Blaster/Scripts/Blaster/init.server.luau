@@ -11,6 +11,10 @@ local castRays = require(ServerScriptService.Utility.castRays)
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 local DamageTracker = require(ServerScriptService.GameLoop.DamageTracker)
 local AntiExploit = require(ServerScriptService.Utility.AntiExploit)
+local ShotReplicator = require(script.ShotReplicator)
+
+-- Start Shot Replicator
+ShotReplicator.Start()
 
 -- Lazy Load MetaManager
 local MetaProgressionManager = nil
@@ -171,11 +175,6 @@ local function onShoot(player, now, tool, originCF, tagged)
 				-- Damage Number
 				if damageNumberRemote then
 					local hitPosition = result.position
-					local head = targetChar:FindFirstChild("Head")
-					if head then
-						hitPosition = head.Position + Vector3.new(0, 2, 0)
-					end
-
 					local xpAmount = willKill and ScalingConfig.GetXPReward(targetChar:GetAttribute("Level") or 1)
 						or nil
 					damageNumberRemote:FireClient(player, finalDamage, hitPosition, willKill, xpAmount)
@@ -195,7 +194,9 @@ local function onShoot(player, now, tool, originCF, tagged)
 			instance = r.instance,
 		})
 	end
-	replicateShotRemote:FireAllClients(tool, originCF.Position, visualRayResults)
+
+	-- Use Batch Replicator
+	ShotReplicator.Buffer(tool, originCF.Position, visualRayResults)
 end
 
 local function onReload(player, tool)

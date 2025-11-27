@@ -87,6 +87,15 @@ function ScalingEngine.ResizeCharacter(character: Model, level: number)
 	local finalMaxHealth = baseMaxHealth * healthMult
 	local finalWalkSpeed = baseWalkSpeed * speedMult
 
+	-- [FIX] Scale JumpPower/JumpHeight proportional to size
+	-- Default JumpPower is 50, JumpHeight is 7.2.
+	-- We scale it by sqrt(size) to make it feel weighty but functional, or linear?
+	-- Physics: To jump X times higher (relative to body), we need linear scaling if gravity is constant.
+	-- Since sizeMultiplier affects leg length, we want to jump relative to that.
+	-- Let's use linear scaling for now so a 10x giant jumps 10x high (which looks "normal" for their size).
+	local baseJumpHeight = 7.2
+	local finalJumpHeight = baseJumpHeight * sizeMultiplier
+
 	-- 2. Scale Character Uniformly
 	-- We use ScaleTo which handles all parts, attachments, joints, and Humanoid properties (HipHeight) automatically.
 	-- This ensures the model is scaled uniformly without distortion.
@@ -107,6 +116,10 @@ function ScalingEngine.ResizeCharacter(character: Model, level: number)
 	end
 	
 	humanoid.WalkSpeed = finalWalkSpeed
+
+	-- Use JumpHeight if available (newer Roblox standard), falling back to Power if needed.
+	humanoid.UseJumpPower = false
+	humanoid.JumpHeight = finalJumpHeight
 
 	-- 6. Star Mode Visuals (Titan Level)
 	if math.floor(level) >= ScalingConfig.MAX_LEVEL then

@@ -82,14 +82,29 @@ local COLORS = {
 }
 
 local ICON_MAP = {
-	Lock = "rbxassetid://6895079853", -- Placeholder
-	StartLevel = "rbxassetid://6895079853", -- Placeholder
-	-- Add other icons as needed
+	Health = "rbxassetid://7169354151", -- White Shield
+	Damage = "rbxassetid://10468915", -- Classic Sword
+	Speed = "rbxassetid://1234752", -- Sonic/Speed
+	Ammo = "rbxassetid://11563251", -- Bomb/Ammo
+	Vampirism = "rbxassetid://6238815272",
+	ExplosiveDeath = "rbxassetid://11563251",
+	StartLevel = "rbxasset://textures/ui/GuiImagePlaceholder.png",
+	Lock = "rbxassetid://10700326032",
+	Stats = "rbxassetid://15264359039", -- Bar Graph Icon
+	Biomass = "rbxassetid://7493638708", -- DNA/Biomass Icon
+
+    -- New Skills Icons (Placeholders for now)
+    Regeneration = "rbxassetid://7169354151", -- Shield/Health
+    Photosynthesis = "rbxassetid://15264359039", -- Leaf/Growth
+    Magnetism = "rbxassetid://1234752", -- Magnet/Speed
+    Thorns = "rbxassetid://10468915", -- Spikes/Sword
+    Featherweight = "rbxassetid://1234752", -- Feather/Speed
+    ToxicAura = "rbxassetid://11563251", -- Gas/Bomb
 }
 
--- --- State Variables --- --
-local currentGlobalXP = 0
-local previousGlobalXP = 0
+-- --- State --- --
+local currentDNA = 0
+local previousDNA = 0
 local currentBiomass = 0
 local currentUpgrades = {}
 local currentMagazineSize = 0
@@ -103,242 +118,400 @@ local function createHUD()
 	screenGui.ResetOnSpawn = false
 	screenGui.Parent = playerGui
 
-	-- Helper for Neon Borders
-	local function addNeonBorder(parent, color, cornerRadius)
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = color
-		stroke.Thickness = 2
-		stroke.Transparency = 0
-		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		stroke.Parent = parent
-		
-		local glow = Instance.new("UIStroke")
-		glow.Color = color
-		glow.Thickness = 4
-		glow.Transparency = 0.5
-		glow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-		glow.Name = "Glow"
-		glow.Parent = parent
+	-- ============================================
+	-- 1. Health Bar (Bottom Left)
+	-- ============================================
+	local healthFrame = Instance.new("Frame")
+	healthFrame.Name = "HealthFrame"
+	healthFrame.Size = UDim2.fromOffset(300, 40)
+	healthFrame.Position = UDim2.fromScale(0.02, 0.90) -- Moved up slightly for XP bar
+	healthFrame.AnchorPoint = Vector2.new(0, 1)
+	healthFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40) -- Dark Grey Background
+	healthFrame.BorderSizePixel = 0
+	healthFrame.Parent = screenGui
 
-		if cornerRadius then
-			local corner = Instance.new("UICorner")
-			corner.CornerRadius = UDim.new(0, cornerRadius)
-			corner.Parent = parent
-		end
-		return stroke
-	end
+	local healthCorner = Instance.new("UICorner")
+	healthCorner.CornerRadius = UDim.new(0, 10)
+	healthCorner.Parent = healthFrame
 
-	-- 1. Top Right Widget (Size & Kills)
-	local topWidget = Instance.new("Frame")
-	topWidget.Name = "TopWidget"
-	topWidget.Size = UDim2.fromOffset(200, 80)
-	topWidget.Position = UDim2.new(1, -20, 0, 10) -- Moved to Top Right
-	topWidget.AnchorPoint = Vector2.new(1, 0)
-	topWidget.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-	topWidget.BackgroundTransparency = 0.3
-	topWidget.Parent = screenGui
-	
-	addNeonBorder(topWidget, Color3.fromRGB(100, 100, 255), 16) -- Blue/Purple Neon
-	
-	local sizeLabel = Instance.new("TextLabel")
-	sizeLabel.Name = "SizeLabel"
-	sizeLabel.Size = UDim2.new(1, 0, 0.6, 0)
-	sizeLabel.BackgroundTransparency = 1
-	sizeLabel.Text = "SIZE: 1"
-	sizeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	sizeLabel.Font = Enum.Font.GothamBlack
-	sizeLabel.TextSize = 28
-	sizeLabel.Parent = topWidget
-	
-	local topKillsLabel = Instance.new("TextLabel")
-	topKillsLabel.Name = "TopKillsLabel"
-	topKillsLabel.Size = UDim2.new(1, 0, 0.4, 0)
-	topKillsLabel.Position = UDim2.new(0, 0, 0.6, 0)
-	topKillsLabel.BackgroundTransparency = 1
-	topKillsLabel.Text = "KILLS: 0"
-	topKillsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-	topKillsLabel.Font = Enum.Font.GothamBold
-	topKillsLabel.TextSize = 16
-	topKillsLabel.Parent = topWidget
-
-	-- 2. Bottom Left Widget (Health)
-	local healthWidget = Instance.new("Frame")
-	healthWidget.Name = "HealthWidget"
-	healthWidget.Size = UDim2.fromOffset(280, 50)
-	healthWidget.Position = UDim2.new(0, 20, 1, -20)
-	healthWidget.AnchorPoint = Vector2.new(0, 1)
-	healthWidget.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-	healthWidget.BackgroundTransparency = 0.3
-	healthWidget.Parent = screenGui
-	
-	addNeonBorder(healthWidget, Color3.fromRGB(0, 255, 255), 25) -- Cyan Neon
+	local healthStroke = Instance.new("UIStroke")
+	healthStroke.Color = Color3.fromRGB(20, 20, 20)
+	healthStroke.Thickness = 3
+	healthStroke.Parent = healthFrame
 
 	local healthFill = Instance.new("Frame")
 	healthFill.Name = "HealthFill"
 	healthFill.Size = UDim2.fromScale(1, 1)
 	healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
 	healthFill.BorderSizePixel = 0
-	healthFill.Parent = healthWidget
-	
-	local healthGradient = Instance.new("UIGradient")
-	healthGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 200, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 150))
-	})
-	healthGradient.Parent = healthFill
-	
-	local healthCorner = Instance.new("UICorner")
-	healthCorner.CornerRadius = UDim.new(0, 25)
-	healthCorner.Parent = healthFill
+	healthFill.Parent = healthFrame
+
+	local healthFillCorner = Instance.new("UICorner")
+	healthFillCorner.CornerRadius = UDim.new(0, 10)
+	healthFillCorner.Parent = healthFill
 
 	local healthText = Instance.new("TextLabel")
 	healthText.Name = "HealthText"
 	healthText.Size = UDim2.fromScale(1, 1)
 	healthText.BackgroundTransparency = 1
-	healthText.Text = "Health: 100/100"
-	healthText.TextColor3 = Color3.new(1, 1, 1)
-	healthText.Font = Enum.Font.GothamBlack
-	healthText.TextSize = 20
-	healthText.TextStrokeTransparency = 0.5
-	healthText.Parent = healthWidget
+	healthText.Text = "100 / 100"
+	healthText.TextColor3 = Color3.fromRGB(20, 20, 20) -- Dark text on Yellow
+	healthText.TextSize = 24
+	healthText.Font = Enum.Font.LuckiestGuy
+	if not pcall(function() healthText.Font = Enum.Font.LuckiestGuy end) then
+		healthText.Font = Enum.Font.GothamBlack
+	end
+	healthText.TextStrokeTransparency = 1
+	healthText.Parent = healthFrame
 
-	-- 3. Bottom Center Widget (Progression)
-	local progressionWidget = Instance.new("Frame")
-	progressionWidget.Name = "ProgressionWidget"
-	progressionWidget.Size = UDim2.fromOffset(400, 50) -- Matches HealthWidget height
-	progressionWidget.Position = UDim2.new(0.5, 0, 1, -20)
-	progressionWidget.AnchorPoint = Vector2.new(0.5, 1)
-	progressionWidget.BackgroundTransparency = 1
-	progressionWidget.Parent = screenGui
-	
-	-- XP Bar Container (Pill Shape like Health)
-	local xpBarContainer = Instance.new("Frame")
-	xpBarContainer.Name = "XPBarContainer"
-	xpBarContainer.Size = UDim2.new(1, 0, 1, 0) -- Fill the widget
-	xpBarContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-	xpBarContainer.BackgroundTransparency = 0.3
-	xpBarContainer.Parent = progressionWidget
-	
-	addNeonBorder(xpBarContainer, Color3.fromRGB(255, 100, 200), 25) -- Pink Neon, pill radius
+	-- ============================================
+	-- 1b. Biomass Bar (Below Health Bar)
+	-- ============================================
+	local xpFrame = Instance.new("Frame")
+	xpFrame.Name = "XPFrame"
+	xpFrame.Size = UDim2.fromOffset(300, 15) -- Thinner
+	xpFrame.Position = UDim2.fromScale(0.02, 0.93) -- Below Health (0.90 + height)
+	xpFrame.AnchorPoint = Vector2.new(0, 1)
+	xpFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	xpFrame.BorderSizePixel = 0
+	xpFrame.Parent = screenGui
+
+	local xpCorner = Instance.new("UICorner")
+	xpCorner.CornerRadius = UDim.new(0, 4)
+	xpCorner.Parent = xpFrame
+
+	local xpStroke = Instance.new("UIStroke")
+	xpStroke.Color = Color3.fromRGB(20, 20, 20)
+	xpStroke.Thickness = 2
+	xpStroke.Parent = xpFrame
 
 	local xpFill = Instance.new("Frame")
 	xpFill.Name = "XPFill"
 	xpFill.Size = UDim2.fromScale(0, 1)
 	xpFill.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
 	xpFill.BorderSizePixel = 0
-	xpFill.Parent = xpBarContainer
-	
-	local xpGradient = Instance.new("UIGradient")
-	xpGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 50, 150)), -- Pink
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 150, 50))  -- Orange
-	})
-	xpGradient.Parent = xpFill
-	
-	local xpCorner = Instance.new("UICorner")
-	xpCorner.CornerRadius = UDim.new(0, 25)
-	xpCorner.Parent = xpFill
-	
-	-- Level Text (Inside Bar)
-	local levelLabel = Instance.new("TextLabel")
-	levelLabel.Name = "LevelLabel"
-	levelLabel.Size = UDim2.fromScale(1, 1)
-	levelLabel.BackgroundTransparency = 1
-	levelLabel.Text = "Level 1"
-	levelLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	levelLabel.Font = Enum.Font.GothamBlack
-	levelLabel.TextSize = 20
-	levelLabel.TextStrokeTransparency = 0.5
-	levelLabel.Parent = xpBarContainer
-	
-	-- Stats Row (Below XP Bar)
-	local statsRow = Instance.new("Frame")
-	statsRow.Name = "StatsRow"
-	statsRow.Size = UDim2.new(1, 0, 0, 20)
-	statsRow.Position = UDim2.new(0, 0, 1, 5)
-	statsRow.BackgroundTransparency = 1
-	statsRow.Parent = progressionWidget
-	
+	xpFill.Parent = xpFrame
+
+	local xpFillCorner = Instance.new("UICorner")
+	xpFillCorner.CornerRadius = UDim.new(0, 4)
+	xpFillCorner.Parent = xpFill
+
+	local xpText = Instance.new("TextLabel")
+	xpText.Name = "ValueText"
+	xpText.Size = UDim2.fromScale(1, 1)
+	xpText.BackgroundTransparency = 1
+	xpText.Text = "Level 1"
+	xpText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	xpText.TextSize = 10
+	xpText.Font = Enum.Font.GothamBold
+	xpText.TextStrokeTransparency = 0.5
+	xpText.TextStrokeColor3 = Color3.new(0, 0, 0)
+	xpText.Parent = xpFrame
+
+	-- ============================================
+	-- 2. Stats Bar (Above XP Bar)
+	-- ============================================
+	local statsBar = Instance.new("Frame")
+	statsBar.Name = "StatsBar"
+	statsBar.Size = UDim2.fromOffset(300, 20)
+	statsBar.Position = UDim2.fromScale(0.02, 0.85) -- Above Health (0.90 - height)
+	statsBar.AnchorPoint = Vector2.new(0, 1)
+	statsBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	statsBar.BackgroundTransparency = 0.5
+	statsBar.BorderSizePixel = 0
+	statsBar.Parent = screenGui
+
+	local statsCorner = Instance.new("UICorner")
+	statsCorner.CornerRadius = UDim.new(0, 4)
+	statsCorner.Parent = statsBar
+
+	local statsStroke = Instance.new("UIStroke")
+	statsStroke.Color = RS_THEME.PANEL_BORDER
+	statsStroke.Thickness = 2
+	statsStroke.Parent = statsBar
+
 	local statsLayout = Instance.new("UIListLayout")
 	statsLayout.FillDirection = Enum.FillDirection.Horizontal
 	statsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	statsLayout.Padding = UDim.new(0, 20)
-	statsLayout.Parent = statsRow
-	
-	local function createStatLabel(name, color)
-		local label = Instance.new("TextLabel")
-		label.Name = name
-		label.AutomaticSize = Enum.AutomaticSize.X
-		label.Size = UDim2.new(0, 0, 1, 0)
-		label.BackgroundTransparency = 1
-		label.Text = name .. ": 0"
-		label.TextColor3 = color
-		label.Font = Enum.Font.GothamBold
-		label.TextSize = 14
-		label.TextStrokeTransparency = 0.5 -- Added stroke for readability
-		label.Parent = statsRow
-		return label
-	end
-	
-	local killsStatLabel = createStatLabel("Kills", ARCADE_THEME.TEXT_WHITE)
-	local biomassStatLabel = createStatLabel("Biomass", ARCADE_THEME.ACCENT_GREEN)
-	local gxpStatLabel = createStatLabel("GXP", ARCADE_THEME.ACCENT_ORANGE)
+	statsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	statsLayout.Padding = UDim.new(0, 10)
+	statsLayout.Parent = statsBar
 
-	-- 4. Bottom Right Widget (Ammo)
-	local ammoWidget = Instance.new("Frame")
-	ammoWidget.Name = "AmmoWidget"
-	ammoWidget.Size = UDim2.fromOffset(220, 60)
-	ammoWidget.Position = UDim2.new(1, -20, 1, -20)
-	ammoWidget.AnchorPoint = Vector2.new(1, 1)
-	ammoWidget.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-	ammoWidget.BackgroundTransparency = 0.3
-	ammoWidget.Visible = false
-	ammoWidget.Parent = screenGui
-	
-	addNeonBorder(ammoWidget, Color3.fromRGB(0, 150, 255), 10) -- Blue Neon
-	
+	-- Kills Label
+	local killsLabel = Instance.new("TextLabel")
+	killsLabel.Name = "KillsLabel"
+	killsLabel.Size = UDim2.new(0, 0, 1, 0)
+	killsLabel.AutomaticSize = Enum.AutomaticSize.X
+	killsLabel.BackgroundTransparency = 1
+	killsLabel.Text = "Kills: 0"
+	killsLabel.TextColor3 = RS_THEME.TEXT_ORANGE
+	killsLabel.TextSize = 14
+	killsLabel.Font = Enum.Font.GothamBold
+	killsLabel.TextStrokeTransparency = 0.5
+	killsLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	killsLabel.Parent = statsBar
+
+	-- DNA Label (Permanent Currency)
+	local dnaLabel = Instance.new("TextLabel")
+	dnaLabel.Name = "DNALabel"
+	dnaLabel.Size = UDim2.new(0, 0, 1, 0)
+	dnaLabel.AutomaticSize = Enum.AutomaticSize.X
+	dnaLabel.BackgroundTransparency = 1
+	dnaLabel.Text = "DNA: 0"
+	dnaLabel.TextColor3 = RS_THEME.TEXT_YELLOW -- Gold for DNA
+	dnaLabel.TextSize = 14
+	dnaLabel.Font = Enum.Font.GothamBold
+	dnaLabel.TextStrokeTransparency = 0.5
+	dnaLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	dnaLabel.Parent = statsBar
+
+	-- ============================================
+	-- 3. Ammo Display
+	-- ============================================
+	local ammoPanel = Instance.new("Frame")
+	ammoPanel.Name = "AmmoPanel"
+	ammoPanel.Size = UDim2.fromOffset(200, 100)
+	ammoPanel.Position = UDim2.fromScale(0.98, 0.95)
+	ammoPanel.AnchorPoint = Vector2.new(1, 1)
+	ammoPanel.BackgroundTransparency = 1
+	ammoPanel.BorderSizePixel = 0
+	ammoPanel.ZIndex = 10
+	ammoPanel.Parent = screenGui
+
+	local ammoUIScale = Instance.new("UIScale")
+	ammoUIScale.Parent = ammoPanel
+
+	-- Weapon Icon
+	local weaponIcon = Instance.new("ImageLabel")
+	weaponIcon.Name = "WeaponIcon"
+	weaponIcon.Size = UDim2.fromOffset(60, 60)
+	weaponIcon.Position = UDim2.fromScale(1, 0)
+	weaponIcon.AnchorPoint = Vector2.new(1, 0)
+	weaponIcon.BackgroundTransparency = 1
+	weaponIcon.Image = ""
+	weaponIcon.Visible = false
+	weaponIcon.Parent = ammoPanel
+
+	local ammoContainer = Instance.new("Frame")
+	ammoContainer.Name = "AmmoContainer"
+	ammoContainer.Size = UDim2.new(1, 0, 1, 0)
+	ammoContainer.Position = UDim2.fromScale(0, 0)
+	ammoContainer.BackgroundTransparency = 1
+	ammoContainer.Parent = ammoPanel
+
 	local ammoLabel = Instance.new("TextLabel")
 	ammoLabel.Name = "AmmoLabel"
 	ammoLabel.Size = UDim2.new(0.6, 0, 1, 0)
 	ammoLabel.Position = UDim2.new(0, 10, 0, 0)
 	ammoLabel.BackgroundTransparency = 1
-	ammoLabel.Text = "30/30"
-	ammoLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	ammoLabel.Font = Enum.Font.GothamBlack
-	ammoLabel.TextSize = 32
-	ammoLabel.TextXAlignment = Enum.TextXAlignment.Left
-	ammoLabel.Parent = ammoWidget
-	
-	local weaponIcon = Instance.new("ImageLabel")
-	weaponIcon.Name = "WeaponIcon"
-	weaponIcon.Size = UDim2.new(0, 50, 0, 50)
-	weaponIcon.Position = UDim2.new(1, -60, 0.5, 0)
-	weaponIcon.AnchorPoint = Vector2.new(0, 0.5)
-	weaponIcon.BackgroundTransparency = 1
-	weaponIcon.Parent = ammoWidget
-	
-	-- 5. XP Popup (Keep existing logic but style it)
-	local xpPopup = Instance.new("Frame")
-	xpPopup.Name = "XPPopup"
-	xpPopup.Size = UDim2.new(0, 200, 0, 50)
-	xpPopup.Position = UDim2.fromScale(0.5, 0.3)
-	xpPopup.AnchorPoint = Vector2.new(0.5, 0.5)
-	xpPopup.BackgroundTransparency = 1
-	xpPopup.Visible = false
-	xpPopup.Parent = screenGui
-	
+	ammoLabel.Text = "30"
+	ammoLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
+	ammoLabel.TextSize = 80
+	ammoLabel.Font = Enum.Font.LuckiestGuy
+	if not pcall(function() ammoLabel.Font = Enum.Font.LuckiestGuy end) then
+		ammoLabel.Font = Enum.Font.GothamBlack
+	end
+	ammoLabel.TextStrokeTransparency = 0
+	ammoLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	ammoLabel.TextXAlignment = Enum.TextXAlignment.Right
+	ammoLabel.RichText = true
+	ammoLabel.Parent = ammoContainer
+
+	local magazineLabel = Instance.new("TextLabel")
+	magazineLabel.Name = "MagazineLabel"
+	magazineLabel.Size = UDim2.fromScale(1, 0.3)
+	magazineLabel.Position = UDim2.fromScale(0, 0.7)
+	magazineLabel.BackgroundTransparency = 1
+	magazineLabel.Text = "/ 90"
+	magazineLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	magazineLabel.TextSize = 24
+	magazineLabel.Font = Enum.Font.GothamBold
+	magazineLabel.TextStrokeTransparency = 0.5
+	magazineLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	magazineLabel.TextXAlignment = Enum.TextXAlignment.Right
+	magazineLabel.Parent = ammoContainer
+
+	-- ============================================
+	-- 4. Popup (DNA/Biomass)
+	-- ============================================
+	local xpPopupFrame = Instance.new("Frame")
+	xpPopupFrame.Name = "XPPopup"
+	xpPopupFrame.Size = UDim2.fromOffset(300, 100)
+	xpPopupFrame.Position = UDim2.fromScale(0.5, 0.3)
+	xpPopupFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	xpPopupFrame.BackgroundTransparency = 1
+	xpPopupFrame.Visible = false
+	xpPopupFrame.Parent = screenGui
+
 	local xpPopupText = Instance.new("TextLabel")
 	xpPopupText.Name = "XPPopupText"
 	xpPopupText.Size = UDim2.fromScale(1, 1)
 	xpPopupText.BackgroundTransparency = 1
-	xpPopupText.Text = "+100 XP"
-	xpPopupText.TextColor3 = Color3.fromRGB(255, 215, 0)
-	xpPopupText.TextSize = 24
-	xpPopupText.Font = Enum.Font.LuckiestGuy
-	xpPopupText.TextStrokeTransparency = 0
-	xpPopupText.Parent = xpPopup
+	xpPopupText.Text = "+0 DNA"
+	xpPopupText.TextColor3 = COLORS.XP_GOLD
+	xpPopupText.TextSize = 32
+	xpPopupText.Font = Enum.Font.GothamBold
+	xpPopupText.TextStrokeTransparency = 0.3
+	xpPopupText.TextStrokeColor3 = Color3.new(0, 0, 0)
+	xpPopupText.Parent = xpPopupFrame
 
-	-- 6. Shop UI (Keep existing logic)
+	-- ============================================
+	-- 4b. Death Summary Frame
+	-- ============================================
+	local deathSummaryFrame = Instance.new("Frame")
+	deathSummaryFrame.Name = "DeathSummaryFrame"
+	deathSummaryFrame.Size = UDim2.fromOffset(400, 280) -- Slightly taller
+	deathSummaryFrame.Position = UDim2.fromScale(0.5, 0.5)
+	deathSummaryFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	deathSummaryFrame.BackgroundColor3 = RS_THEME.PANEL_BROWN
+	deathSummaryFrame.BorderSizePixel = 0
+	deathSummaryFrame.Visible = false
+	deathSummaryFrame.ZIndex = 100
+	deathSummaryFrame.Parent = screenGui
+
+	local deathStroke = Instance.new("UIStroke")
+	deathStroke.Color = RS_THEME.PANEL_BORDER
+	deathStroke.Thickness = 4
+	deathStroke.Parent = deathSummaryFrame
+
+	local deathTitle = Instance.new("TextLabel")
+	deathTitle.Name = "Title"
+	deathTitle.Size = UDim2.new(1, -20, 0, 50)
+	deathTitle.Position = UDim2.fromOffset(10, 10)
+	deathTitle.BackgroundTransparency = 1
+	deathTitle.Text = "YOU DIED"
+	deathTitle.TextColor3 = Color3.fromRGB(255, 50, 50)
+	deathTitle.TextSize = 36
+	deathTitle.Font = Enum.Font.GothamBold
+	deathTitle.TextStrokeTransparency = 0.3
+	deathTitle.TextStrokeColor3 = Color3.new(0, 0, 0)
+	deathTitle.Parent = deathSummaryFrame
+
+	-- Kills Label
+	local killsStatLabel = Instance.new("TextLabel")
+	killsStatLabel.Name = "KillsLabel"
+	killsStatLabel.Size = UDim2.new(1, -20, 0, 30)
+	killsStatLabel.Position = UDim2.fromOffset(10, 70)
+	killsStatLabel.BackgroundTransparency = 1
+	killsStatLabel.Text = "Kills: 0"
+	killsStatLabel.TextColor3 = COLORS.TEXT_WHITE
+	killsStatLabel.TextSize = 20
+	killsStatLabel.Font = Enum.Font.GothamBold
+	killsStatLabel.TextStrokeTransparency = 0.5
+	killsStatLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	killsStatLabel.TextXAlignment = Enum.TextXAlignment.Left
+	killsStatLabel.Parent = deathSummaryFrame
+
+	-- Biomass Lost Label
+	local biomassLostLabel = Instance.new("TextLabel")
+	biomassLostLabel.Name = "BiomassLostLabel"
+	biomassLostLabel.Size = UDim2.new(1, -20, 0, 30)
+	biomassLostLabel.Position = UDim2.fromOffset(10, 105)
+	biomassLostLabel.BackgroundTransparency = 1
+	biomassLostLabel.Text = "Biomass: 0"
+	biomassLostLabel.TextColor3 = COLORS.TEXT_WHITE
+	biomassLostLabel.TextSize = 20
+	biomassLostLabel.Font = Enum.Font.GothamBold
+	biomassLostLabel.TextStrokeTransparency = 0.5
+	biomassLostLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	biomassLostLabel.TextXAlignment = Enum.TextXAlignment.Left
+	biomassLostLabel.Parent = deathSummaryFrame
+
+	-- Earned DNA Label
+	local earnedDNALabel = Instance.new("TextLabel")
+	earnedDNALabel.Name = "EarnedDNALabel"
+	earnedDNALabel.Size = UDim2.new(1, -20, 0, 50)
+	earnedDNALabel.Position = UDim2.fromOffset(10, 150)
+	earnedDNALabel.BackgroundTransparency = 1
+	earnedDNALabel.Text = "CONVERTED: +0 DNA"
+	earnedDNALabel.TextColor3 = RS_THEME.TEXT_YELLOW
+	earnedDNALabel.TextSize = 24
+	earnedDNALabel.Font = Enum.Font.GothamBold
+	earnedDNALabel.TextStrokeTransparency = 0.3
+	earnedDNALabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	earnedDNALabel.TextXAlignment = Enum.TextXAlignment.Center
+	earnedDNALabel.Parent = deathSummaryFrame
+
+	-- OK Button
+	local okButton = Instance.new("TextButton")
+	okButton.Name = "OKButton"
+	okButton.Size = UDim2.fromOffset(100, 35)
+	okButton.Position = UDim2.fromOffset(200, 220)
+	okButton.AnchorPoint = Vector2.new(0.5, 0)
+	okButton.BackgroundColor3 = RS_THEME.SLOT_BG
+	okButton.BorderSizePixel = 0
+	okButton.Text = "OK"
+	okButton.TextColor3 = COLORS.TEXT_WHITE
+	okButton.TextSize = 18
+	okButton.Font = Enum.Font.GothamBold
+	okButton.Parent = deathSummaryFrame
+
+	local okButtonStroke = Instance.new("UIStroke")
+	okButtonStroke.Color = RS_THEME.PANEL_BORDER
+	okButtonStroke.Thickness = 2
+	okButtonStroke.Parent = okButton
+
+
+	-- ============================================
+	-- 4c. HARVEST BUTTON (Safe Zone)
+	-- ============================================
+	local harvestButton = Instance.new("TextButton")
+	harvestButton.Name = "HarvestButton"
+	harvestButton.Size = UDim2.fromOffset(250, 80)
+	harvestButton.Position = UDim2.fromScale(0.5, 0.7)
+	harvestButton.AnchorPoint = Vector2.new(0.5, 0.5)
+	harvestButton.BackgroundColor3 = COLORS.BUTTON_GREEN
+	harvestButton.Visible = false -- Hidden until Safe
+	harvestButton.Text = ""
+	harvestButton.Parent = screenGui
+
+	local harvestCorner = Instance.new("UICorner")
+	harvestCorner.CornerRadius = UDim.new(0, 10)
+	harvestCorner.Parent = harvestButton
+
+	local harvestStroke = Instance.new("UIStroke")
+	harvestStroke.Color = Color3.fromRGB(200, 255, 200)
+	harvestStroke.Thickness = 3
+	harvestStroke.Parent = harvestButton
+
+	local harvestTitle = Instance.new("TextLabel")
+	harvestTitle.Name = "Title"
+	harvestTitle.Size = UDim2.new(1, 0, 0, 40)
+	harvestTitle.Position = UDim2.new(0,0,0,5)
+	harvestTitle.BackgroundTransparency = 1
+	harvestTitle.Text = "HARVEST SIZE"
+	harvestTitle.TextColor3 = COLORS.TEXT_WHITE
+	harvestTitle.TextSize = 24
+	harvestTitle.Font = Enum.Font.GothamBlack
+	harvestTitle.TextStrokeTransparency = 0.5
+	harvestTitle.Parent = harvestButton
+
+	local harvestDesc = Instance.new("TextLabel")
+	harvestDesc.Name = "Desc"
+	harvestDesc.Size = UDim2.new(1, 0, 0, 30)
+	harvestDesc.Position = UDim2.new(0,0,0,45)
+	harvestDesc.BackgroundTransparency = 1
+	harvestDesc.Text = "Convert Biomass to DNA"
+	harvestDesc.TextColor3 = Color3.fromRGB(200, 255, 200)
+	harvestDesc.TextSize = 16
+	harvestDesc.Font = Enum.Font.GothamBold
+	harvestDesc.TextStrokeTransparency = 0.5
+	harvestDesc.Parent = harvestButton
+
+	bindButtonSounds(harvestButton, true)
+
+
+
+	-- ============================================
+	-- 5. Skill Tree Shop GUI
+	-- ============================================
+	local shopScreenGui = Instance.new("ScreenGui")
+	shopScreenGui.Name = "SkillTreeGui"
+	shopScreenGui.ResetOnSpawn = false
+	shopScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	shopScreenGui.DisplayOrder = 20
+	shopScreenGui.Parent = playerGui
+
 	local shopMainFrame = Instance.new("Frame")
 	shopMainFrame.Name = "ShopMainFrame"
 	shopMainFrame.Size = UDim2.fromScale(0.6, 0.7)
@@ -361,11 +534,14 @@ local function createHUD()
 	local shopTitle = Instance.new("TextLabel")
 	shopTitle.Name = "Title"
 	shopTitle.Size = UDim2.new(1, 0, 0, 50)
-	shopTitle.BackgroundTransparency = 1
-	shopTitle.Text = "SKILL TREE"
-	shopTitle.TextColor3 = ARCADE_THEME.ACCENT_GREEN
-	shopTitle.Font = Enum.Font.LuckiestGuy
-	shopTitle.TextSize = 32
+	shopTitle.Position = UDim2.new(0, 0, 0, 0)
+	shopTitle.BackgroundColor3 = Color3.new(0, 0, 0)
+	shopTitle.BackgroundTransparency = 0.5
+	shopTitle.BorderSizePixel = 0
+	shopTitle.Text = "SKILL TREE (DNA SHOP)"
+	shopTitle.TextColor3 = RS_THEME.TEXT_ORANGE
+	shopTitle.TextSize = 24
+	shopTitle.Font = Enum.Font.GothamBold
 	shopTitle.Parent = shopMainFrame
 	
 	local shopCloseButton = Instance.new("TextButton")
@@ -445,12 +621,11 @@ local function createHUD()
 		-- Progression Widget
 		LevelLabel = levelLabel,
 		XPFill = xpFill,
-		KillsStatLabel = killsStatLabel,
-		BiomassStatLabel = biomassStatLabel,
-		GXPStatLabel = gxpStatLabel,
-		
-		-- Ammo Widget
-		AmmoWidget = ammoWidget,
+		XPText = xpText,
+		StatsBar = statsBar,
+		DNALabel = dnaLabel,
+		KillsLabel = killsLabel,
+		AmmoPanel = ammoPanel,
 		AmmoLabel = ammoLabel,
 		WeaponIcon = weaponIcon,
 		
@@ -462,7 +637,13 @@ local function createHUD()
 		ShopCloseButton = shopCloseButton,
 		RespawnButton = respawnButton,
 		DeathSummaryFrame = deathSummaryFrame,
-		OKButton = okButton
+		DeathTitle = deathTitle,
+		KillsStatLabel = killsStatLabel,
+		BiomassLostLabel = biomassLostLabel,
+		EarnedDNALabel = earnedDNALabel,
+		OKButton = okButton,
+		HarvestButton = harvestButton,
+		HarvestDesc = harvestDesc,
 	}
 end
 
@@ -505,8 +686,8 @@ local function createTierSection(tierNumber: number, tierData)
 	tierNameLabel.Size = UDim2.new(1, -20, 1, 0)
 	tierNameLabel.Position = UDim2.new(0, 10, 0, 0)
 	tierNameLabel.BackgroundTransparency = 1
-	tierNameLabel.Text = tierData.Name .. " (Req: " .. tierData.UnlockBiomass .. " Bio)"
-	tierNameLabel.TextColor3 = tierData.Color
+	tierNameLabel.Text = tierData.Name .. " (Req: " .. tierData.UnlockAmount .. " DNA)"
+	tierNameLabel.TextColor3 = COLORS.TEXT_WHITE
 	tierNameLabel.TextSize = 18
 	tierNameLabel.Font = Enum.Font.GothamBold
 	tierNameLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -639,9 +820,9 @@ local function createUpgradeCard(statName: string, upgradeConfig: any)
 	costLabel.Size = UDim2.new(1, 0, 0, 15)
 	costLabel.Position = UDim2.new(0, 0, 0, 15)
 	costLabel.BackgroundTransparency = 1
-	costLabel.Text = "100 GXP"
-	costLabel.TextColor3 = ARCADE_THEME.ACCENT_ORANGE
-	costLabel.TextSize = 14
+	costLabel.Text = "100 DNA"
+	costLabel.TextColor3 = COLORS.XP_GOLD
+	costLabel.TextSize = 16
 	costLabel.Font = Enum.Font.GothamBold
 	costLabel.TextXAlignment = Enum.TextXAlignment.Right
 	costLabel.Parent = actionContainer
@@ -738,50 +919,88 @@ end)
 
 -- --- Shop Update Function (Optimized with Caching) --- --
 local function updateShopUI()
-	-- Direct access via cache - O(1) instead of O(n²)
-	for statName, upgradeConfig in pairs(MetaConfig.Upgrades) do
-		local cached = cardCache[statName]
-		if not cached then continue end
-		
-		local level = currentUpgrades[statName] or 0
-		local cost = MetaConfig.GetCost(statName, level)
-		local isUnlocked = MetaConfig.IsUnlocked(currentBiomass, statName)
-		
-		-- Direct element access - no FindFirstChild calls
-		local percent = math.clamp(level / upgradeConfig.MaxLevel, 0, 1)
-		cached.progressBarFill.Size = UDim2.fromScale(percent, 1)
-		
-		cached.levelLabel.Text = string.format("Level %d / %d", level, upgradeConfig.MaxLevel)
-		
-		if level >= upgradeConfig.MaxLevel then
-			cached.costLabel.Text = "MAX"
-		else
-			cached.costLabel.Text = string.format("%d GXP", math.floor(cost))
-		end
-		
-		if isUnlocked then
-			cached.lockOverlay.Visible = false
-			cached.card.BackgroundTransparency = 0.2
-			
-			if level >= upgradeConfig.MaxLevel then
-				cached.purchaseButton.BackgroundColor3 = COLORS.XP_GOLD
-				cached.purchaseButton.Text = "MAXED"
-				cached.purchaseButton.Active = false
-			elseif currentGlobalXP >= cost then
-				cached.purchaseButton.BackgroundColor3 = COLORS.BUTTON_GREEN
-				cached.purchaseButton.Text = "UPGRADE"
-				cached.purchaseButton.Active = true
-			else
-				cached.purchaseButton.BackgroundColor3 = COLORS.BUTTON_RED
-				cached.purchaseButton.Text = "UPGRADE"
-				cached.purchaseButton.Active = true
+	for tierNumber, tierFrame in pairs(tierFrames) do
+		local container = tierFrame:FindFirstChild("UpgradeContainer")
+		if container then
+			for _, card in ipairs(container:GetChildren()) do
+				if card:IsA("Frame") and card.Name:match("Card$") then
+					local statName = card:GetAttribute("StatName")
+					if statName and MetaConfig.Upgrades[statName] then
+						local upgradeConfig = MetaConfig.Upgrades[statName]
+						local level = currentUpgrades[statName] or 0
+						local cost = MetaConfig.GetCost(statName, level)
+
+						-- Unlock Check: uses lifetime Biomass (which is effectively Lifetime DNA earned)
+						local isUnlocked = MetaConfig.IsUnlocked(currentBiomass, statName)
+
+						local infoContainer = card:FindFirstChild("InfoContainer")
+						if infoContainer then
+							local progressBarBg = infoContainer:FindFirstChild("ProgressBarBg")
+							if progressBarBg then
+								local progressBarFill = progressBarBg:FindFirstChild("ProgressBarFill")
+								if progressBarFill then
+									local percent = math.clamp(level / upgradeConfig.MaxLevel, 0, 1)
+									progressBarFill.Size = UDim2.fromScale(percent, 1)
+								end
+							end
+						end
+
+						local actionContainer = card:FindFirstChild("ActionContainer")
+						if actionContainer then
+							local costLabel = actionContainer:FindFirstChild("CostLabel")
+							local levelLabel = actionContainer:FindFirstChild("LevelLabel")
+
+							if levelLabel then
+								levelLabel.Text = string.format("Level %d / %d", level, upgradeConfig.MaxLevel)
+							end
+
+							if costLabel then
+								if level >= upgradeConfig.MaxLevel then
+									costLabel.Text = "MAX"
+								else
+									costLabel.Text = string.format("%d DNA", math.floor(cost))
+								end
+							end
+						end
+
+						local lockOverlay = card:FindFirstChild("LockOverlay")
+						local purchaseButton = card:FindFirstChild("PurchaseButton")
+
+						if isUnlocked then
+							if lockOverlay then
+								lockOverlay.Visible = false
+							end
+							card.BackgroundTransparency = 0.2
+
+							if purchaseButton then
+								if level >= upgradeConfig.MaxLevel then
+									purchaseButton.BackgroundColor3 = COLORS.XP_GOLD
+									purchaseButton.Text = "MAXED"
+									purchaseButton.Active = false
+								elseif currentDNA >= cost then
+									purchaseButton.BackgroundColor3 = COLORS.BUTTON_GREEN
+									purchaseButton.Text = "UPGRADE"
+									purchaseButton.Active = true
+								else
+									purchaseButton.BackgroundColor3 = COLORS.BUTTON_RED
+									purchaseButton.Text = "UPGRADE"
+									purchaseButton.Active = true
+								end
+							end
+						else
+							if lockOverlay then
+								lockOverlay.Visible = true
+							end
+							card.BackgroundTransparency = 0.5
+							if purchaseButton then
+								purchaseButton.BackgroundColor3 = COLORS.LOCKED_GREY
+								purchaseButton.Text = "LOCKED"
+								purchaseButton.Active = false
+							end
+						end
+					end
+				end
 			end
-		else
-			cached.lockOverlay.Visible = true
-			cached.card.BackgroundTransparency = 0.5
-			cached.purchaseButton.BackgroundColor3 = COLORS.LOCKED_GREY
-			cached.purchaseButton.Text = "LOCKED"
-			cached.purchaseButton.Active = false
 		end
 	end
 	
@@ -799,10 +1018,13 @@ local function updateShopUI()
 end
 
 -- --- XP Popup Function --- --
-local function showXPPopup(amount: number, isGlobalXP: boolean?)
-	isGlobalXP = isGlobalXP or false
-	local prefix = if isGlobalXP then "Biomass" else "XP"
+local function showXPPopup(amount: number, isDNA: boolean?)
+	isDNA = isDNA or false
+	local prefix = if isDNA then "DNA" else "Biomass"
+	local color = if isDNA then COLORS.XP_GOLD else COLORS.XP_ORANGE
+
 	hud.XPPopupText.Text = string.format("+%d %s", amount, prefix)
+	hud.XPPopupText.TextColor3 = color
 	hud.XPPopup.Visible = true
 	hud.XPPopup.Position = UDim2.fromScale(0.5, 0.3)
 	hud.XPPopupText.TextTransparency = 0
@@ -874,16 +1096,16 @@ end
 
 local function updateXP()
 	local level = player:GetAttribute("Level") or 1
-	local xp = player:GetAttribute("XP") or 0
-	local requiredXP = ScalingConfig.GetXPRequired(level)
+	local biomass = player:GetAttribute("Biomass") or 0
+	local requiredBiomass = ScalingConfig.GetXPRequired(level)
 
-	local percent = math.clamp(xp / requiredXP, 0, 1)
+	local percent = math.clamp(biomass / requiredBiomass, 0, 1)
 
 	if level >= ScalingConfig.MAX_LEVEL then
 		hud.LevelLabel.Text = "MAX LEVEL"
 		percent = 1
 	else
-		hud.LevelLabel.Text = string.format("Level %d", level)
+		hud.XPText.Text = string.format("Level %d (Size)", level)
 	end
 	
 	-- Update Size Label (optimized string formatting)
@@ -895,9 +1117,6 @@ local function updateXP()
 		{ Size = UDim2.fromScale(percent, 1) }
 	)
 	tween:Play()
-
-	-- Update Session Biomass (optimized string formatting)
-	hud.BiomassStatLabel.Text = string.format("Biomass: %d", math.floor(xp))
 end
 
 local function updateKills()
@@ -916,11 +1135,13 @@ local function updateAmmo()
 
 	local tool = character:FindFirstChildOfClass("Tool")
 	if not tool then
-		hud.AmmoWidget.Visible = false
+		-- print("HUD: No tool found in character")
+		hud.AmmoPanel.Visible = false
 		return
 	end
 
-	hud.AmmoWidget.Visible = true
+	-- print("HUD: Found tool:", tool.Name)
+	hud.AmmoPanel.Visible = true
 	hud.WeaponIcon.Image = tool.TextureId or ""
 
 	local ammo = tonumber(tool:GetAttribute(Constants.AMMO_ATTRIBUTE)) or 0
@@ -941,16 +1162,51 @@ local function updateAmmo()
 end
 
 
+-- Harvest Button Logic
+local function updateHarvestButton()
+	local isSafe = player:GetAttribute("SafeZone") == true
+	hud.HarvestButton.Visible = isSafe
+
+	if isSafe then
+		-- Update text with current potential
+		local potentialDNA = math.floor(player:GetAttribute("Biomass") or 0)
+		hud.HarvestDesc.Text = "Convert Biomass to " .. potentialDNA .. " DNA"
+	end
+end
+
+-- Harvest Click
+local harvestDebounce = false
+hud.HarvestButton.MouseButton1Click:Connect(function()
+	if harvestDebounce then return end
+	harvestDebounce = true
+
+	local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
+	local harvestRemote = remotes and remotes:FindFirstChild("Harvest")
+
+	if harvestRemote then
+		local success, msg = harvestRemote:InvokeServer()
+		if success then
+			playSound(SOUNDS.Purchase)
+			-- UI will update via attribute signals
+		else
+			playSound(SOUNDS.Error)
+		end
+	end
+
+	task.wait(1)
+	harvestDebounce = false
+end)
+
 
 -- Meta Stats Update (from Server)
-local function updateMetaStats(globalXP, upgrades, biomass)
-	previousGlobalXP = currentGlobalXP
-	currentGlobalXP = globalXP or 0
-	currentBiomass = biomass or 0
+local function updateMetaStats(dna, upgrades, biomass)
+	previousDNA = currentDNA
+	currentDNA = dna or 0
+	currentBiomass = biomass or 0 -- This is Lifetime Biomass (Unlock Progress)
 	currentUpgrades = upgrades or {}
 
-	if currentGlobalXP > previousGlobalXP then
-		local gained = currentGlobalXP - previousGlobalXP
+	if currentDNA > previousDNA then
+		local gained = currentDNA - previousDNA
 		if gained > 0 then
 			showXPPopup(gained, true)
 		end
@@ -960,8 +1216,8 @@ local function updateMetaStats(globalXP, upgrades, biomass)
 		updateShopUI()
 	end
 	
-	-- Update GXP Label
-	hud.GXPStatLabel.Text = "GXP: " .. tostring(math.floor(currentGlobalXP))
+	-- Update DNA Panel
+	hud.DNALabel.Text = "DNA: " .. tostring(math.floor(currentDNA))
 end
 
 -- --- Connections --- --
@@ -984,60 +1240,64 @@ local function setupCharacterConnections(character)
 	-- Initial Updates
 	updateXP()
 	updateKills()
+	updateHarvestButton()
 	
 	-- Connect Signals
-	player:GetAttributeChangedSignal("XP"):Connect(function()
-		-- Update the bar.
-		updateXP()
-	end)
-	
-	player:GetAttributeChangedSignal("Level"):Connect(function()
-		updateXP()
-		-- Level Up Popup
-		hud.XPPopupText.Text = "LEVEL UP!"
-		hud.XPPopup.Visible = true
-		
-		-- Hide after a delay
-		task.delay(2, function()
-			hud.XPPopup.Visible = false
-		end)
-	end)
-	
-	player:GetAttributeChangedSignal("Kills"):Connect(updateKills)
-
-	-- Tool Connections
-	character.ChildAdded:Connect(function(child)
-		if child:IsA("Tool") then
-			updateAmmo()
-			child:GetAttributeChangedSignal(Constants.AMMO_ATTRIBUTE):Connect(updateAmmo)
-			child:GetAttributeChangedSignal(Constants.MAGAZINE_SIZE_ATTRIBUTE):Connect(updateAmmo)
-			child:GetAttributeChangedSignal(Constants.RELOADING_ATTRIBUTE):Connect(updateAmmo)
-		end
-	end)
-	
-	character.ChildRemoved:Connect(function(child)
-		if child:IsA("Tool") then
-			updateAmmo()
-		end
-	end)
-	
-	-- Check for existing tools
-	for _, child in ipairs(character:GetChildren()) do
-		if child:IsA("Tool") then
-			updateAmmo()
-			child:GetAttributeChangedSignal(Constants.AMMO_ATTRIBUTE):Connect(updateAmmo)
-			child:GetAttributeChangedSignal(Constants.MAGAZINE_SIZE_ATTRIBUTE):Connect(updateAmmo)
-			child:GetAttributeChangedSignal(Constants.RELOADING_ATTRIBUTE):Connect(updateAmmo)
-		end
-	end
+	-- Note: Attributes are on the Player, so these signals persist across characters,
+	-- but we refresh them here just in case.
 end
 
 player.CharacterAdded:Connect(setupCharacterConnections)
 
--- Initial Check
+-- Attribute Listeners (Persistent on Player)
+player:GetAttributeChangedSignal("Biomass"):Connect(function()
+	updateXP()
+	updateHarvestButton()
+end)
+
+player:GetAttributeChangedSignal("Level"):Connect(function()
+	updateXP()
+	-- Level Up Popup
+	local lvl = player:GetAttribute("Level") or 1
+	if lvl > 1 then
+		hud.XPPopupText.Text = "GROWN TO LEVEL " .. lvl .. "!"
+		hud.XPPopupText.TextColor3 = COLORS.XP_ORANGE
+		hud.XPPopup.Visible = true
+		
+		task.delay(2, function()
+			hud.XPPopup.Visible = false
+		end)
+	end
+end)
+
+player:GetAttributeChangedSignal("Kills"):Connect(updateKills)
+player:GetAttributeChangedSignal("SafeZone"):Connect(updateHarvestButton)
+
+-- Tool Connections
+local function onChildAdded(child)
+	if child:IsA("Tool") then
+		updateAmmo()
+		child:GetAttributeChangedSignal(Constants.AMMO_ATTRIBUTE):Connect(updateAmmo)
+		child:GetAttributeChangedSignal(Constants.MAGAZINE_SIZE_ATTRIBUTE):Connect(updateAmmo)
+		child:GetAttributeChangedSignal(Constants.RELOADING_ATTRIBUTE):Connect(updateAmmo)
+	end
+end
+
 if player.Character then
 	setupCharacterConnections(player.Character)
+	player.Character.ChildAdded:Connect(onChildAdded)
+	player.Character.ChildRemoved:Connect(function(child)
+		if child:IsA("Tool") then updateAmmo() end
+	end)
 end
+
+player.CharacterAdded:Connect(function(char)
+	char.ChildAdded:Connect(onChildAdded)
+	char.ChildRemoved:Connect(function(child)
+		if child:IsA("Tool") then updateAmmo() end
+	end)
+end)
+
 
 -- Remotes
 local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes")
@@ -1049,18 +1309,11 @@ end
 
 local showDeathSummaryRemote = remotes:WaitForChild("ShowDeathSummary", 10)
 if showDeathSummaryRemote then
-	showDeathSummaryRemote.OnClientEvent:Connect(function(sessionKills, sessionXP, earnedGXP)
-		-- Instead of showing the old DeathSummaryFrame, we show the Shop with Respawn button
-		
-		-- Hide standard death summary if it was visible
-		hud.DeathSummaryFrame.Visible = false
-		
-		-- Open Shop
-		hud.ShopMainFrame.Visible = true
-		
-		-- Configure Shop for Death Mode
-		hud.ShopCloseButton.Visible = false -- Cannot close
-		hud.RespawnButton.Visible = true -- Can respawn
+	showDeathSummaryRemote.OnClientEvent:Connect(function(sessionKills, biomassLost, earnedDNA)
+		hud.DeathSummaryFrame.Visible = true
+		hud.KillsStatLabel.Text = "Kills: " .. tostring(sessionKills)
+		hud.BiomassLostLabel.Text = "Biomass Lost: " .. tostring(biomassLost)
+		hud.EarnedDNALabel.Text = "CONVERTED: +" .. tostring(earnedDNA) .. " DNA"
 		
 		-- Unlock mouse
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -1098,55 +1351,7 @@ end)
 task.spawn(function()
 	local reqRemote = remotes:WaitForChild("RequestMetaData", 10)
 	if reqRemote then
-	end
-end)
-
--- Killstreak listener (Deprecated, using Attribute now)
-local killstreakRemote = remotes:FindFirstChild("Killstreak")
-if killstreakRemote then
-	killstreakRemote.OnClientEvent:Connect(function(killCount)
-		-- Optional: Keep this if the server still sends it for other reasons, 
-		-- but we rely on the attribute for the HUD.
-		-- currentKills = killCount or 0
-		-- hud.KillsLabel.Text = "Kills: " .. currentKills
-	end)
-end
-
--- Enforce mouse unlock when shop is open (prevents weapon system from locking it)
--- Uses Heartbeat instead of RenderStepped for better performance
-local mouseUnlockConnection = nil
-
-hud.ShopMainFrame:GetPropertyChangedSignal("Visible"):Connect(function()
-	if hud.ShopMainFrame.Visible then
-		-- Sink ONLY mouse button inputs to prevent shooting (not keyboard - need N to close shop)
-		ContextActionService:BindAction("DisableMouseInputs", function()
-			return Enum.ContextActionResult.Sink
-		end, false, Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2)
-		
-		-- Continuously enforce mouse unlock (weapon system fights for control)
-		mouseUnlockConnection = RunService.Heartbeat:Connect(function()
-			if hud.ShopMainFrame.Visible then
-				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-				UserInputService.MouseIconEnabled = true
-			else
-				-- Shop was closed, clean up
-				if mouseUnlockConnection then
-					mouseUnlockConnection:Disconnect()
-					mouseUnlockConnection = nil
-				end
-			end
-		end)
-	else
-		-- Shop closed, unbind input sink and stop enforcing
-		ContextActionService:UnbindAction("DisableMouseInputs")
-		
-		if mouseUnlockConnection then
-			mouseUnlockConnection:Disconnect()
-			mouseUnlockConnection = nil
-		end
-		
-		-- Re-lock mouse for gameplay
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-		UserInputService.MouseIconEnabled = false
+		local dna, upgrades, biomass = reqRemote:InvokeServer()
+		updateMetaStats(dna, upgrades, biomass)
 	end
 end)
