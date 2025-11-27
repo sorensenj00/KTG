@@ -25,6 +25,7 @@ local KillEffectController = require(Controllers.KillEffectController)
 local BlasterController = require(Controllers.BlasterController)
 local BeaconController = require(Controllers.BeaconController)
 local LeaderboardController = require(Controllers.LeaderboardController)
+local XPOrbController = require(Controllers.XPOrbController)
 
 -- Initialize controllers in proper order
 print("🚀 GameClient: Starting initialization...")
@@ -117,6 +118,16 @@ if not success then
 	warn("❌ GameClient: Failed to initialize LeaderboardController:", err)
 else
 	print("✅ GameClient: LeaderboardController initialized")
+end
+
+-- 8. XPOrbController
+success, err = pcall(function()
+	XPOrbController.Start()
+end)
+if not success then
+	warn("❌ GameClient: Failed to initialize XPOrbController:", err)
+else
+	print("✅ GameClient: XPOrbController initialized")
 end
 
 print("🎉 GameClient: All controllers initialized successfully!")

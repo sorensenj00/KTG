@@ -6,6 +6,7 @@ local CollectionService = game:GetService("CollectionService")
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 local ScalingEngine = require(script.Parent.ScalingEngine)
 local DamageTracker = require(script.Parent.DamageTracker)
+local XPOrbManager = require(script.Parent.XPOrbManager)
 
 local ProgressionManager = {}
 
@@ -267,6 +268,25 @@ function ProgressionManager.Start()
 						-- Increment Kill Count
 						local currentKills = killer:GetAttribute("Kills") or 0
 						killer:SetAttribute("Kills", currentKills + 1)
+					end
+
+					-- 💰 LOOT DROP SYSTEM (Explode Orbs)
+					if victim and victimChar then
+						local victimLevel = victim:GetAttribute("Level") or 1
+
+						-- Calculate Total Accumulated XP for this life
+						-- This is an estimation since we don't track total accumulated XP explicitly per life easily without summing all levels
+						-- But we can approximate using the current level requirement
+						local totalBiomass = 0
+						for lvl = 1, victimLevel do
+							totalBiomass = totalBiomass + ScalingConfig.GetXPRequired(lvl)
+						end
+
+						-- Add current progress XP
+						totalBiomass = totalBiomass + (victim:GetAttribute("XP") or 0)
+
+						-- Drop 100% of it
+						XPOrbManager.DropLoot(victimChar.PrimaryPart.Position, totalBiomass)
 					end
 
 					-- Award XP to all players who damaged the victim (equal to damage dealt)

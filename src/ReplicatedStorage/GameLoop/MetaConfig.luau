@@ -4,7 +4,8 @@ local MetaConfig = {}
 MetaConfig.GXP_PER_KILL = 10
 
 -- Session XP to Global XP conversion ratio (e.g., 100 Session XP = 50 GXP)
-MetaConfig.SESSION_XP_TO_GXP_RATIO = 0.5
+-- User Requirement: 20% conversion ratio.
+MetaConfig.SESSION_XP_TO_GXP_RATIO = 0.2
 
 -- Define Tiers for UI Grouping and Unlocks
 MetaConfig.Tiers = {

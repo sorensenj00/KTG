@@ -1,17 +1,23 @@
 --[[
     Module: XPOrbManager
-    Description: Manages spawning and lifecycle of XP orbs using object pooling.
+    Description: Manages spawning and lifecycle of XP orbs.
+                 Refactored for "Explosion" loot drops and Client-Side Vacuum pickup.
     
     Dependencies:
     - Workspace
     - ServerScriptService.GameLoop.ProgressionManager
+    - ReplicatedStorage.GameLoop.Remotes
     
     Author: System
-    Last Updated: 2025-01-20
+    Last Updated: 2025-01-28
 ]]
 
 local Workspace = game:GetService("Workspace")
 local ServerScriptService = game:GetService("ServerScriptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
+local Debris = game:GetService("Debris")
 
 -- Lazy load ProgressionManager
 local ProgressionManager = nil
@@ -25,10 +31,33 @@ end
 local XPOrbManager = {}
 
 -- Configuration
-local SPAWN_INTERVAL = 0.5
-local ORB_LIFETIME = 45
-local MAX_ORBS = 300
-local POOL_SIZE = 50
+local SPAWN_INTERVAL = 3 -- Slower natural spawn interval
+local ORB_LIFETIME = 60
+local MAX_ORBS_PER_DROP = 20 -- Max physical parts per kill
+local MAX_TOTAL_ORBS = 400
+local VACUUM_DISTANCE = 15 -- Max distance for server validation
+
+-- Remotes
+local remotesFolder = ReplicatedStorage:WaitForChild("GameLoop"):WaitForChild("Remotes")
+local collectOrbRemote = remotesFolder:FindFirstChild("CollectOrb")
+if not collectOrbRemote then
+	collectOrbRemote = Instance.new("RemoteEvent")
+	collectOrbRemote.Name = "CollectOrb"
+	collectOrbRemote.Parent = remotesFolder
+end
+
+-- Collision Group
+-- We want orbs to collide with Map but not Players (so players walk through them)
+-- Assuming "Debris" or similar group exists, otherwise use CanCollide=false for now (handled via filtering)
+-- Better: Set CollisionGroup if you have them. For now, we rely on CanCollide=true initially for physics,
+-- then Client sets CanCollide=false when vacuuming.
+-- ACTUALLY: If CanCollide=true, players will trip.
+-- We will use PhysicsService if needed, but for now, small spherical parts are usually okay if we make them CanQuery=false CanTouch=false?
+-- No, we need CanTouch=false (handled by client raycast/magnitude) and CanCollide=true (for ground)
+-- but filter players.
+-- Simplest approach: Use collision groups or just small size + non-collidable with players.
+-- For this implementation, we will make them CanCollide=true so they roll, but use a CollisionGroup if possible.
+-- If no groups defined, players might kick them. That's actually fun.
 
 -- Helper to ensure Orbs folder exists in Workspace
 local function getOrbsFolder()
@@ -41,219 +70,176 @@ local function getOrbsFolder()
 	return folder
 end
 
--- Object Pool
-local orbPool = {}
-local activeOrbs = {}
-
--- Orb Tiers
+-- Orb Tiers (Descending XP order for greedy algorithm)
 local ORB_TIERS = {
-	{ Name = "Common", XP = 100, Size = Vector3.new(2, 2, 2), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
-	{ Name = "Uncommon", XP = 250, Size = Vector3.new(5, 5, 5), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
-	{ Name = "Rare", XP = 500, Size = Vector3.new(12, 12, 12), Color = Color3.fromRGB(163, 35, 35), Chance = 8 },
-	{ Name = "Legendary", XP = 2000, Size = Vector3.new(25, 25, 25), Color = Color3.fromRGB(197, 209, 28), Chance = 2 },
+	{ Name = "Legendary", XP = 2000, Size = Vector3.new(2.5, 2.5, 2.5), Color = Color3.fromRGB(197, 209, 28) },
+	{ Name = "Rare", XP = 500, Size = Vector3.new(1.8, 1.8, 1.8), Color = Color3.fromRGB(163, 35, 35) },
+	{ Name = "Uncommon", XP = 250, Size = Vector3.new(1.4, 1.4, 1.4), Color = Color3.fromRGB(0, 255, 255) },
+	{ Name = "Common", XP = 100, Size = Vector3.new(1.0, 1.0, 1.0), Color = Color3.fromRGB(255, 215, 0) },
 }
 
--- Helper to get random spawn position on Baseplate
-local function getRandomSpawnPosition()
-	-- Attempt to find the map/baseplate by common names
-	local baseplate = Workspace:FindFirstChild("Baseplate")
-		or Workspace:FindFirstChild("Map")
-		or Workspace:FindFirstChild("Ground")
+-- Tracking
+local activeOrbs = {} -- { [part] = xpValue }
 
-	local centerX, centerZ = 0, 0
-	local sizeX, sizeZ = 2048, 2048 -- Default to large map size
+-- Helper: Create a physical orb
+local function createOrb(tier, position)
+	local orb = Instance.new("Part")
+	orb.Name = "XPOrb"
+	orb.Shape = Enum.PartType.Ball
+	orb.Material = Enum.Material.Neon
+	orb.Size = tier.Size
+	orb.Color = tier.Color
+	orb.Position = position
+	orb.Anchored = false
+	orb.CanCollide = true
+	orb.CastShadow = false
 
-	if baseplate then
-		if baseplate:IsA("Model") then
-			local cf, s = baseplate:GetBoundingBox()
-			centerX, centerZ = cf.Position.X, cf.Position.Z
-			sizeX, sizeZ = s.X, s.Z
-		elseif baseplate:IsA("BasePart") then
-			centerX, centerZ = baseplate.Position.X, baseplate.Position.Z
-			sizeX, sizeZ = baseplate.Size.X, baseplate.Size.Z
+	-- Physical properties for nice rolling/bouncing
+	orb.CustomPhysicalProperties = PhysicalProperties.new(
+		0.7, -- Density
+		0.3, -- Friction (slippery)
+		0.5, -- Elasticity (bouncy)
+		1,   -- FrictionWeight
+		1    -- ElasticityWeight
+	)
+
+	-- Add Tag for Client Finder
+	CollectionService:AddTag(orb, "XPOrb")
+
+	-- Register
+	orb.Parent = getOrbsFolder()
+	activeOrbs[orb] = tier.XP
+
+	-- Cleanup
+	task.delay(ORB_LIFETIME, function()
+		if orb.Parent then
+			activeOrbs[orb] = nil
+			orb:Destroy()
 		end
-	end
+	end)
 
-	local halfSizeX = sizeX / 2
-	local halfSizeZ = sizeZ / 2
-
-	-- Random offset within baseplate (leaving a margin)
-	local x = math.random(-halfSizeX + 20, halfSizeX - 20)
-	local z = math.random(-halfSizeZ + 20, halfSizeZ - 20)
-
-	local targetX = centerX + x
-	local targetZ = centerZ + z
-
-	-- Raycast to find floor height
-	local rayOrigin = Vector3.new(targetX, 500, targetZ)
-	local rayDirection = Vector3.new(0, -1000, 0)
-	local rayResult = Workspace:Raycast(rayOrigin, rayDirection)
-
-	local yPos = 10 -- Default height
-	if rayResult then
-		yPos = rayResult.Position.Y + 1 -- 1 stud above ground (easier to collect)
-	end
-
-	return Vector3.new(targetX, yPos, targetZ)
-end
-
--- Get orb from pool or create new
-local function getOrb()
-	local orb = table.remove(orbPool)
-	if not orb then
-		orb = Instance.new("Part")
-		orb.Name = "XPOrb"
-		orb.Shape = Enum.PartType.Ball
-		orb.Material = Enum.Material.Neon
-		orb.Anchored = true
-		orb.CanCollide = false
-		orb.CastShadow = false
-	end
 	return orb
 end
 
--- Return orb to pool
-local function returnOrb(orb)
-	if orb and orb.Parent then
-		orb.Parent = nil
-		-- Clean up any attachments/particles
-		for _, child in ipairs(orb:GetChildren()) do
-			child:Destroy()
-		end
-		table.insert(orbPool, orb)
-	end
-end
+-- Public: Drop Loot (Explosion)
+function XPOrbManager.DropLoot(position: Vector3, totalXP: number)
+	if totalXP <= 0 then return end
 
--- Count active orbs efficiently
-local function countOrbs()
-	return #activeOrbs
-end
+	local drops = {}
+	local remainingXP = totalXP
+	local count = 0
 
--- Spawn orb with pooling
-local function spawnOrb()
-	if countOrbs() >= MAX_ORBS then
-		-- Remove oldest orb
-		local oldest = table.remove(activeOrbs, 1)
-		if oldest then
-			returnOrb(oldest)
-		end
-	end
-
-	-- Select tier
-	local randomValue = math.random(1, 100)
-	local accumulatedChance = 0
-	local selectedTier = ORB_TIERS[1]
-
+	-- Greedy algorithm to determine orb counts
 	for _, tier in ipairs(ORB_TIERS) do
-		accumulatedChance = accumulatedChance + tier.Chance
-		if randomValue <= accumulatedChance then
-			selectedTier = tier
-			break
+		if remainingXP >= tier.XP and count < MAX_ORBS_PER_DROP then
+			local num = math.floor(remainingXP / tier.XP)
+			-- Cap number of this tier to prevent flooding if huge XP
+			local limit = math.ceil((MAX_ORBS_PER_DROP - count) / 2)
+			-- If we are at the last tier (Common), take all we can
+			if tier.Name == "Common" then limit = MAX_ORBS_PER_DROP - count end
+
+			local take = math.clamp(num, 0, limit)
+
+			for i = 1, take do
+				table.insert(drops, tier)
+			end
+
+			remainingXP = remainingXP - (take * tier.XP)
+			count = count + take
 		end
 	end
 
-	local orb = getOrb()
-	orb.Size = selectedTier.Size
-	orb.Color = selectedTier.Color
-	orb:SetAttribute("XPValue", selectedTier.XP)
+	-- Distribute drops with physics
+	for _, tier in ipairs(drops) do
+		local orb = createOrb(tier, position + Vector3.new(0, 2, 0))
 
-	-- Create invisible hitbox for easier pickup (3x the orb size)
-	local hitbox = Instance.new("Part")
-	hitbox.Name = "Hitbox"
-	hitbox.Size = selectedTier.Size * 3 -- 3x larger for forgiving pickup
-	hitbox.Transparency = 1 -- Invisible
-	hitbox.CanCollide = false
-	hitbox.Anchored = true
-	hitbox.CastShadow = false
-	hitbox.Parent = orb
+		-- Random Explosion Velocity
+		local angle = math.random() * 2 * math.pi
+		local speed = math.random(15, 40) -- Explosion force
+		local upForce = math.random(20, 50)
 
-	-- Position using helper
-	orb.Position = getRandomSpawnPosition()
-	orb.Parent = getOrbsFolder()
+		local velocity = Vector3.new(math.cos(angle) * speed, upForce, math.sin(angle) * speed)
+		orb.AssemblyLinearVelocity = velocity
+	end
 
-	-- Add to active list
-	table.insert(activeOrbs, orb)
-
-	-- Simplified animation
-	local startY = orb.Position.Y
-	task.spawn(function()
-		local elapsed = 0
-		local connection
-		connection = game:GetService("RunService").Heartbeat:Connect(function(dt)
-			elapsed = elapsed + dt
-			if elapsed > ORB_LIFETIME or not orb.Parent then
-				connection:Disconnect()
-				local index = table.find(activeOrbs, orb)
-				if index then
-					table.remove(activeOrbs, index)
-				end
-				returnOrb(orb)
-				return
+	-- Clean up overflow if needed
+	local allOrbs = getOrbsFolder():GetChildren()
+	if #allOrbs > MAX_TOTAL_ORBS then
+		-- Remove oldest 10%
+		for i = 1, math.floor(MAX_TOTAL_ORBS * 0.1) do
+			if allOrbs[i] then
+				activeOrbs[allOrbs[i]] = nil
+				allOrbs[i]:Destroy()
 			end
-			-- Simple float animation
-			local floatOffset = math.sin(elapsed * 2) * 1
-			orb.Position = Vector3.new(orb.Position.X, startY + floatOffset, orb.Position.Z)
-			orb.Orientation = Vector3.new(0, elapsed * 60, 0) -- Rotate
-			-- Keep hitbox centered on orb
-			if hitbox and hitbox.Parent then
-				hitbox.CFrame = orb.CFrame
-			end
-		end)
-	end)
+		end
+	end
+end
 
-	-- Touch detection on the larger hitbox for easier pickup
-	local collected = false
-	hitbox.Touched:Connect(function(hit)
-		if collected or not orb.Parent then
+-- Public: Natural Spawns (Reduced rate)
+local function spawnNaturalOrb()
+	-- Simple logic to spawn random orbs around the map
+	-- Similar to original but less frequent
+
+	-- Get random tier (weighted)
+	local r = math.random(100)
+	local tier = ORB_TIERS[4] -- Common
+	if r > 95 then tier = ORB_TIERS[1] -- Legendary
+	elseif r > 85 then tier = ORB_TIERS[2] -- Rare
+	elseif r > 60 then tier = ORB_TIERS[3] -- Uncommon
+	end
+
+	-- Random Position (Simplified map bounds)
+	local x = math.random(-800, 800)
+	local z = math.random(-800, 800)
+	local rayOrigin = Vector3.new(x, 500, z)
+	local rayResult = Workspace:Raycast(rayOrigin, Vector3.new(0, -1000, 0))
+
+	if rayResult then
+		createOrb(tier, rayResult.Position + Vector3.new(0, 5, 0))
+	end
+end
+
+-- Secure Collection Handler
+local function onCollectOrb(player, orb)
+	if not orb or not orb.Parent then return end
+
+	local xpValue = activeOrbs[orb]
+	if not xpValue then return end -- Invalid orb
+
+	-- Distance Check (Server Authority)
+	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+		local dist = (player.Character.HumanoidRootPart.Position - orb.Position).Magnitude
+		if dist > VACUUM_DISTANCE + 10 then -- Tolerance for latency
+			-- warn(player.Name .. " tried to collect orb from too far: " .. dist)
 			return
 		end
-		local character = hit.Parent
-		local humanoid = character:FindFirstChild("Humanoid")
-		if humanoid and humanoid.Health > 0 then
-			collected = true
 
-			-- Award XP
-			local player = game:GetService("Players"):GetPlayerFromCharacter(character)
-			local xpValue = orb:GetAttribute("XPValue") or 100
+		-- Award XP
+		getProgressionManager().AddXP(player, xpValue)
 
-			if player then
-				getProgressionManager().AddXP(player, xpValue)
-			else
-				-- Check for bot
-				local CollectionService = game:GetService("CollectionService")
-				if CollectionService:HasTag(character, "BotAI") then
-					getProgressionManager().AddXP(character, xpValue)
-				end
-			end
-
-			local index = table.find(activeOrbs, orb)
-			if index then
-				table.remove(activeOrbs, index)
-			end
-			returnOrb(orb)
-		end
-	end)
+		-- Cleanup
+		activeOrbs[orb] = nil
+		orb:Destroy()
+	end
 end
 
 function XPOrbManager.Start()
-	print("--- Starting Optimized XPOrbManager ---")
+	print("--- Starting Refactored XPOrbManager (Physics Loot) ---")
 
-	-- Pre-populate pool
-	for _ = 1, POOL_SIZE do
-		local orb = Instance.new("Part")
-		orb.Name = "XPOrb"
-		orb.Shape = Enum.PartType.Ball
-		orb.Material = Enum.Material.Neon
-		orb.Anchored = true
-		orb.CanCollide = false
-		orb.CastShadow = false
-		table.insert(orbPool, orb)
-	end
+	-- Clean old orbs
+	local folder = getOrbsFolder()
+	folder:ClearAllChildren()
 
+	-- Connect Remote
+	collectOrbRemote.OnServerEvent:Connect(onCollectOrb)
+
+	-- Start Natural Spawner
 	task.spawn(function()
 		while true do
-			spawnOrb()
 			task.wait(SPAWN_INTERVAL)
+			if #getOrbsFolder():GetChildren() < MAX_TOTAL_ORBS then
+				spawnNaturalOrb()
+			end
 		end
 	end)
 end
