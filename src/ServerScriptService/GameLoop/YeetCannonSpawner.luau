@@ -2,6 +2,8 @@ local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService") -- Added Service
 
+local YeetCannonManager = require(script.Parent.YeetCannonManager)
+
 local YeetCannonSpawner = {}
 
 -- Helper to ensure MapInteractables folder exists in Workspace
@@ -135,6 +137,9 @@ function YeetCannonSpawner.Start()
 			cannon:PivotTo(CFrame.new(defaultPos) * templateRotation)
 			print("YeetCannonSpawner: No floor found. Spawned at default", defaultPos)
 		end
+
+		-- Register with Manager
+		YeetCannonManager.Register(cannon)
 	end
 
 	-- Spawn 3 cannons at random positions (never in the middle)
