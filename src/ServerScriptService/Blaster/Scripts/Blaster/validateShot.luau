@@ -22,6 +22,11 @@ local function validateShot(player: Player, timestamp: number, blaster: Tool, or
 	if not character then
 		return false
 	end
+
+	-- [FIX] Prevent shooting from Safe Zone
+	if player:GetAttribute("SafeZone") then
+		return false
+	end
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then
 		return false
