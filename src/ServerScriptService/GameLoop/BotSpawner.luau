@@ -205,34 +205,46 @@ local function spawnBot()
 		humanoid:ChangeState(Enum.HumanoidStateType.Running)
 	end)
 
-	-- Respawn Logic
+	-- Respawn Logic (Handled by maintain loop now, but clean up dead body)
 	humanoid.Died:Connect(function()
 		task.delay(RESPAWN_DELAY, function()
 			if bot then
 				bot:Destroy()
 			end
-			spawnBot()
 		end)
 	end)
 end
 
 function BotSpawner.Start()
-
-	
 	-- Wait for Baseplate to ensure world geometry is loaded
-	-- This prevents raycast failures that cause bots to spawn in the sky
 	local baseplate = Workspace:WaitForChild("Baseplate", 30)
 	if not baseplate then
 		warn("BotSpawner: Baseplate not found after 30 seconds! Bots may spawn incorrectly.")
-	else
-
 	end
 	
-	for _ = 1, SPAWN_COUNT do
+	-- Initial Spawn
+	local currentBots = #CollectionService:GetTagged("BotAI")
+	for _ = currentBots + 1, SPAWN_COUNT do
 		spawnBot()
 		task.wait(0.1)
 	end
 	
+	-- Maintain Population Loop
+	task.spawn(function()
+		while true do
+			task.wait(3) -- Check every 3 seconds
+			local activeBots = CollectionService:GetTagged("BotAI")
+			if #activeBots < SPAWN_COUNT then
+				local missing = SPAWN_COUNT - #activeBots
+				-- Spawn missing bots (throttled)
+				for i = 1, missing do
+					spawnBot()
+					task.wait(0.2)
+				end
+			end
+		end
+	end)
+
 	-- Spawn Display Bots
 	BotSpawner.SpawnDisplayBots()
 end
@@ -311,12 +323,23 @@ function BotSpawner.SpawnDisplayBots()
 		
 		bot:PivotTo(CFrame.new(xPos, spawnY, lineZ) * CFrame.Angles(0, math.rad(180), 0)) -- Face forward
 		
-		-- Make completely still
+		-- Make completely still and disable physics states
 		for _, part in ipairs(bot:GetDescendants()) do
 			if part:IsA("BasePart") then
 				part.Anchored = true
+				part.CanCollide = false
+				part.CastShadow = false -- Optimization
 			end
 		end
+
+		-- Disable Humanoid Physics
+		humanoid:ChangeState(Enum.HumanoidStateType.None)
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, false)
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
 	end
 end
 

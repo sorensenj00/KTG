@@ -106,48 +106,50 @@ function BotController.Start()
 	-- Find closest enemy (player or bot) and nearest orb
 	-- ✅ IMPROVED: Spatial partitioning for bot target detection
 	local function scanSurroundings(bot, rootPos, attackRadius)
-		-- Use Region3 for efficient spatial queries
-		local region = Region3.new(
-			rootPos - Vector3.new(attackRadius, 50, attackRadius),
-			rootPos + Vector3.new(attackRadius, 50, attackRadius)
-		)
-		region = region:ExpandToGrid(4)
+		-- Use OverlapParams for efficient spatial queries (replaces Region3)
+		local overlapParams = OverlapParams.new()
+		overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+		overlapParams.FilterDescendantsInstances = { bot }
+		overlapParams.MaxParts = 100 -- Increased limit to detect crowded enemies reliably
 
-		local parts = Workspace:FindPartsInRegion3(region, bot, 100)
+		local halfSize = attackRadius
+		local cframe = CFrame.new(rootPos)
+		local size = Vector3.new(halfSize * 2, 100, halfSize * 2)
+
+		local parts = Workspace:GetPartBoundsInBox(cframe, size, overlapParams)
 
 		local bestTarget = nil
 		local bestDist = attackRadius
 
 		for _, part in ipairs(parts) do
-			if part.Parent:FindFirstChild("Humanoid") and part.Parent:FindFirstChild("HumanoidRootPart") then
+			local char = part.Parent
+			local hum = char:FindFirstChild("Humanoid")
+			local humRoot = char:FindFirstChild("HumanoidRootPart")
+
+			if hum and humRoot and hum.Health > 0 and char ~= bot then
 				-- Target found
-				local targetPos = part.Parent.HumanoidRootPart.Position
+				local targetPos = humRoot.Position
 				local dist = (targetPos - rootPos).Magnitude
 				if dist < bestDist then
-					-- Verify target is valid (alive and not self)
-					local hum = part.Parent.Humanoid
-					if hum.Health > 0 and part.Parent ~= bot then
-						local targetChar = part.Parent
-						local targetPlayer = Players:GetPlayerFromCharacter(targetChar)
+					local targetPlayer = Players:GetPlayerFromCharacter(char)
 
-						-- If target is a player, check if they have aggro
-						if targetPlayer and targetPlayer:IsA("Player") then
-							-- Check aggro before allowing targeting
-							local hasPlayerAggro = hasAggro(bot, targetPlayer)
+					-- If target is a player, check if they have aggro
+					if targetPlayer and targetPlayer:IsA("Player") then
+						-- Check aggro before allowing targeting
+						local hasPlayerAggro = hasAggro(bot, targetPlayer)
 
-							if hasPlayerAggro then
-								-- Player has shot this bot, valid target
-								bestDist = dist
-								bestTarget = targetChar
-							end
-							-- If player hasn't shot bot, skip them (do not update bestDist or bestTarget)
-						elseif not targetPlayer then
-							-- Target is not a player, check if it's a bot
-							-- Verify it's actually a bot by checking for BotAI tag
-							if CollectionService:HasTag(targetChar, "BotAI") then
-								bestDist = dist
-								bestTarget = targetChar
-							end
+						if hasPlayerAggro then
+							-- Player has shot this bot, valid target
+							bestDist = dist
+							bestTarget = char
+						end
+						-- If player hasn't shot bot, skip them (do not update bestDist or bestTarget)
+					elseif not targetPlayer then
+						-- Target is not a player, check if it's a bot
+						-- Verify it's actually a bot by checking for BotAI tag
+						if CollectionService:HasTag(char, "BotAI") then
+							bestDist = dist
+							bestTarget = char
 						end
 					end
 				end
@@ -373,15 +375,35 @@ function BotController.Start()
 	end
 
 	-- Update Loop
+	-- Queue system for time-slicing bot updates
+	local botUpdateQueue = {}
+	local BOTS_PER_FRAME = 10 -- Update 10 bots per frame to spread load
+
 	RunService.Heartbeat:Connect(function()
 		local now = Workspace:GetServerTimeNow()
 
-		for _, bot in ipairs(CollectionService:GetTagged("BotAI")) do
-			if not bot:FindFirstChild("Humanoid") or bot.Humanoid.Health <= 0 then
+		-- Refill queue if empty
+		if #botUpdateQueue == 0 then
+			local allBots = CollectionService:GetTagged("BotAI")
+			-- Shuffle slightly to avoid same order artifacts? Not strictly necessary.
+			for _, bot in ipairs(allBots) do
+				table.insert(botUpdateQueue, bot)
+			end
+		end
+
+		-- Process budget
+		local processedCount = 0
+		while processedCount < BOTS_PER_FRAME and #botUpdateQueue > 0 do
+			local bot = table.remove(botUpdateQueue, 1)
+
+			-- Verify bot is still valid
+			if not bot or not bot.Parent or not bot:FindFirstChild("Humanoid") or bot.Humanoid.Health <= 0 then
 				botData[bot] = nil
-				botAggroTable[bot] = nil -- Clean up aggro when bot dies
+				botAggroTable[bot] = nil
 				continue
 			end
+
+			processedCount = processedCount + 1
 
 			-- Clean up stale aggro entries for this bot
 			cleanupAggro(bot, now)
