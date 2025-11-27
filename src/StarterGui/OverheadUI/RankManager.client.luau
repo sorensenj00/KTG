@@ -114,7 +114,7 @@ local function setupEntity(entity: Model, dataSource: Instance)
 		
 		-- Visibility Logic
 		local lastDamageTime = 0
-		local VISIBILITY_RANGE = 200
+		local VISIBILITY_RANGE = 400
 		local DAMAGE_SHOW_DURATION = 10
 		local SCALE_DISTANCE_MAX = 400 -- Distance at which UI is smallest
 		
@@ -170,9 +170,13 @@ local function setupEntity(entity: Model, dataSource: Instance)
 				ui.Enabled = true
 				
 				-- Fade based on distance (0 = fully visible, VISIBILITY_RANGE = transparent)
-				-- Fade starts at 100 studs, full fade at 200 studs
-				local fadeStart = 100
-				local fadeAlpha = math.clamp((dist - fadeStart) / (VISIBILITY_RANGE - fadeStart), 0, 1)
+				-- Fade starts at 300 studs, full fade at 400 studs
+				local fadeStart = 300
+				local fadeAlpha = 0
+
+				if not recentlyDamaged then
+					fadeAlpha = math.clamp((dist - fadeStart) / (VISIBILITY_RANGE - fadeStart), 0, 1)
+				end
 				
 				-- Apply transparency to all UI elements
 				for _, child in ipairs(ui:GetDescendants()) do

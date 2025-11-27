@@ -1,19 +1,11 @@
 --[[
     Controller: DamageNumberController
-    Description: Manages floating damage numbers that appear above hit targets. Uses object pooling
-    to optimize performance during high fire-rate combat. Supports healing (negative damage) and
-    XP display on kills.
+    Description: Manages 3D floating damage numbers using Part pooling and physics.
+    Optimized for high fire-rate combat (Borderlands style).
     
     Dependencies:
-    - Players (Roblox Service)
-    - ReplicatedStorage (Roblox Service)
-    - TweenService (Roblox Service)
-    - Workspace (Roblox Service)
-    - RunService (Roblox Service)
-    - ReplicatedStorage.Blaster.Remotes.DamageNumber (RemoteEvent)
-    
-    Public API:
-    - Start(): void - Initialize the controller and begin listening for damage events
+    - Players, ReplicatedStorage, Workspace, RunService
+    - ReplicatedStorage.Blaster.Remotes.DamageNumber
     
     Author: System
     Last Updated: 2025-01-20
@@ -25,280 +17,256 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
 local camera = Workspace.CurrentCamera
 
--- Get RemoteEvent
+-- Configuration
+local POOL_SIZE = 100
+local PART_LIFETIME = 0.8 -- Seconds before cleanup
+local FADE_DURATION = 0.2 -- Last 0.2s are for fading
+
+-- Physics Config
+local GRAVITY = Vector3.new(0, -30, 0) -- Custom gravity feel (if needed, but we use Roblox physics)
+local INITIAL_UP_VELOCITY = 25
+local CAMERA_BIAS_STRENGTH = 10
+local SPREAD_STRENGTH = 10
+
+-- Colors
+local COLORS = {
+	NORMAL = Color3.fromRGB(255, 255, 255),
+	CRITICAL = Color3.fromRGB(255, 50, 50), -- Red
+	KILL = Color3.fromRGB(255, 215, 0), -- Gold
+	HEALING = Color3.fromRGB(0, 255, 100), -- Green
+}
+
+-- State
+local damageNumberPool = {}
+local activeDamageNumbers = {}
+local damageNumberContainer -- Folder in Workspace
+
+-- Remote
 local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes")
 local damageNumberRemote = remotes:WaitForChild("DamageNumber")
 
--- Object pool for damage number labels
-local labelPool = {}
-local activeLabels = {}
-local MAX_CONCURRENT_DAMAGE_NUMBERS = 50 -- Increased from 5 to 50
+--------------------------------------------------------------------------------
+-- Prefab Creation
+--------------------------------------------------------------------------------
+local function createDamageNumberPrefab(): Part
+	local part = Instance.new("Part")
+	part.Name = "PooledDamageNumber"
+	part.Size = Vector3.new(0.5, 0.5, 0.5)
+	part.Transparency = 1
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.Anchored = true -- Pooled parts are anchored
+	part.Massless = true
+	part.CastShadow = false
 
--- Animation constants
-local FLOAT_DURATION = 1.0
-local FLOAT_DISTANCE = 50 -- pixels
-local DRIFT_RANGE = 60 -- Increased drift range
-local FADE_START = 0.5 -- start fading later
+	-- BillboardGui was requested? No, user said "Floating Damage Number system".
+	-- Actually, for 3D numbers that face camera, BillboardGui is easiest,
+	-- but user requested "Physics" with "Trajectory".
+	-- A Part with a BillboardGui works perfectly with physics.
+	-- Or SurfaceGui on a Part that looksAt camera?
+	-- BillboardGui is standard for damage numbers, but if we want them to tumble
+	-- or have true 3D trajectory that feels "physic-y", we attach the UI to the part.
+	-- Since the prompt asks for "Popcorn Physics (arcing projectiles)" and "Server must never create visual parts",
+	-- we use a Part as the physical anchor.
+	-- We will use a BillboardGui attached to the part so the text always faces camera,
+	-- but the Part itself moves via physics.
 
--- Color constants
-local COLORS = {
-	NORMAL = Color3.fromRGB(255, 255, 255), -- White
-	KILL = Color3.fromRGB(255, 215, 0), -- Gold
-	HIGH_DAMAGE = Color3.fromRGB(255, 100, 100), -- Light red
-	CRITICAL = Color3.fromRGB(255, 50, 50), -- Deep Red
-	HEALING = Color3.fromRGB(0, 255, 0), -- Green
-}
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "Display"
+	billboard.Size = UDim2.fromScale(4, 2)
+	billboard.Adornee = part
+	billboard.AlwaysOnTop = true -- Borderlands style visibility
+	billboard.Parent = part
 
--- Create ScreenGui for damage numbers if it doesn't exist
-local damageGui = Instance.new("ScreenGui")
-damageGui.Name = "DamageNumbers"
-damageGui.ResetOnSpawn = false
-damageGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-damageGui.Parent = playerGui
-
--- Create a damage number label
-local function createLabel(): TextLabel
 	local label = Instance.new("TextLabel")
-	label.Name = "DamageNumber"
-	label.Size = UDim2.fromOffset(100, 50)
+	label.Name = "Label"
+	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
-	label.Text = ""
+	label.Text = "123"
 	label.TextColor3 = COLORS.NORMAL
-	label.TextSize = 24
-	label.Font = Enum.Font.GothamBold
-	label.TextStrokeTransparency = 0.3
-	label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-	label.ZIndex = 10
-	label.Visible = false
-	label.TextScaled = false
-	return label
+	label.TextStrokeTransparency = 0
+	label.TextStrokeColor3 = Color3.new(0,0,0)
+	label.Font = Enum.Font.GothamBlack
+	label.TextScaled = true
+	label.Parent = billboard
+
+	return part
 end
 
--- Get or create a label from the pool
-local function getLabel(): TextLabel
-	local label = table.remove(labelPool)
-	if not label then
-		label = createLabel()
-		label.Parent = damageGui
-	end
-	return label
-end
+--------------------------------------------------------------------------------
+-- Pooling System
+--------------------------------------------------------------------------------
+local function initializePool()
+	damageNumberContainer = Instance.new("Folder")
+	damageNumberContainer.Name = "DamageNumbers_Client"
+	damageNumberContainer.Parent = Workspace
 
--- Return label to pool
-local function returnLabel(label: TextLabel)
-	if label and label.Parent then
-		label.Visible = false
-		label.Text = ""
-		label.Position = UDim2.new()
-		table.insert(labelPool, label)
+	local storagePos = Vector3.new(0, -5000, 0)
+
+	for i = 1, POOL_SIZE do
+		local part = createDamageNumberPrefab()
+		part.CFrame = CFrame.new(storagePos)
+		part.Parent = damageNumberContainer
+		table.insert(damageNumberPool, part)
 	end
 end
 
--- Show a damage number
-local function showDamageNumber(damage: number, worldPosition: Vector3, isKill: boolean, xpAmount: number?)
-	-- Limit concurrent damage numbers
-	if #activeLabels >= MAX_CONCURRENT_DAMAGE_NUMBERS then
-		local oldest = table.remove(activeLabels, 1)
-		if oldest and oldest.label then
-			returnLabel(oldest.label)
+local function getPartFromPool(): Part?
+	local part = table.remove(damageNumberPool)
+	if not part then
+		-- Optional: Dynamic expansion or just recycle oldest active (simpler to just return nil or create new temp)
+		-- For safety, let's create a new temporary one if pool is empty
+		part = createDamageNumberPrefab()
+		part.Parent = damageNumberContainer
+	end
+	return part
+end
+
+local function returnPartToPool(part: Part)
+	part.Anchored = true
+	part.CFrame = CFrame.new(0, -5000, 0)
+	part.AssemblyLinearVelocity = Vector3.zero
+	part.AssemblyAngularVelocity = Vector3.zero
+
+	-- Reset Visuals
+	local bb = part:FindFirstChild("Display")
+	if bb then
+		local label = bb:FindFirstChild("Label")
+		if label then
+			label.TextTransparency = 0
+			label.TextStrokeTransparency = 0
 		end
 	end
 
-	local label = getLabel()
-	if not label then
-		return
+	table.insert(damageNumberPool, part)
+end
+
+--------------------------------------------------------------------------------
+-- Logic
+--------------------------------------------------------------------------------
+
+local function spawnDamageNumber(amount: number, position: Vector3, isKill: boolean, xpAmount: number?)
+	local part = getPartFromPool()
+	if not part then return end
+
+	local isHealing = amount < 0
+	local absAmount = math.abs(amount)
+	local isCrit = (absAmount > 50) and not isHealing -- Arbitrary crit threshold or flag passed?
+	-- NOTE: The current remote doesn't pass "isCrit". We can infer it or just use simple logic.
+	-- Prompt said: "Crit Hit: Red text, larger size, adds '!' to the text."
+	-- I'll treat > 50 as high damage/crit for now, or just rely on visual flare for kills.
+
+	-- Configure Text
+	local bb = part:FindFirstChild("Display")
+	local label = bb and bb:FindFirstChild("Label")
+
+	if label then
+		local text = tostring(math.floor(absAmount))
+
+		if isHealing then
+			text = "+" .. text
+			label.TextColor3 = COLORS.HEALING
+			bb.Size = UDim2.fromScale(3, 1.5)
+		elseif isKill then
+			text = "☠ " .. text .. "!" -- Kill flare
+			label.TextColor3 = COLORS.KILL
+			bb.Size = UDim2.fromScale(6, 3) -- Big for kills
+		elseif isCrit or absAmount >= 50 then
+			text = text .. "!"
+			label.TextColor3 = COLORS.CRITICAL
+			bb.Size = UDim2.fromScale(5, 2.5)
+		else
+			label.TextColor3 = COLORS.NORMAL
+			bb.Size = UDim2.fromScale(4, 2)
+		end
+
+		if xpAmount then
+			text = text .. "\n+" .. xpAmount .. " XP"
+		end
+
+		label.Text = text
 	end
 
-	-- Convert world position to screen space first
-	local screenPoint, onScreen = camera:WorldToViewportPoint(worldPosition)
-
-	if not onScreen then
-		returnLabel(label)
-		return
-	end
-
-	-- Check if this is healing (negative damage)
-	local isHealing = damage < 0
-	local absoluteValue = math.abs(damage)
-
-	-- Set text and style
-	local damageText
-	if isHealing then
-		-- Format as "+X HP" for healing
-		damageText = "+" .. tostring(math.floor(absoluteValue)) .. " HP"
-	else
-		damageText = tostring(math.floor(damage))
-	end
-
-	-- Add XP text if this is a kill and XP amount is provided
-	if isKill and xpAmount then
-		damageText = damageText .. "\n+" .. tostring(math.floor(xpAmount)) .. " XP"
-	end
-
-	label.Text = damageText
-
-	-- Style based on healing, kill, or damage amount
-	local isCritical = absoluteValue >= 100
+	-- Physics Setup
+	part.CFrame = CFrame.new(position)
+	part.Anchored = false
 	
-	if isHealing then
-		label.TextColor3 = Color3.fromRGB(0, 255, 100) -- NEON GREEN
-		label.TextSize = 26
-		label.TextStrokeColor3 = Color3.fromRGB(0, 50, 0)
-	elseif isKill then
-		label.TextColor3 = COLORS.KILL
-		label.TextSize = 32
-		label.TextStrokeColor3 = Color3.fromRGB(100, 0, 0)
-	elseif isCritical then
-		label.TextColor3 = COLORS.CRITICAL
-		label.TextSize = 30
-		label.TextStrokeColor3 = Color3.fromRGB(100, 0, 0)
-	elseif damage >= 50 then
-		label.TextColor3 = COLORS.HIGH_DAMAGE
-		label.TextSize = 28
-	else
-		label.TextColor3 = COLORS.NORMAL
-		label.TextSize = 24
+	-- Calculate Velocity
+	-- 1. Upwards pop
+	local velocity = Vector3.new(0, INITIAL_UP_VELOCITY, 0)
+
+	-- 2. Bias towards camera (so it doesn't get occluded by the enemy body)
+	if camera then
+		local camDir = (camera.CFrame.Position - position).Unit
+		-- Flatten y so we don't shoot it too high/low based on look angle
+		camDir = Vector3.new(camDir.X, 0, camDir.Z).Unit
+		velocity = velocity + (camDir * CAMERA_BIAS_STRENGTH)
 	end
-
-	-- Ensure label is properly sized and visible
-	local labelHeight = (isKill and xpAmount) and 70 or 50
-	label.Size = UDim2.fromOffset(150, labelHeight)
-	label.TextTransparency = 0
-	label.TextStrokeTransparency = 0.3
-
-	-- Set initial position with slight random offset to prevent perfect stacking
-	local random = Random.new()
-	local startOffsetX = (random:NextNumber() - 0.5) * 20
-	local startOffsetY = (random:NextNumber() - 0.5) * 20
 	
-	label.Position = UDim2.fromOffset(screenPoint.X + startOffsetX, screenPoint.Y + startOffsetY)
-	label.Visible = true
+	-- 3. Random Spread (Popcorn effect)
+	local rng = Random.new()
+	local spread = Vector3.new(
+		rng:NextNumber(-1, 1),
+		rng:NextNumber(0, 0.5), -- slight upward bias in spread
+		rng:NextNumber(-1, 1)
+	) * SPREAD_STRENGTH
 
-	-- Random horizontal drift
-	local driftAmount = (random:NextNumber() - 0.5) * DRIFT_RANGE
-	local endX = screenPoint.X + startOffsetX + driftAmount
-	local endY = screenPoint.Y + startOffsetY - FLOAT_DISTANCE
+	velocity = velocity + spread
 
-	-- Create animation
-	local startTime = tick()
-	local labelData = {
-		label = label,
-		startX = screenPoint.X + startOffsetX,
-		startY = screenPoint.Y + startOffsetY,
-		endX = endX,
-		endY = endY,
-		startTime = startTime,
-		isHealing = isHealing,
-		absoluteValue = absoluteValue,
-		isKill = isKill,
-		isCritical = isCritical,
-	}
+	part.AssemblyLinearVelocity = velocity
 
-	table.insert(activeLabels, labelData)
+	-- Add to active list for cleanup
+	table.insert(activeDamageNumbers, {
+		part = part,
+		spawnTime = tick()
+	})
+end
 
-	-- Animate using RunService for smooth updates
-	local connection
-	connection = RunService.Heartbeat:Connect(function()
-		local elapsed = tick() - startTime
-		local progress = math.min(elapsed / FLOAT_DURATION, 1)
+local function update(dt)
+	local now = tick()
 
-		if progress >= 1 or not label.Parent then
-			connection:Disconnect()
-			-- Remove from active labels
-			for i, data in ipairs(activeLabels) do
-				if data == labelData then
-					table.remove(activeLabels, i)
-					break
+	-- Iterate backwards to safely remove
+	for i = #activeDamageNumbers, 1, -1 do
+		local data = activeDamageNumbers[i]
+		local age = now - data.spawnTime
+
+		if age >= PART_LIFETIME then
+			-- Done
+			returnPartToPool(data.part)
+			table.remove(activeDamageNumbers, i)
+		elseif age > (PART_LIFETIME - FADE_DURATION) then
+			-- Fading
+			local fadeAlpha = (age - (PART_LIFETIME - FADE_DURATION)) / FADE_DURATION
+			local bb = data.part:FindFirstChild("Display")
+			if bb then
+				local label = bb:FindFirstChild("Label")
+				if label then
+					label.TextTransparency = fadeAlpha
+					label.TextStrokeTransparency = fadeAlpha
 				end
 			end
-			returnLabel(label)
-			return
 		end
-
-		-- Interpolate position
-		local currentX = labelData.startX + (labelData.endX - labelData.startX) * progress
-		local currentY = labelData.startY + (labelData.endY - labelData.startY) * progress
-
-		-- Easing function (ease out)
-		local easedProgress = 1 - math.pow(1 - progress, 3)
-		currentY = labelData.startY + (labelData.endY - labelData.startY) * easedProgress
-
-		label.Position = UDim2.fromOffset(currentX, currentY)
-
-		-- Fade out
-		if elapsed > FADE_START then
-			local fadeProgress = (elapsed - FADE_START) / (FLOAT_DURATION - FADE_START)
-			label.TextTransparency = math.min(fadeProgress, 1)
-			label.TextStrokeTransparency = 0.3 + (fadeProgress * 0.7)
-		else
-			label.TextTransparency = 0
-			label.TextStrokeTransparency = 0.3
-		end
-
-		-- Scale effect (slight bounce)
-		local scale = 1
-		if progress < 0.2 then
-			-- Bounce in
-			local bounceProgress = progress / 0.2
-			scale = 0.5 + (bounceProgress * 0.5) * 1.2
-		elseif progress < 0.4 then
-			-- Settle
-			local settleProgress = (progress - 0.2) / 0.2
-			scale = 1.2 - (settleProgress * 0.2)
-		else
-			scale = 1
-		end
-		
-		-- Calculate base text size (accounting for healing)
-		local baseTextSize = 24
-		if labelData.isHealing then
-			baseTextSize = 26
-		elseif labelData.isKill then
-			baseTextSize = 32
-		elseif labelData.isCritical then
-			baseTextSize = 30
-		elseif labelData.absoluteValue >= 50 then
-			baseTextSize = 28
-		end
-		label.TextSize = baseTextSize * scale
-	end)
+	end
 end
 
+--------------------------------------------------------------------------------
+-- Controller
+--------------------------------------------------------------------------------
 local DamageNumberController = {}
 
 function DamageNumberController.Start()
-	-- Listen for damage number events
-	damageNumberRemote.OnClientEvent:Connect(
-		function(damage: number, worldPosition: Vector3, isKill: boolean, xpAmount: number?)
-			print(
-				"🔢 DamageNumberController: Received damage event -",
-				damage,
-				"at",
-				worldPosition,
-				"isKill:",
-				isKill,
-				"XP:",
-				xpAmount
-			)
-			showDamageNumber(damage, worldPosition, isKill, xpAmount)
-		end
-	)
+	initializePool()
 
-	print("✅ DamageNumberController: Initialized and listening for damage events")
-
-	-- Cleanup on character removal
-	player.CharacterRemoving:Connect(function()
-		-- Return all active labels to pool
-		for _, labelData in ipairs(activeLabels) do
-			if labelData.label then
-				returnLabel(labelData.label)
-			end
-		end
-		activeLabels = {}
+	damageNumberRemote.OnClientEvent:Connect(function(damage, position, isKill, xpAmount)
+		spawnDamageNumber(damage, position, isKill, xpAmount)
 	end)
+
+	RunService.Heartbeat:Connect(update)
+
+	print("✅ DamageNumberController: Initialized (Physics/Pooling)")
 end
 
 return DamageNumberController
