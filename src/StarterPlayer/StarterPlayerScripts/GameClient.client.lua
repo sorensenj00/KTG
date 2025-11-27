@@ -1,134 +1,51 @@
 --[[
-    Bootstrapper: GameClient
-    Description: Central bootstrapper that initializes all client-side controllers in the proper order.
-    Handles initialization errors gracefully and prints status for debugging.
-    
-    Dependencies:
-    - Controllers.CameraController
-    - Controllers.UIController
-    - Controllers.KillfeedController
-    - Controllers.DamageNumberController
-    - Controllers.BlasterController
-    
-    Author: System
-    Last Updated: 2025-01-20
+    Client-side bootstrapper
+    Initializes all client controllers.
 ]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 
 local Controllers = script.Parent:WaitForChild("Controllers")
 
-local CameraController = require(Controllers.CameraController)
-local UIController = require(Controllers.UIController)
--- local KillfeedController = require(Controllers.KillfeedController)
-local DamageNumberController = require(Controllers.DamageNumberController)
-local DamageEffectController = require(Controllers.DamageEffectController)
-local KillEffectController = require(Controllers.KillEffectController)
-local BlasterController = require(Controllers.BlasterController)
-local BeaconController = require(Controllers.BeaconController)
-local LeaderboardController = require(Controllers.LeaderboardController)
-local IKController = require(Controllers.IKController)
-
--- Initialize controllers in proper order
-print("🚀 GameClient: Starting initialization...")
-
--- 1. CameraController (needed by BlasterController)
-local success, err = pcall(function()
-	CameraController.Start()
-end)
-if not success then
-	warn("❌ GameClient: Failed to initialize CameraController:", err)
-else
-	print("✅ GameClient: CameraController initialized")
+local function safeRequire(moduleScript)
+    local success, result = pcall(function()
+        return require(moduleScript)
+    end)
+    if not success then
+        warn("Failed to load controller: " .. moduleScript.Name)
+        warn(result)
+    end
 end
 
--- 2. UIController
-success, err = pcall(function()
-	UIController.Start()
-end)
-if not success then
-	warn("❌ GameClient: Failed to initialize UIController:", err)
-else
-	print("✅ GameClient: UIController initialized")
+-- Load Controllers
+safeRequire(Controllers:WaitForChild("HUDController"))
+safeRequire(Controllers:WaitForChild("MovementController"))
+safeRequire(Controllers:WaitForChild("YeetCannonController"))
+safeRequire(Controllers:WaitForChild("MutationShopController"))
+-- safeRequire(Controllers:WaitForChild("CameraGrowthController")) -- This is a script, not a module, so it runs automatically?
+-- Actually CameraGrowthController.client.luau is in StarterPlayerScripts, so it runs itself.
+-- Wait, the list_files showed it as a separate file, not in Controllers.
+-- "src/StarterPlayer/StarterPlayerScripts/CameraGrowthController.client.luau"
+-- So we don't need to require it here if it's a LocalScript.
+-- Checking file extension: .client.luau usually means LocalScript if Rojo syncs it as such.
+-- If it's a ModuleScript in Controllers, we require it.
+-- Let's check `list_files` again to be sure where I put MutationShopController.
+-- I put it in `src/StarterPlayer/StarterPlayerScripts/Controllers/MutationShopController.client.luau`.
+-- If it ends in .client.luau, Rojo might treat it as a LocalScript if not configured as Module.
+-- Usually "Controllers" folder contains ModuleScripts.
+-- I should ensure it returns a table with Start() and I call Start().
+
+-- Re-verify CameraGrowthController
+-- It was at `src/StarterPlayer/StarterPlayerScripts/CameraGrowthController.client.luau`.
+-- This means it's a sibling of GameClient.client.lua.
+
+-- My new file: `src/StarterPlayer/StarterPlayerScripts/Controllers/MutationShopController.client.luau`
+-- If it is a module, I should require it.
+-- Based on the code I wrote `local MutationShopController = {} ... return MutationShopController`, it is a Module.
+-- The `.client.luau` extension is just a naming convention often used for client-side modules.
+
+local MutationShop = require(Controllers:WaitForChild("MutationShopController"))
+if MutationShop.Start then
+    MutationShop.Start()
 end
-
--- 3. KillfeedController (Removed - using StarterGui version)
--- success, err = pcall(function()
--- 	KillfeedController.Start()
--- end)
--- if not success then
--- 	warn("❌ GameClient: Failed to initialize KillfeedController:", err)
--- else
--- 	print("✅ GameClient: KillfeedController initialized")
--- end
-
--- 4. DamageNumberController
-success, err = pcall(function()
-	DamageNumberController.Start()
-end)
-if not success then
-	warn("❌ GameClient: Failed to initialize DamageNumberController:", err)
-else
-	print("✅ GameClient: DamageNumberController initialized")
-end
-
--- 4.5. DamageEffectController
-success, err = pcall(function()
-	DamageEffectController.Start()
-end)
-if not success then
-	warn("❌ GameClient: Failed to initialize DamageEffectController:", err)
-else
-	print("✅ GameClient: DamageEffectController initialized")
-end
-
--- 4.6. KillEffectController
-success, err = pcall(function()
-	KillEffectController.Start()
-end)
-if not success then
-	warn("❌ GameClient: Failed to initialize KillEffectController:", err)
-else
-	print("✅ GameClient: KillEffectController initialized")
-end
-
--- 5. BlasterController (depends on CameraController)
-success, err = pcall(function()
-	BlasterController.Start()
-end)
-if not success then
-	warn("❌ GameClient: Failed to initialize BlasterController:", err)
-else
-	print("✅ GameClient: BlasterController initialized")
-end
-
--- 6. BeaconController
-success, err = pcall(function()
-	BeaconController.Start()
-end)
-if not success then
-	warn("❌ GameClient: Failed to initialize BeaconController:", err)
-else
-	print("✅ GameClient: BeaconController initialized")
-end
-
--- 7. LeaderboardController
-success, err = pcall(function()
-	LeaderboardController.Start()
-end)
-if not success then
-	warn("❌ GameClient: Failed to initialize LeaderboardController:", err)
-else
-	print("✅ GameClient: LeaderboardController initialized")
-end
-
--- 8. IKController
-success, err = pcall(function()
-	IKController.Start()
-end)
-if not success then
-	warn("❌ GameClient: Failed to initialize IKController:", err)
-else
-	print("✅ GameClient: IKController initialized")
-end
-
-print("🎉 GameClient: All controllers initialized successfully!")
-

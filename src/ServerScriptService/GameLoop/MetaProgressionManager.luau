@@ -1,570 +1,253 @@
+--[[
+    Module: MetaProgressionManager
+    Description: Handles persistent "DNA" currency and permanent upgrades (Mutations).
+                 Saves/Loads data using DataStoreService.
+                 Handles Gacha mechanics.
+
+    Dependencies:
+    - ReplicatedStorage.GameLoop.MetaConfig
+
+    Author: System
+    Last Updated: 2025-01-20
+]]
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
-local RunService = game:GetService("RunService")
 local DataStoreService = game:GetService("DataStoreService")
 
 local MetaConfig = require(ReplicatedStorage.GameLoop.MetaConfig)
 
 local MetaProgressionManager = {}
 
+-- Constants
+local DATA_STORE_KEY = "PlayerData_v1"
+local Store = DataStoreService:GetDataStore(DATA_STORE_KEY)
 
+-- State
+-- PlayerMeta[Player] = { DNA = 0, Upgrades = { ["Dense Muscle"] = 0, ... } }
+local PlayerMeta = {}
 
--- Check if running in Studio (DataStore not available)
-local IS_STUDIO = RunService:IsStudio()
+-- Draft State: { [Player] = { MutationName1, MutationName2, MutationName3 } }
+local PlayerDrafts = {}
 
--- DataStore setup (only if not in Studio)
-local DATASTORE_NAME = "MetaProgression"
-local datastore = not IS_STUDIO and DataStoreService:GetDataStore(DATASTORE_NAME) or nil
+-- Signals
+local UpdateMetaEvent = Instance.new("RemoteEvent")
+UpdateMetaEvent.Name = "UpdateMetaEvent"
+UpdateMetaEvent.Parent = ReplicatedStorage
 
--- Player data cache
-local playerData = {}
--- Structure:
--- {
---    GlobalXP = 0 (This is DNA/Currency),
---    Biomass = 0 (This is Lifetime DNA earned, used for Tiers/Unlocks),
---    Upgrades = {...},
---    SessionKills = 0
--- }
+local MutationShopEvent = Instance.new("RemoteEvent")
+MutationShopEvent.Name = "MutationShopEvent"
+MutationShopEvent.Parent = ReplicatedStorage
 
--- Remotes
-local purchaseUpgradeRemote
-local updateMetaStatsRemote
-local requestMetaDataRemote
-local showDeathSummaryRemote
-local requestRespawnRemote
-local harvestRemote
-
--- Helper to get all upgrade stat names from config
-local function getAllUpgradeNames()
-	local upgradeNames = {}
-	for tier, upgrades in pairs(MetaConfig.Upgrades) do
-		for statName, _ in pairs(upgrades) do
-			upgradeNames[statName] = true
-		end
-	end
-	return upgradeNames
-end
-
--- Default data structure
+-- Default Data
 local function getDefaultData()
-	local defaultUpgrades = {}
-	local allUpgrades = getAllUpgradeNames()
-	for statName, _ in pairs(allUpgrades) do
-		defaultUpgrades[statName] = 0
-	end
-
-	return {
-		GlobalXP = 0, -- Current DNA (Spendable)
-		Biomass = 0,  -- Lifetime DNA (Unlock Progress)
-		Upgrades = defaultUpgrades,
-		SessionKills = 0,
-	}
+    return {
+        DNA = 0,
+        Upgrades = {} -- Dynamic now
+    }
 end
 
--- Load player data from DataStore
-local function loadPlayerData(player: Player)
-	-- Skip DataStore in Studio mode
-	if IS_STUDIO then
-		playerData[player] = getDefaultData()
-		print("📝 Studio mode: Using default data for", player.Name)
-		return
-	end
+-- === Internal Logic ===
 
-	local success, data = pcall(function()
-		return datastore:GetAsync("Player_" .. player.UserId)
-	end)
+local function savePlayer(player)
+    local data = PlayerMeta[player]
+    if not data then return end
 
-	if success and data then
-		-- Validate data structure
-		if typeof(data) == "table" and data.GlobalXP and data.Upgrades then
-			-- Handle migration: if Biomass is missing, set it to current GlobalXP
-			local biomass = data.Biomass
-			if biomass == nil then
-				biomass = data.GlobalXP or 0
-			end
+    local success, err = pcall(function()
+        Store:SetAsync(player.UserId, data)
+    end)
 
-			-- Load all upgrade stats
-			local allUpgrades = getAllUpgradeNames()
-			local upgrades = {}
-			for statName, _ in pairs(allUpgrades) do
-				upgrades[statName] = (data.Upgrades and data.Upgrades[statName]) or 0
-			end
-
-			playerData[player] = {
-				GlobalXP = data.GlobalXP or 0,
-				Biomass = biomass,
-				Upgrades = upgrades,
-				SessionKills = 0,
-			}
-			print("✅ Loaded meta-progression data for", player.Name)
-		else
-			-- Invalid data, use defaults
-			playerData[player] = getDefaultData()
-			print("⚠️ Invalid data structure for", player.Name, "- using defaults")
-		end
-	else
-		-- No data or error, use defaults
-		playerData[player] = getDefaultData()
-		if not success then
-			warn("❌ Failed to load data for", player.Name, ":", data)
-		end
-	end
-end
-
--- Save player data to DataStore with retry logic
-local function savePlayerData(player: Player)
-	if not playerData[player] then
-		return
-	end
-
-	-- Skip DataStore in Studio mode
-	if IS_STUDIO then
-		print("📝 Studio mode: Skipping save for", player.Name)
-		return true
-	end
-
-	-- Save all upgrade stats dynamically
-	local allUpgrades = getAllUpgradeNames()
-	local upgradesToSave = {}
-	for statName, _ in pairs(allUpgrades) do
-		upgradesToSave[statName] = playerData[player].Upgrades[statName] or 0
-	end
-
-	local dataToSave = {
-		GlobalXP = playerData[player].GlobalXP,
-		Biomass = playerData[player].Biomass or 0,
-		Upgrades = upgradesToSave,
-	}
-
-	local maxRetries = 3
-	local retryDelay = 1
-
-	for attempt = 1, maxRetries do
-		local success, err = pcall(function()
-			datastore:SetAsync("Player_" .. player.UserId, dataToSave)
-		end)
-
-		if success then
-			print("✅ Saved meta-progression data for", player.Name)
-			return true
-		else
-			warn("❌ Failed to save data for", player.Name, "(attempt", attempt, "/", maxRetries, "):", err)
-			if attempt < maxRetries then
-				task.wait(retryDelay)
-				retryDelay = retryDelay * 2 -- Exponential backoff
-			end
-		end
-	end
-
-	return false
-end
-
--- Handle player death - Conversion Logic
-local function onPlayerDeath(player: Player)
-	if not playerData[player] then
-		return
-	end
-
-	local sessionKills = playerData[player].SessionKills or 0
-	
-	-- Get Current Biomass (Size/XP) from Player Attributes
-	local currentBiomass = player:GetAttribute("Biomass") or 0
-
-	-- Calculate DNA from Kills (Small bonus)
-	local dnaFromKills = sessionKills * MetaConfig.DNA_PER_KILL
-
-	-- Calculate DNA from Biomass Conversion (20% retained)
-	local dnaFromBiomass = math.floor(currentBiomass * MetaConfig.DEATH_BIOMASS_CONVERSION_PCT)
-
-	local totalDnaEarned = dnaFromKills + dnaFromBiomass
-
-	if totalDnaEarned > 0 then
-		-- Add to Wallet (GlobalXP/DNA)
-		playerData[player].GlobalXP = playerData[player].GlobalXP + totalDnaEarned
-
-		-- Add to Lifetime Stats (Biomass/LifetimeDNA)
-		playerData[player].Biomass = (playerData[player].Biomass or 0) + totalDnaEarned
-
-		print(string.format("💀 %s Died. Converted %d Biomass -> %d DNA. Kills: %d (+%d DNA). Total Earned: %d DNA",
-			player.Name, currentBiomass, dnaFromBiomass, sessionKills, dnaFromKills, totalDnaEarned))
-
-		-- Save to DataStore
-		savePlayerData(player)
-
-		-- Notify client with death summary
-		if showDeathSummaryRemote then
-			showDeathSummaryRemote:FireClient(player, sessionKills, currentBiomass, totalDnaEarned)
-		end
-
-		-- Notify client with updated stats
-		if updateMetaStatsRemote then
-			updateMetaStatsRemote:FireClient(
-				player,
-				playerData[player].GlobalXP,
-				playerData[player].Upgrades,
-				playerData[player].Biomass
-			)
-		end
-	end
-
-	-- Notify client with death summary (ALWAYS show this, even if 0 GXP earned)
-	if showDeathSummaryRemote then
-		showDeathSummaryRemote:FireClient(player, sessionKills, currentBiomass, totalDnaEarned)
-	end
-
-	-- Reset session data
-	playerData[player].SessionKills = 0
-	
-	-- CRITICAL: Reset player size/progress on death
-	-- The "Reward" was calculated above based on current biomass. Now we must reset it.
-	player:SetAttribute("Biomass", 0)
-	player:SetAttribute("Level", 1)
-end
-
--- Public API: Add GlobalXP (DNA) directly
-function MetaProgressionManager.AddDNA(player: Player, amount: number)
-	if not playerData[player] then
-		return
-	end
-	
-	amount = math.floor(amount)
-	playerData[player].GlobalXP = (playerData[player].GlobalXP or 0) + amount
-	playerData[player].Biomass = (playerData[player].Biomass or 0) + amount
-	
-	-- Save to DataStore
-	savePlayerData(player)
-	
-	-- Notify client
-	if updateMetaStatsRemote then
-		updateMetaStatsRemote:FireClient(
-			player,
-			playerData[player].GlobalXP,
-			playerData[player].Upgrades,
-			playerData[player].Biomass
-		)
-	end
-end
-
--- HARVEST FUNCTION (The "Bank" mechanic)
-function MetaProgressionManager.Harvest(player: Player)
-	if not playerData[player] then return false end
-
-	-- 1. Validate State (Check if player is in Safe Zone? - Logic should be handled by caller or checked via attribute)
-	-- For now, we trust the caller (Remote/Manager) to verify location.
-
-	-- 2. Get Current Biomass
-	local currentBiomass = player:GetAttribute("Biomass") or 0
-	if currentBiomass <= 0 then
-		return false
-	end
-	
-	-- 3. Calculate DNA (100% Conversion)
-	local dnaEarned = math.floor(currentBiomass)
-
-	-- 4. Apply DNA
-	MetaProgressionManager.AddDNA(player, dnaEarned)
-
-	print(string.format("🌾 %s Harvested! Converted %d Biomass -> %d DNA.", player.Name, currentBiomass, dnaEarned))
-
-	-- 5. Reset Player Stats
-	-- We need to reset them to Level 1 / Biomass 0
-	player:SetAttribute("Biomass", 0)
-	player:SetAttribute("Level", 1)
-
-	-- ProgressionManager listener will handle the physical resize on Level change
-
-	return true
-end
-
--- Handle kill event - increment session kills
-local function onEliminated(_gameState, killerArg, _victimArg, _toolArg)
-	-- Resolve killer
-	local killer = nil
-	if killerArg then
-		if killerArg:IsA("Player") then
-			killer = killerArg
-		elseif killerArg:IsA("Model") then
-			killer = Players:GetPlayerFromCharacter(killerArg)
-		end
-	end
-
-	if killer and playerData[killer] then
-		playerData[killer].SessionKills = (playerData[killer].SessionKills or 0) + 1
-	end
-end
-
--- Get stat multiplier for a player
-function MetaProgressionManager.GetStatMultiplier(player: Player, statName: string): number
-	if not playerData[player] then
-		return 1
-	end
-	local level = playerData[player].Upgrades[statName] or 0
-	return MetaConfig.GetMultiplier(statName, level)
-end
-
--- Get flat stat value for a player
-function MetaProgressionManager.GetStatValue(player: Player, statName: string): number
-    if not playerData[player] then
-        return 0
+    if not success then
+        warn("Failed to save data for " .. player.Name .. ": " .. tostring(err))
     end
-    local level = playerData[player].Upgrades[statName] or 0
+end
+
+-- Weighted Random Selection
+local function getRandomRarity()
+    local totalWeight = 0
+    for _, entry in ipairs(MetaConfig.RarityWeights) do
+        totalWeight = totalWeight + entry.Weight
+    end
+
+    local r = math.random() * totalWeight
+    local current = 0
+    for _, entry in ipairs(MetaConfig.RarityWeights) do
+        current = current + entry.Weight
+        if r <= current then
+            return entry.Rarity
+        end
+    end
+    return 1 -- Default Common
+end
+
+local function getRandomMutationOfRarity(rarity, excludeList)
+    local candidates = {}
+    for name, data in pairs(MetaConfig.Mutations) do
+        if data.Rarity == rarity then
+            -- Check if not excluded
+            local excluded = false
+            if excludeList then
+                for _, ex in ipairs(excludeList) do
+                    if ex == name then excluded = true break end
+                end
+            end
+            if not excluded then
+                table.insert(candidates, name)
+            end
+        end
+    end
+
+    if #candidates == 0 then return nil end
+    return candidates[math.random(1, #candidates)]
+end
+
+-- === Public API ===
+
+function MetaProgressionManager.Initialize(player)
+    local success, data = pcall(function()
+        return Store:GetAsync(player.UserId)
+    end)
+
+    if success and data then
+        -- Merge with default to handle new fields
+        local default = getDefaultData()
+        for k, v in pairs(default) do
+            if data[k] == nil then
+                data[k] = v
+            end
+        end
+        PlayerMeta[player] = data
+    else
+        PlayerMeta[player] = getDefaultData()
+    end
+
+    UpdateMetaEvent:FireClient(player, PlayerMeta[player])
+end
+
+function MetaProgressionManager.AddDNA(player, amount)
+    local data = PlayerMeta[player]
+    if not data then return end
+
+    data.DNA = data.DNA + amount
+    UpdateMetaEvent:FireClient(player, data)
+end
+
+-- Gacha: Start Draft
+function MetaProgressionManager.RequestDraft(player)
+    local data = PlayerMeta[player]
+    if not data then return nil end
+
+    -- Check cost
+    if data.DNA < MetaConfig.ROLL_COST then
+        return nil, "Not enough DNA"
+    end
+
+    -- Generate 3 Cards
+    local draft = {}
+    local attempts = 0
+    while #draft < 3 and attempts < 100 do
+        attempts = attempts + 1
+        local rarity = getRandomRarity()
+        local mutationName = getRandomMutationOfRarity(rarity, draft)
+
+        if mutationName then
+            -- Verify Max Level
+            local currentLvl = data.Upgrades[mutationName] or 0
+            local maxLvl = MetaConfig.Mutations[mutationName].MaxLevel
+            if currentLvl < maxLvl then
+                table.insert(draft, mutationName)
+            end
+        end
+    end
+
+    if #draft < 3 then
+         -- Fill with randoms if we ran out of unique valid options (unlikely unless maxed out)
+         -- For now, just return what we have
+    end
+
+    PlayerDrafts[player] = draft
+    return draft
+end
+
+-- Gacha: Select
+function MetaProgressionManager.SelectMutation(player, index)
+    local draft = PlayerDrafts[player]
+    if not draft or not draft[index] then return false end
+
+    local data = PlayerMeta[player]
+    if data.DNA < MetaConfig.ROLL_COST then return false end
+
+    -- Deduct Cost
+    data.DNA = data.DNA - MetaConfig.ROLL_COST
+
+    -- Award Mutation
+    local mutationName = draft[index]
+    local currentLevel = data.Upgrades[mutationName] or 0
+    data.Upgrades[mutationName] = currentLevel + 1
+
+    -- Clear Draft
+    PlayerDrafts[player] = nil
+
+    -- Save & Notify
+    savePlayer(player) -- Save immediately on purchase
+    UpdateMetaEvent:FireClient(player, data)
+
+    print(player.Name .. " purchased mutation: " .. mutationName)
+
+    return true
+end
+
+function MetaProgressionManager.GetStatValue(player, statName)
+     local data = PlayerMeta[player]
+    if not data then return 0 end
+
+    local level = data.Upgrades[statName] or 0
     return MetaConfig.GetValue(statName, level)
 end
 
--- Handle purchase upgrade request
-local function onPurchaseUpgrade(player: Player, statName: string): (boolean, string?)
-	if not playerData[player] then
-		return false, "Player data not loaded"
-	end
+function MetaProgressionManager.GetStatMultiplier(player, statName)
+    local data = PlayerMeta[player]
+    if not data then return 1 end
 
-	-- Get upgrade config
-	local upgradeConfig = MetaConfig.GetUpgradeConfig(statName)
-	if not upgradeConfig then
-		return false, "Invalid stat name"
-	end
-
-	local currentLevel = playerData[player].Upgrades[statName] or 0
-
-	-- Check MaxLevel
-	if currentLevel >= upgradeConfig.MaxLevel then
-		return false, "Max level reached"
-	end
-
-	-- Check tier unlock requirement
-	local tierData = MetaConfig.Tiers[upgradeConfig.Tier]
-	local lifetimeDNA = playerData[player].Biomass or 0
-	if lifetimeDNA < tierData.UnlockAmount then
-		return false, "Tier Locked"
-	end
-
-	local cost = MetaConfig.GetCost(statName, currentLevel)
-
-	if playerData[player].GlobalXP < cost then
-		return false, "Insufficient DNA"
-	end
-
-	-- Deduct cost and upgrade
-	playerData[player].GlobalXP = playerData[player].GlobalXP - cost
-	playerData[player].Upgrades[statName] = currentLevel + 1
-
-	print(
-		"🛒",
-		player.Name,
-		"purchased",
-		statName,
-		"upgrade (Level",
-		currentLevel + 1,
-		") for",
-		cost,
-		"DNA."
-	)
-
-	-- Save to DataStore
-	savePlayerData(player)
-
-	-- Notify client
-	if updateMetaStatsRemote then
-		updateMetaStatsRemote:FireClient(
-			player,
-			playerData[player].GlobalXP,
-			playerData[player].Upgrades,
-			playerData[player].Biomass
-		)
-	end
-
-	return true, "Success"
+    local level = data.Upgrades[statName] or 0
+    return MetaConfig.GetMultiplier(statName, level)
 end
 
--- Setup remotes
-local function setupRemotes()
-	local remotesFolder = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
-
-	if not remotesFolder then
-		warn("MetaProgressionManager: Remotes folder not found")
-		return
-	end
-
-	-- PurchaseUpgrade RemoteFunction
-	purchaseUpgradeRemote = remotesFolder:FindFirstChild("PurchaseUpgrade")
-	if not purchaseUpgradeRemote then
-		purchaseUpgradeRemote = Instance.new("RemoteFunction")
-		purchaseUpgradeRemote.Name = "PurchaseUpgrade"
-		purchaseUpgradeRemote.Parent = remotesFolder
-	end
-
-	purchaseUpgradeRemote.OnServerInvoke = function(player: Player, statName: string)
-		local success, message = onPurchaseUpgrade(player, statName)
-		return success, message
-	end
-
-	-- UpdateMetaStats RemoteEvent
-	updateMetaStatsRemote = remotesFolder:FindFirstChild("UpdateMetaStats")
-	if not updateMetaStatsRemote then
-		updateMetaStatsRemote = Instance.new("RemoteEvent")
-		updateMetaStatsRemote.Name = "UpdateMetaStats"
-		updateMetaStatsRemote.Parent = remotesFolder
-	end
-
-	-- RequestMetaData RemoteFunction
-	requestMetaDataRemote = remotesFolder:FindFirstChild("RequestMetaData")
-	if not requestMetaDataRemote then
-		requestMetaDataRemote = Instance.new("RemoteFunction")
-		requestMetaDataRemote.Name = "RequestMetaData"
-		requestMetaDataRemote.Parent = remotesFolder
-	end
-
-	requestMetaDataRemote.OnServerInvoke = function(player: Player)
-		if not playerData[player] then
-			return 0, {}, 0
-		end
-		return playerData[player].GlobalXP, playerData[player].Upgrades, playerData[player].Biomass
-	end
-
-	-- ShowDeathSummary RemoteEvent
-	showDeathSummaryRemote = remotesFolder:FindFirstChild("ShowDeathSummary")
-	if not showDeathSummaryRemote then
-		showDeathSummaryRemote = Instance.new("RemoteEvent")
-		showDeathSummaryRemote.Name = "ShowDeathSummary"
-		showDeathSummaryRemote.Parent = remotesFolder
-	end
-
-	-- Harvest RemoteFunction
-	harvestRemote = remotesFolder:FindFirstChild("Harvest")
-	if not harvestRemote then
-		harvestRemote = Instance.new("RemoteFunction")
-		harvestRemote.Name = "Harvest"
-		harvestRemote.Parent = remotesFolder
-	end
-
-	harvestRemote.OnServerInvoke = function(player: Player)
-		-- Check if safe
-		local isSafe = player:GetAttribute("SafeZone") == true
-		if not isSafe then
-			return false, "Not in Safe Zone"
-		end
-
-		local success = MetaProgressionManager.Harvest(player)
-		return success
-	end
-
-	-- RequestRespawn RemoteEvent
-	requestRespawnRemote = remotesFolder:FindFirstChild("RequestRespawn")
-	if not requestRespawnRemote then
-		requestRespawnRemote = Instance.new("RemoteEvent")
-		requestRespawnRemote.Name = "RequestRespawn"
-		requestRespawnRemote.Parent = remotesFolder
-		print("✅ Created RequestRespawn RemoteEvent")
-	end
-	
-	requestRespawnRemote.OnServerEvent:Connect(function(player)
-		print("🔄 Respawn requested for", player.Name)
-		
-
-		
-		-- Load new character
-		player:LoadCharacter()
-		
-
-	end)
+function MetaProgressionManager.GetDNA(player)
+    return PlayerMeta[player] and PlayerMeta[player].DNA or 0
 end
 
-function MetaProgressionManager.Start()
-	print("--- Starting MetaProgressionManager (Refactored) ---")
+-- Cleanup
+Players.PlayerRemoving:Connect(function(player)
+    savePlayer(player)
+    PlayerMeta[player] = nil
+    PlayerDrafts[player] = nil
+end)
 
-	-- Setup remotes
-	setupRemotes()
+-- AutoSave
+task.spawn(function()
+    while true do
+        task.wait(60)
+        for player, _ in pairs(PlayerMeta) do
+            savePlayer(player)
+        end
+    end
+end)
 
-	-- Load data for existing players
-	for _, player in ipairs(Players:GetPlayers()) do
-		loadPlayerData(player)
-		if updateMetaStatsRemote and playerData[player] then
-			updateMetaStatsRemote:FireClient(
-				player,
-				playerData[player].GlobalXP,
-				playerData[player].Upgrades,
-				playerData[player].Biomass
-			)
-		end
-	end
+-- Remote Functions
+local DraftFunc = Instance.new("RemoteFunction")
+DraftFunc.Name = "RequestDraft"
+DraftFunc.Parent = ReplicatedStorage
+DraftFunc.OnServerInvoke = function(player)
+    return MetaProgressionManager.RequestDraft(player)
+end
 
-	-- Handle new players
-	Players.PlayerAdded:Connect(function(player)
-		loadPlayerData(player)
-		if updateMetaStatsRemote and playerData[player] then
-			updateMetaStatsRemote:FireClient(
-				player,
-				playerData[player].GlobalXP,
-				playerData[player].Upgrades,
-				playerData[player].Biomass
-			)
-		end
-
-		player.CharacterAdded:Connect(function(character)
-			local humanoid = character:WaitForChild("Humanoid", 5)
-			if humanoid then
-				humanoid.Died:Connect(function()
-					onPlayerDeath(player)
-				end)
-			end
-		end)
-	end)
-
-	-- Handle existing players' characters
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player.Character then
-			local humanoid = player.Character:FindFirstChild("Humanoid")
-			if humanoid then
-				humanoid.Died:Connect(function()
-					onPlayerDeath(player)
-				end)
-			end
-		end
-		player.CharacterAdded:Connect(function(character)
-			local humanoid = character:WaitForChild("Humanoid", 5)
-			if humanoid then
-				humanoid.Died:Connect(function()
-					onPlayerDeath(player)
-				end)
-			end
-		end)
-	end
-
-	-- Listen to Eliminated event for kill tracking
-	task.spawn(function()
-		local blasterFolder = ServerScriptService:WaitForChild("Blaster", 10)
-		if not blasterFolder then return end
-
-		local eliminatedEvent = blasterFolder:WaitForChild("Events"):WaitForChild("Eliminated", 10)
-		if eliminatedEvent then
-			eliminatedEvent.Event:Connect(onEliminated)
-		end
-	end)
-
-	-- Save data on player removal
-	Players.PlayerRemoving:Connect(function(player)
-		if playerData[player] then
-			savePlayerData(player)
-			playerData[player] = nil
-		end
-	end)
-
-	local function saveAllPlayerData()
-		local promises = {}
-		for player, data in pairs(playerData) do
-			table.insert(promises, task.spawn(function()
-				savePlayerData(player)
-			end))
-		end
-		for _, promise in ipairs(promises) do
-			task.wait()
-		end
-	end
-
-	game:BindToClose(function()
-		saveAllPlayerData()
-		task.wait(3)
-	end)
+local SelectFunc = Instance.new("RemoteFunction")
+SelectFunc.Name = "SelectMutation"
+SelectFunc.Parent = ReplicatedStorage
+SelectFunc.OnServerInvoke = function(player, index)
+    return MetaProgressionManager.SelectMutation(player, index)
 end
 
 return MetaProgressionManager
