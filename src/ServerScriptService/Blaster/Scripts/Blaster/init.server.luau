@@ -160,11 +160,6 @@ local function onShoot(player, now, tool, originCF, tagged)
 				-- Damage Number
 				if damageNumberRemote then
 					local hitPosition = result.position
-					local head = targetChar:FindFirstChild("Head")
-					if head then
-						hitPosition = head.Position + Vector3.new(0, 2, 0)
-					end
-
 					local xpAmount = willKill and ScalingConfig.GetXPReward(targetChar:GetAttribute("Level") or 1)
 						or nil
 					damageNumberRemote:FireClient(player, finalDamage, hitPosition, willKill, xpAmount)
