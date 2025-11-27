@@ -29,16 +29,8 @@ end
 
 -- Apply micro-shake on shoot (high frequency, low amplitude)
 function CameraShaker:shakeOnShoot()
-	local random = Random.new()
-	local intensity = 0.08 -- Low amplitude
-	local frequency = 20 -- High frequency
-	
-	-- Add small random shake
-	shakeOffset = shakeOffset + Vector3.new(
-		(random:NextNumber() - 0.5) * intensity,
-		(random:NextNumber() - 0.5) * intensity,
-		0
-	)
+	-- DISABLED: User requested pure spring recoil for shots.
+	-- "The 'Kick' is all you need. Adding random noise to a pistol shot makes it feel 'messy' rather than 'punchy'."
 end
 
 -- Apply larger thud on kill
@@ -63,4 +55,3 @@ RunService:BindToRenderStep(
 )
 
 return CameraShaker
-

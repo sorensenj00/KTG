@@ -11,6 +11,10 @@ local castRays = require(ServerScriptService.Utility.castRays)
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 local DamageTracker = require(ServerScriptService.GameLoop.DamageTracker)
 local AntiExploit = require(ServerScriptService.Utility.AntiExploit)
+local ShotReplicator = require(script.ShotReplicator)
+
+-- Start Shot Replicator
+ShotReplicator.Start()
 
 -- Lazy Load MetaManager
 local MetaProgressionManager = nil
@@ -180,7 +184,9 @@ local function onShoot(player, now, tool, originCF, tagged)
 			instance = r.instance,
 		})
 	end
-	replicateShotRemote:FireAllClients(tool, originCF.Position, visualRayResults)
+
+	-- Use Batch Replicator
+	ShotReplicator.Buffer(tool, originCF.Position, visualRayResults)
 end
 
 local function onReload(player, tool)

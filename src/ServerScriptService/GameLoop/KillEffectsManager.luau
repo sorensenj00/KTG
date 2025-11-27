@@ -73,146 +73,34 @@ task.spawn(function()
 end)
 
 -- Create confetti particle effect
-local function createConfettiEffect(position)
-	local part = Instance.new("Part")
-	part.Name = "ConfettiEffect"
-	part.Size = Vector3.new(1, 1, 1)
-	part.Anchored = true
-	part.CanCollide = false
-	part.Transparency = 1
-	part.CFrame = CFrame.new(position)
-	part.Parent = Workspace
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-	local attachment = Instance.new("Attachment")
-	attachment.Parent = part
+-- Create/Get Remote for Client-Side Effects
+local function getPlayKillEffectRemote()
+	local blasterFolder = ReplicatedStorage:FindFirstChild("Blaster")
+	if not blasterFolder then
+		blasterFolder = Instance.new("Folder")
+		blasterFolder.Name = "Blaster"
+		blasterFolder.Parent = ReplicatedStorage
+	end
 
-	local particles = Instance.new("ParticleEmitter")
-	particles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	particles.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),   -- Red
-		ColorSequenceKeypoint.new(0.25, Color3.fromRGB(0, 255, 0)), -- Green
-		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 0, 255)),  -- Blue
-		ColorSequenceKeypoint.new(0.75, Color3.fromRGB(255, 255, 0)), -- Yellow
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 255)),   -- Magenta
-	})
-	particles.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.5),
-		NumberSequenceKeypoint.new(0.5, 1),
-		NumberSequenceKeypoint.new(1, 0),
-	})
-	particles.Lifetime = NumberRange.new(1, 2)
-	particles.Rate = 100
-	particles.Speed = NumberRange.new(10, 20)
-	particles.SpreadAngle = Vector2.new(45, 45)
-	particles.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	particles.Parent = attachment
+	local remotesFolder = blasterFolder:FindFirstChild("Remotes")
+	if not remotesFolder then
+		remotesFolder = Instance.new("Folder")
+		remotesFolder.Name = "Remotes"
+		remotesFolder.Parent = blasterFolder
+	end
 
-	-- Emit particles
-	particles:Emit(150)
-
-	-- Clean up after particles finish
-	task.delay(3, function()
-		particles.Enabled = false
-		Debris:AddItem(part, 1)
-	end)
+	local remote = remotesFolder:FindFirstChild("PlayKillEffect")
+	if not remote then
+		remote = Instance.new("RemoteEvent")
+		remote.Name = "PlayKillEffect"
+		remote.Parent = remotesFolder
+	end
+	return remote
 end
 
--- Create smoke particle effect
-local function createSmokeEffect(position)
-	local part = Instance.new("Part")
-	part.Name = "SmokeEffect"
-	part.Size = Vector3.new(1, 1, 1)
-	part.Anchored = true
-	part.CanCollide = false
-	part.Transparency = 1
-	part.CFrame = CFrame.new(position)
-	part.Parent = Workspace
-
-	local attachment = Instance.new("Attachment")
-	attachment.Parent = part
-
-	local particles = Instance.new("ParticleEmitter")
-	particles.Texture = "rbxasset://textures/particles/smoke_main.dds"
-	particles.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(200, 200, 200)), -- Light gray
-		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(150, 150, 150)), -- Medium gray
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(100, 100, 100)),  -- Dark gray
-	})
-	particles.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 2),
-		NumberSequenceKeypoint.new(0.5, 5),
-		NumberSequenceKeypoint.new(1, 8),
-	})
-	particles.Lifetime = NumberRange.new(1.5, 3)
-	particles.Rate = 80
-	particles.Speed = NumberRange.new(5, 15)
-	particles.SpreadAngle = Vector2.new(30, 30)
-	particles.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.3),
-		NumberSequenceKeypoint.new(0.5, 0.5),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	particles.Parent = attachment
-
-	-- Emit particles
-	particles:Emit(120)
-
-	-- Clean up after particles finish
-	task.delay(4, function()
-		particles.Enabled = false
-		Debris:AddItem(part, 1)
-	end)
-end
-
--- Create coins particle effect
-local function createCoinsEffect(position)
-	local part = Instance.new("Part")
-	part.Name = "CoinsEffect"
-	part.Size = Vector3.new(1, 1, 1)
-	part.Anchored = true
-	part.CanCollide = false
-	part.Transparency = 1
-	part.CFrame = CFrame.new(position)
-	part.Parent = Workspace
-
-	local attachment = Instance.new("Attachment")
-	attachment.Parent = part
-
-	local particles = Instance.new("ParticleEmitter")
-	particles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	particles.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),   -- Gold
-		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 200, 0)), -- Bright gold
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 150, 0)),   -- Dark gold
-	})
-	particles.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.8),
-		NumberSequenceKeypoint.new(0.5, 1.2),
-		NumberSequenceKeypoint.new(1, 0),
-	})
-	particles.Lifetime = NumberRange.new(1, 2)
-	particles.Rate = 100
-	particles.Speed = NumberRange.new(8, 18)
-	particles.SpreadAngle = Vector2.new(50, 50)
-	particles.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0),
-		NumberSequenceKeypoint.new(0.7, 0.3),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	particles.Parent = attachment
-
-	-- Emit particles
-	particles:Emit(150)
-
-	-- Clean up after particles finish
-	task.delay(3, function()
-		particles.Enabled = false
-		Debris:AddItem(part, 1)
-	end)
-end
+local playKillEffectRemote = getPlayKillEffectRemote()
 
 -- Hide character immediately to prevent ragdoll
 local function hideCharacter(character)
@@ -300,13 +188,9 @@ local function onEliminated(_gameState, _killer, victim, _tool)
 
 	-- (Keep existing particle logic below...)
 	local effectType = math.random(1, 3)
-	if effectType == 1 then
-		createConfettiEffect(position)
-	elseif effectType == 2 then
-		createSmokeEffect(position)
-	else
-		createCoinsEffect(position)
-	end
+
+	-- Fire Client Side Effect
+	playKillEffectRemote:FireAllClients(effectType, position)
 end
 
 function KillEffectsManager.Start()

@@ -21,6 +21,7 @@ local UIController = require(Controllers.UIController)
 -- local KillfeedController = require(Controllers.KillfeedController)
 local DamageNumberController = require(Controllers.DamageNumberController)
 local DamageEffectController = require(Controllers.DamageEffectController)
+local KillEffectController = require(Controllers.KillEffectController)
 local BlasterController = require(Controllers.BlasterController)
 local BeaconController = require(Controllers.BeaconController)
 local LeaderboardController = require(Controllers.LeaderboardController)
@@ -76,6 +77,16 @@ if not success then
 	warn("❌ GameClient: Failed to initialize DamageEffectController:", err)
 else
 	print("✅ GameClient: DamageEffectController initialized")
+end
+
+-- 4.6. KillEffectController
+success, err = pcall(function()
+	KillEffectController.Start()
+end)
+if not success then
+	warn("❌ GameClient: Failed to initialize KillEffectController:", err)
+else
+	print("✅ GameClient: KillEffectController initialized")
 end
 
 -- 5. BlasterController (depends on CameraController)
