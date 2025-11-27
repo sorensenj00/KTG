@@ -8,6 +8,8 @@ local MetaConfig = require(ReplicatedStorage.GameLoop.MetaConfig)
 
 local MetaProgressionManager = {}
 
+
+
 -- Check if running in Studio (DataStore not available)
 local IS_STUDIO = RunService:IsStudio()
 
@@ -457,7 +459,13 @@ local function setupRemotes()
 	
 	requestRespawnRemote.OnServerEvent:Connect(function(player)
 		print("🔄 Respawn requested for", player.Name)
+		
+
+		
+		-- Load new character
 		player:LoadCharacter()
+		
+
 	end)
 end
 

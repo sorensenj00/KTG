@@ -146,6 +146,9 @@ function YeetCannonController:onUnseated()
 	end
 
 	-- 4. Disconnect Inputs
+	local ContextActionService = game:GetService("ContextActionService")
+	ContextActionService:UnbindAction("YeetCannonFire")
+	
 	for _, connection in ipairs(self.connections) do
 		connection:Disconnect()
 	end
@@ -176,20 +179,25 @@ function YeetCannonController:onUnseated()
 end
 
 function YeetCannonController:connectInputEvents()
-	-- Removed InputChanged logic. We now use GetMouseDelta in the loop.
-
-	local fireInput = UserInputService.InputBegan:Connect(function(inputObject, gameProcessed)
-		if gameProcessed then
-			return
-		end
-		if not self.isSeated then
-			return
-		end
-		if inputObject.UserInputType == Enum.UserInputType.MouseButton1 then
-			self:fire()
-		end
-	end)
-	table.insert(self.connections, fireInput)
+	-- Use ContextActionService for higher priority input handling
+	-- This allows firing to work even when UI is active
+	local ContextActionService = game:GetService("ContextActionService")
+	
+	ContextActionService:BindAction(
+		"YeetCannonFire",
+		function(actionName, inputState, inputObject)
+			if inputState == Enum.UserInputState.Begin then
+				if self.isSeated then
+					self:fire()
+					return Enum.ContextActionResult.Sink
+				end
+			end
+			return Enum.ContextActionResult.Pass
+		end,
+		false,
+		Enum.UserInputType.MouseButton1,
+		Enum.KeyCode.ButtonR2
+	)
 end
 
 function YeetCannonController:createViewModel()
@@ -246,21 +254,32 @@ function YeetCannonController:fire()
 	if not self.isSeated then
 		return
 	end
+	print("yeetcannonfire - attempting to fire")
 
 	local blastFolder = ReplicatedStorage:FindFirstChild("Blaster")
+	print("blastFolder:", blastFolder)
 	if blastFolder then
 		local remotes = blastFolder:FindFirstChild("Remotes")
+		print("remotes:", remotes)
 		if remotes then
 			local fireRemote = remotes:FindFirstChild("YeetCannonFire")
+			print("fireRemote:", fireRemote)
 			if fireRemote then
 				local rotationDelta = CFrame.Angles(0, self.currentYaw, 0) * CFrame.Angles(self.currentPitch, 0, 0)
 				local currentSeatCFrame = self.originalPivot * rotationDelta
 
 				-- Send launch data
 				local muzzlePos = currentSeatCFrame.Position + (currentSeatCFrame.LookVector * 10)
+				print("Firing remote to server! Direction:", currentSeatCFrame.LookVector)
 				fireRemote:FireServer(currentSeatCFrame.LookVector, muzzlePos)
+			else
+				warn("YeetCannonFire remote not found!")
 			end
+		else
+			warn("Remotes folder not found!")
 		end
+	else
+		warn("Blaster folder not found!")
 	end
 end
 

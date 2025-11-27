@@ -272,6 +272,10 @@ function ProgressionManager.Start()
 
 			-- IMMEDIATE Scale on spawn (We don't want them to wait 5 seconds to spawn correctly)
 			task.wait(0.2)
+			
+			-- Force update by clearing cache for this player (New Character = Fresh Start)
+			lastUpdateCache[player] = nil
+			
 			enforceEntityStats(player, character)
 		end)
 	end

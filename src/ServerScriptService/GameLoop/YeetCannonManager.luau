@@ -6,7 +6,7 @@ local Debris = game:GetService("Debris")
 local YeetCannonManager = {}
 
 -- === CONFIG VARIABLES ===
-local DEFAULT_LAUNCH_FORCE = 400 -- Increased slightly for better feel
+local DEFAULT_LAUNCH_FORCE = 800 -- Increased slightly for better feel
 local DEFAULT_COOLDOWN = 1.5
 
 -- === STATE ===
@@ -79,29 +79,50 @@ function YeetCannonManager.Start()
 
 	-- Connect the fire event ONCE
 	fireRemote.OnServerEvent:Connect(function(player, aimDirection, clientOrigin)
+		print("🚀 YeetCannon fire request received from", player.Name)
+		
 		local char = player.Character
-		if not char then return end
+		if not char then 
+			warn("No character found")
+			return 
+		end
 		local root = char:FindFirstChild("HumanoidRootPart")
 		local hum = char:FindFirstChild("Humanoid")
-		if not root or not hum then return end
+		if not root or not hum then 
+			warn("No root or humanoid")
+			return 
+		end
 
 		-- Verify player is sitting in a YeetCannon
 		local seat = hum.SeatPart
-		if not seat or not seat:IsDescendantOf(Workspace) or not seat:FindFirstAncestor("MapInteractables") then
-			-- Not sitting or not in a YeetCannon (assuming all cannons are in MapInteractables as per Spawner)
-			-- But let's check the tag or name to be sure it's a YeetCannon seat
-			if not (seat and (seat.Name == "VehicleSeat" or seat.Name == "Seat")) then
-				return
-			end
-			-- We can also check if the model has the "YeetCannon" tag
-			local model = seat:FindFirstAncestorWhichIsA("Model")
-			if not model or not model:HasTag("YeetCannon") then
-				return
-			end
+		print("Seat:", seat)
+		
+		if not seat then
+			warn("Player not sitting in any seat")
+			return
+		end
+		
+		-- Check if the seat's parent model is a YeetCannon
+		local model = seat:FindFirstAncestorWhichIsA("Model")
+		print("Model:", model, "Name:", model and model.Name)
+		
+		if not model then
+			warn("Seat has no model parent")
+			return
+		end
+		
+		-- Check if model name starts with "YeetCannon" or has the tag
+		local isYeetCannon = string.match(model.Name, "^YeetCannon") or model:HasTag("YeetCannon")
+		print("Is YeetCannon:", isYeetCannon)
+		
+		if not isYeetCannon then
+			warn("Not a YeetCannon model:", model.Name)
+			return
 		end
 
-		local cannon = seat.Parent
+		local cannon = model
 		local muzzle = cannon:FindFirstChild("Muzzle") or seat
+		print("Cannon:", cannon.Name, "Muzzle:", muzzle)
 
 		-- Cooldown check
 		local state = playerStates[player] or { lastFireTime = 0 }
@@ -165,6 +186,24 @@ function YeetCannonManager.Start()
 	end)
 
 	print("✅ YeetCannonManager: Listening for fire events")
+	
+	-- Auto-register all existing YeetCannons in the workspace
+	local cannons = findAllYeetCannons()
+	print("🔍 Found", #cannons, "YeetCannon(s) in workspace")
+	
+	for _, cannon in ipairs(cannons) do
+		YeetCannonManager.Register(cannon)
+		print("✅ Registered YeetCannon:", cannon.Name)
+	end
+	
+	-- Listen for new YeetCannons added to workspace
+	Workspace.DescendantAdded:Connect(function(descendant)
+		if descendant:IsA("Model") and string.match(descendant.Name, "^YeetCannon") then
+			task.wait(0.1) -- Small delay to ensure all parts are loaded
+			YeetCannonManager.Register(descendant)
+			print("✅ Auto-registered new YeetCannon:", descendant.Name)
+		end
+	end)
 end
 
 -- Initialize a single YeetCannon
