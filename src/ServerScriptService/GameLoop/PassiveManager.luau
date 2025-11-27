@@ -29,7 +29,7 @@ local TICK_RATE = 1.0 -- Run passives every 1 second
 local SCAVENGER_UPDATE_RATE = 0.2 -- Run scavenger every 0.2 seconds
 local AURA_RANGE_BASE = 15
 local SCAVENGER_RANGE_BASE = 10
-local SCAVENGER_SPEED = 15 -- Studs per second attraction
+local SCAVENGER_SPEED = 25 -- Studs per second attraction (Increased for Gravitational Pull feel)
 
 -- State
 local scavengerAccumulator = 0
@@ -61,11 +61,8 @@ local function applyToxicAura(player, character, level)
     local root = character:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    local dps = MetaConfig.GetValue("ToxicAura", level)
+    local dps = MetaProgressionManager.GetStatValue(player, "ToxicAura")
     if dps <= 0 then return end
-
-    -- Visuals (Optional: Client side would be better, but simple particle here for now or just logic)
-    -- Ideally, we fire a remote to show the aura effect on clients.
 
     local enemies = getNearbyEnemies(root.Position, AURA_RANGE_BASE + (level * 1), player)
 
@@ -116,7 +113,7 @@ local function updateScavenger(player, character, rangeBoost, dt)
             local targetPos = root.Position
             local dir = (targetPos - currentPos).Unit
 
-            -- Move based on speed * dt (but slightly faster to feel 'magnetic')
+            -- Move based on speed * dt
             local moveStep = dir * (SCAVENGER_SPEED * 1.5 * dt)
 
             -- Don't overshoot
@@ -170,24 +167,39 @@ end
 
 -- Scavenger Loop (Fast Heartbeat)
 local function onHeartbeat(dt)
-    -- Accumulator logic for reliable timing
     scavengerAccumulator = scavengerAccumulator + dt
 
     if scavengerAccumulator >= SCAVENGER_UPDATE_RATE then
-        -- Process one step
-        -- We pass 'scavengerAccumulator' as the delta time for the movement to keep it smooth relative to the update rate
-        -- actually, it's better to run it every frame for smooth movement, but we can throttle the QUERY.
-        -- But since we are moving Parts directly (server-side), 5-10Hz is fine.
-
         local stepDt = scavengerAccumulator
         scavengerAccumulator = 0
 
         for _, player in ipairs(Players:GetPlayers()) do
              local character = player.Character
              if character then
-                 local magRange = MetaProgressionManager.GetStatValue(player, "Magnetism")
-                 if magRange > 0 then
-                     updateScavenger(player, character, magRange, stepDt)
+                 -- NEW: Gravitational Pull Scaling
+                 -- Base + (Scale * 20%)
+                 -- Or mutation "Gravitational Pull" value?
+                 -- Config says "Your Orb Pickup Range scales with your Size."
+                 -- Mutation "Gravitational Pull" returns: level * 0.2 (20% per level)
+
+                 local gravPull = MetaProgressionManager.GetStatValue(player, "Gravitational Pull") -- e.g., 0.2
+                 local scale = character:GetAttribute("Scale") or 1
+
+                 -- Range Boost Calculation
+                 -- If they have mutation, range scales with size.
+                 -- Let's say: Boost = BaseRange * (Scale * gravPull)
+                 -- If gravPull is 0, boost is 0.
+                 local rangeBoost = 0
+                 if gravPull > 0 then
+                    rangeBoost = SCAVENGER_RANGE_BASE * (scale * gravPull)
+                 end
+
+                 -- Legacy "Magnetism" stat?
+                 local magLegacy = MetaProgressionManager.GetStatValue(player, "Magnetism")
+                 rangeBoost = rangeBoost + magLegacy
+
+                 if rangeBoost > 0 then
+                     updateScavenger(player, character, rangeBoost, stepDt)
                  end
              end
         end
