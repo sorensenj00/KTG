@@ -25,6 +25,7 @@ local KillEffectController = require(Controllers.KillEffectController)
 local BlasterController = require(Controllers.BlasterController)
 local BeaconController = require(Controllers.BeaconController)
 local LeaderboardController = require(Controllers.LeaderboardController)
+local DynamicCrosshairController = require(Controllers.DynamicCrosshairController)
 
 -- Initialize controllers in proper order
 print("🚀 GameClient: Starting initialization...")
@@ -117,6 +118,16 @@ if not success then
 	warn("❌ GameClient: Failed to initialize LeaderboardController:", err)
 else
 	print("✅ GameClient: LeaderboardController initialized")
+end
+
+-- 8. DynamicCrosshairController
+success, err = pcall(function()
+	DynamicCrosshairController.Start()
+end)
+if not success then
+	warn("❌ GameClient: Failed to initialize DynamicCrosshairController:", err)
+else
+	print("✅ GameClient: DynamicCrosshairController initialized")
 end
 
 print("🎉 GameClient: All controllers initialized successfully!")

@@ -119,6 +119,9 @@ UserInputService.InputBegan:Connect(function(inputObject, gameProcessed)
 		or inputObject.KeyCode == Enum.KeyCode.RightControl
 		or inputObject.KeyCode == Enum.KeyCode.C then
 		isCrouching = true
+		if character then
+			character:SetAttribute("IsCrouching", true)
+		end
 		-- Try to slide if also sprinting
 		if isSprinting then
 			performSlide()
@@ -141,6 +144,9 @@ UserInputService.InputEnded:Connect(function(inputObject, gameProcessed)
 		or inputObject.KeyCode == Enum.KeyCode.RightControl
 		or inputObject.KeyCode == Enum.KeyCode.C then
 		isCrouching = false
+		if character then
+			character:SetAttribute("IsCrouching", false)
+		end
 	end
 end)
 

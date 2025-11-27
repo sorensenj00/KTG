@@ -46,8 +46,8 @@ local AimAssistEnum = require(ReplicatedStorage.Blaster.Scripts.AimAssistControl
 local TouchInputController = require(ReplicatedStorage.Blaster.Scripts.TouchInputController)
 local ViewModelController = require(ReplicatedStorage.Blaster.Scripts.ViewModelController)
 local CharacterAnimationController = require(ReplicatedStorage.Blaster.Scripts.CharacterAnimationController)
-local HitmarkerController = require(ReplicatedStorage.Blaster.Scripts.HitmarkerController)
 local AudioController = require(ReplicatedStorage.Blaster.Audio.AudioController)
+local CrosshairSignals = require(ReplicatedStorage.Blaster.Scripts.CrosshairSignals)
 local disconnectAndClear = require(ReplicatedStorage.Utility.disconnectAndClear)
 local getRayDirections = require(ReplicatedStorage.Blaster.Utility.getRayDirections)
 local drawRayResults = require(ReplicatedStorage.Blaster.Utility.drawRayResults)
@@ -76,7 +76,6 @@ BlasterController.__index = BlasterController
 function BlasterController.new(blaster: Tool)
 	local aimAssistController = AimAssistController.new()
 	local viewModelController = ViewModelController.new(blaster)
-	local hitmarkerController = HitmarkerController.new()
 	local touchInputController = TouchInputController.new(blaster)
 	local characterAnimationController = CharacterAnimationController.new(blaster)
 	local audioController = AudioController.new()
@@ -84,7 +83,6 @@ function BlasterController.new(blaster: Tool)
 		blaster = blaster,
 		aimAssistController = aimAssistController,
 		viewModelController = viewModelController,
-		hitmarkerController = hitmarkerController,
 		touchInputController = touchInputController,
 		characterAnimationController = characterAnimationController,
 		audioController = audioController,
@@ -154,11 +152,12 @@ function BlasterController:shoot()
 		end
 	end
 	if didTag then
-		self.hitmarkerController:showHitmarker()
+		CrosshairSignals.Hit:Fire()
 		-- Play hit marker sound immediately (no server wait)
 		self.audioController:playHitMarkerSound()
 	end
 	shootRemote:FireServer(now, self.blaster, origin, tagged)
+	CrosshairSignals.Shoot:Fire()
 
 	local muzzlePosition = self.viewModelController:getMuzzlePosition()
 
@@ -277,8 +276,6 @@ function BlasterController:equip()
 	self.aimAssistController:enable()
 	-- Enable view model
 	self.viewModelController:enable()
-	-- Enable hitmarker/reticle
-	self.hitmarkerController:enable()
 	-- Enable touch input controller
 	self.touchInputController:enable()
 	-- Enable character animations
@@ -306,8 +303,6 @@ function BlasterController:unequip()
 	self.aimAssistController:disable()
 	-- Disable view model
 	self.viewModelController:disable()
-	-- Disable hitmarker/reticle
-	self.hitmarkerController:disable()
 	-- Disable touch input controller
 	self.touchInputController:disable()
 	-- Disable character animations
@@ -398,7 +393,6 @@ function BlasterController:destroy()
 	self.viewModelController:destroy()
 	self.touchInputController:destroy()
 	self.characterAnimationController:destroy()
-	self.hitmarkerController:destroy()
 	self.audioController:destroy()
 end
 
