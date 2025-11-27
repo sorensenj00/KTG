@@ -69,7 +69,7 @@ local function createLeaderboardUI()
 	return screenGui, mainFrame
 end
 
-local function createEntry(rank, playerObj, level, kills)
+local function createEntry(rank, playerObj, biomass, kills)
 	local entryFrame = Instance.new("Frame")
 	entryFrame.Name = "Entry"
 	entryFrame.Size = UDim2.fromOffset(90, 110)
@@ -153,7 +153,7 @@ local function createEntry(rank, playerObj, level, kills)
 	sizeLabel.Name = "SizeLabel"
 	sizeLabel.Size = UDim2.new(1, 0, 0, 18)
 	sizeLabel.BackgroundTransparency = 1
-	sizeLabel.Text = "SIZE: " .. tostring(level)
+	sizeLabel.Text = "BIOMASS: " .. tostring(biomass)
 	sizeLabel.TextColor3 = COLORS.RANK_1 -- Gold text for size
 	sizeLabel.TextSize = 16
 	sizeLabel.Font = Enum.Font.LuckiestGuy
@@ -191,11 +191,11 @@ local function updateLeaderboard()
 	local playerList = {}
 	
 	for _, p in ipairs(Players:GetPlayers()) do
-		local level = p:GetAttribute("Level") or 1
+		local biomass = p:GetAttribute("Biomass") or 0
 		local kills = p:GetAttribute("Kills") or 0
 		table.insert(playerList, {
 			Player = p,
-			Level = level,
+			Biomass = biomass,
 			Kills = kills,
 			IsBot = false
 		})
@@ -206,10 +206,10 @@ local function updateLeaderboard()
 
 	-- Sort by Level Descending
 	table.sort(playerList, function(a, b)
-		if a.Level == b.Level then
+		if a.Biomass == b.Biomass then
 			return a.Kills > b.Kills -- Tie-break with kills
 		end
-		return a.Level > b.Level
+		return a.Biomass > b.Biomass
 	end)
 
 	-- Clear existing
@@ -222,7 +222,7 @@ local function updateLeaderboard()
 	-- Create Top Entries
 	for i = 1, math.min(#playerList, MAX_ENTRIES) do
 		local data = playerList[i]
-		local entry = createEntry(i, data.Player, data.Level, data.Kills)
+		local entry = createEntry(i, data.Player, data.Biomass, data.Kills)
 		entry.Parent = container
 	end
 end

@@ -33,6 +33,7 @@ local NETWORK_OWNERSHIP_RADIUS = 200 -- Transfer ownership if player is within 2
 local ORB_SEARCH_INTERVAL = 1.0 -- Search for orbs once per second
 local STUCK_THRESHOLD = 0.5
 local STUCK_TIME = 1.0
+local REACTION_TIME = 1.2 -- Delay before shooting after acquiring target (Increased for easier difficulty)
 
 -- === Events ===
 local eliminatedEvent
@@ -49,8 +50,7 @@ local BotController = {}
 
 -- === State Management ===
 -- Storing state locally for speed
-local botStates = {}
--- Structure:
+local botStates: { [Model]: BotState } = {}
 -- botStates[bot] = {
 --    Target = Instance | nil,
 --    State = "IDLE" | "COMBAT" | "ORB",
@@ -69,6 +69,25 @@ local botStates = {}
 --    NextStrafeChange = number
 -- }
 
+type BotState = {
+	Target: Instance?,
+	State: "IDLE" | "COMBAT" | "ORB",
+	NextOrbSearch: number,
+	AggroTable: { [Instance]: number },
+	LastPos: Vector3,
+	LastMoveTime: number,
+	StuckSince: number?,
+	LastShot: number,
+	StrafeDir: number,
+	NextStrafeChange: number,
+	IsPathfinding: boolean,
+	LastPathTime: number,
+	Path: Path?,
+	PathWaypoints: {PathWaypoint}?,
+	CurrentWaypointIndex: number?,
+	TargetAcquiredTime: number
+}
+
 -- Initialize State
 local function getBotState(bot)
 	if not botStates[bot] then
@@ -84,7 +103,8 @@ local function getBotState(bot)
 			StrafeDir = 1,
 			NextStrafeChange = 0,
 			IsPathfinding = false,
-			LastPathTime = 0
+			LastPathTime = 0,
+			TargetAcquiredTime = 0
 		}
 	end
 	return botStates[bot]
@@ -316,8 +336,8 @@ local function handleCombat(bot, state, now)
 	end
 
 	-- Shooting Logic
-	-- Check cooldown
-	if now - state.LastShot > 0.15 then -- Fire rate limit
+	-- Check cooldown and reaction time
+	if now - state.LastShot > 0.35 and now - state.TargetAcquiredTime > REACTION_TIME then -- Fire rate limit & Reaction time (Slowed down for easier difficulty)
 
 		-- Raycast for LOS
 		local origin = bot.Head.Position
@@ -325,7 +345,8 @@ local function handleCombat(bot, state, now)
 		local aimPos = targetHead.Position
 
 		-- Add Inaccuracy
-		local spread = math.clamp(dist / 50, 0.5, 4.0)
+		-- Increased spread to prevent "perfect aim" (Further increased for easier difficulty)
+		local spread = math.clamp(dist / 12, 3.0, 10.0) -- Increased base spread
 		local inaccuracy = Vector3.new(
 			math.random() - 0.5,
 			math.random() - 0.5,
@@ -348,19 +369,34 @@ local function handleCombat(bot, state, now)
 			-- Fire
 			local results = castRays(bot, origin, { dir }, 1)
 
-			-- Replicate
+			-- Replicate shot visuals to all clients
+			-- Format as: { {tool, origin, results}, ... }
 			if replicateShotRemote then
-				replicateShotRemote:FireAllClients(
-					bot:FindFirstChildWhichIsA("Tool"),
-					origin,
-					{ { position = origin + dir, normal = Vector3.yAxis, instance = nil } }
-				)
+				-- Convert results to proper format for client
+				local clientResults = {}
+				for _, hit in ipairs(results) do
+					table.insert(clientResults, {
+						position = hit.position,
+						normal = hit.normal or Vector3.yAxis,
+						instance = hit.instance,
+						taggedHumanoid = hit.taggedHumanoid
+					})
+				end
+				
+				-- Send in batch format expected by client
+				replicateShotRemote:FireAllClients({
+					{
+						tool = bot:FindFirstChildWhichIsA("Tool"),
+						origin = origin,
+						results = clientResults
+					}
+				})
 			end
 
 			-- Damage
 			for _, hit in ipairs(results) do
 				if hit.taggedHumanoid then
-					local baseDamage = 10 * ScalingConfig.GetDamageMultiplier(bot:GetAttribute("Level") or 1)
+					local baseDamage = 6 * ScalingConfig.GetDamageMultiplier(bot:GetAttribute("Level") or 1) -- Reduced damage for easier difficulty
 					hit.taggedHumanoid:TakeDamage(baseDamage)
 					DamageTracker.RecordDamage(bot, hit.taggedHumanoid.Parent, baseDamage)
 
@@ -392,6 +428,7 @@ function BotController.RecordAggro(bot, attacker)
 		state.Target = attacker.Character or attacker -- Handle Player object vs Character model
 		state.State = "COMBAT"
 		state.Path = nil -- Clear old path
+		state.TargetAcquiredTime = now
 		-- print("Bot " .. bot.Name .. " instantly reacted to " .. attacker.Name)
 	end
 end
@@ -443,7 +480,13 @@ function BotController.Start()
 
 			-- Clean Aggro
 			for attacker, time in pairs(state.AggroTable) do
-				if now - time > AGGRO_DURATION then
+				local targetEntity = attacker
+				if attacker:IsA("Player") then
+					targetEntity = attacker.Character
+				end
+
+				-- Remove if expired OR if target is dead/invalid
+				if (now - time > AGGRO_DURATION) or not isValidTarget(bot, targetEntity) then
 					state.AggroTable[attacker] = nil
 				end
 			end
@@ -477,7 +520,7 @@ function BotController.Start()
 				end
 			end
 
-			if state.State == "IDLE" or state.State == "ORB" then
+			if (state.State :: any) == "IDLE" or (state.State :: any) == "ORB" then
 				-- Look for Aggro Targets first
 				local bestAggro = nil
 				local bestTime = 0
@@ -491,6 +534,7 @@ function BotController.Start()
 				if bestAggro then
 					state.Target = bestAggro
 					state.State = "COMBAT"
+					state.TargetAcquiredTime = now
 				else
 					-- Look for Orbs
 					if now > state.NextOrbSearch then
@@ -512,7 +556,7 @@ function BotController.Start()
 							end
 						end
 						state.NextOrbSearch = now + ORB_SEARCH_INTERVAL
-					elseif state.State == "ORB" and state.Target then
+					elseif (state.State :: any) == "ORB" and state.Target then
 						-- Continue moving to orb
 						if (state.Target.Position - root.Position).Magnitude < 5 then
 							-- close enough, wait for pickup

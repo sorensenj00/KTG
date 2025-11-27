@@ -129,12 +129,13 @@ local function createHUD()
 	topBar.BackgroundTransparency = 1
 	topBar.Parent = screenGui
 
+	-- Biomass Label (Top Left)
 	local sizeLabel = Instance.new("TextLabel")
 	sizeLabel.Name = "SizeLabel"
-	sizeLabel.Size = UDim2.new(0.5, -10, 1, 0)
+	sizeLabel.Size = UDim2.new(0, 200, 0, 30)
 	sizeLabel.Position = UDim2.new(0, 10, 0, 0)
 	sizeLabel.BackgroundTransparency = 1
-	sizeLabel.Text = "SIZE: 1"
+	sizeLabel.Text = "BIOMASS: 0"
 	sizeLabel.TextColor3 = COLORS.XP_GOLD
 	sizeLabel.TextSize = 24
 	sizeLabel.Font = Enum.Font.LuckiestGuy
@@ -145,21 +146,33 @@ local function createHUD()
 	sizeLabel.TextStrokeTransparency = 0
 	sizeLabel.Parent = topBar
 
-	local topKillsLabel = Instance.new("TextLabel")
-	topKillsLabel.Name = "TopKillsLabel"
-	topKillsLabel.Size = UDim2.new(0.5, -10, 1, 0)
-	topKillsLabel.Position = UDim2.new(0.5, 0, 0, 0)
-	topKillsLabel.BackgroundTransparency = 1
-	topKillsLabel.Text = "KILLS: 0"
-	topKillsLabel.TextColor3 = ARCADE_THEME.ACCENT_ORANGE
-	topKillsLabel.TextSize = 24
-	topKillsLabel.Font = Enum.Font.LuckiestGuy
-	if not pcall(function() topKillsLabel.Font = Enum.Font.LuckiestGuy end) then
-		topKillsLabel.Font = Enum.Font.GothamBlack
-	end
-	topKillsLabel.TextXAlignment = Enum.TextXAlignment.Right
-	topKillsLabel.TextStrokeTransparency = 0
-	topKillsLabel.Parent = topBar
+	-- DNA Label (Under Biomass)
+	local dnaLabel = Instance.new("TextLabel")
+	dnaLabel.Name = "DNALabel"
+	dnaLabel.Size = UDim2.new(0, 200, 0, 20)
+	dnaLabel.Position = UDim2.new(0, 10, 0, 30)
+	dnaLabel.BackgroundTransparency = 1
+	dnaLabel.Text = "DNA: 0"
+	dnaLabel.TextColor3 = COLORS.XP_GOLD
+	dnaLabel.TextSize = 18
+	dnaLabel.Font = Enum.Font.GothamBold
+	dnaLabel.TextXAlignment = Enum.TextXAlignment.Left
+	dnaLabel.TextStrokeTransparency = 0.5
+	dnaLabel.Parent = topBar
+
+	-- Kills Label (Under DNA)
+	local killsLabel = Instance.new("TextLabel")
+	killsLabel.Name = "KillsLabel"
+	killsLabel.Size = UDim2.new(0, 200, 0, 20)
+	killsLabel.Position = UDim2.new(0, 10, 0, 50)
+	killsLabel.BackgroundTransparency = 1
+	killsLabel.Text = "KILLS: 0"
+	killsLabel.TextColor3 = ARCADE_THEME.ACCENT_ORANGE
+	killsLabel.TextSize = 18
+	killsLabel.Font = Enum.Font.GothamBold
+	killsLabel.TextXAlignment = Enum.TextXAlignment.Left
+	killsLabel.TextStrokeTransparency = 0.5
+	killsLabel.Parent = topBar
 
 	-- ============================================
 	-- 1. Health Bar (Bottom Left)
@@ -252,69 +265,12 @@ local function createHUD()
 	xpText.Parent = xpFrame
 
 	-- ============================================
-	-- 2. Stats Bar (Above XP Bar)
-	-- ============================================
-	local statsBar = Instance.new("Frame")
-	statsBar.Name = "StatsBar"
-	statsBar.Size = UDim2.fromOffset(300, 20)
-	statsBar.Position = UDim2.new(0.02, 0, 0.90, -45) -- Above Health (0.90 - height)
-	statsBar.AnchorPoint = Vector2.new(0, 1)
-	statsBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	statsBar.BackgroundTransparency = 0.5
-	statsBar.BorderSizePixel = 0
-	statsBar.Parent = screenGui
-
-	local statsCorner = Instance.new("UICorner")
-	statsCorner.CornerRadius = UDim.new(0, 4)
-	statsCorner.Parent = statsBar
-
-	local statsStroke = Instance.new("UIStroke")
-	statsStroke.Color = ARCADE_THEME.STROKE_DARK
-	statsStroke.Thickness = 2
-	statsStroke.Parent = statsBar
-
-	local statsLayout = Instance.new("UIListLayout")
-	statsLayout.FillDirection = Enum.FillDirection.Horizontal
-	statsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	statsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	statsLayout.Padding = UDim.new(0, 10)
-	statsLayout.Parent = statsBar
-
-	-- Kills Label
-	local killsLabel = Instance.new("TextLabel")
-	killsLabel.Name = "KillsLabel"
-	killsLabel.Size = UDim2.new(0, 0, 1, 0)
-	killsLabel.AutomaticSize = Enum.AutomaticSize.X
-	killsLabel.BackgroundTransparency = 1
-	killsLabel.Text = "Kills: 0"
-	killsLabel.TextColor3 = ARCADE_THEME.ACCENT_ORANGE
-	killsLabel.TextSize = 14
-	killsLabel.Font = Enum.Font.GothamBold
-	killsLabel.TextStrokeTransparency = 0.5
-	killsLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-	killsLabel.Parent = statsBar
-
-	-- DNA Label (Permanent Currency)
-	local dnaLabel = Instance.new("TextLabel")
-	dnaLabel.Name = "DNALabel"
-	dnaLabel.Size = UDim2.new(0, 0, 1, 0)
-	dnaLabel.AutomaticSize = Enum.AutomaticSize.X
-	dnaLabel.BackgroundTransparency = 1
-	dnaLabel.Text = "DNA: 0"
-	dnaLabel.TextColor3 = COLORS.XP_GOLD -- Gold for DNA
-	dnaLabel.TextSize = 14
-	dnaLabel.Font = Enum.Font.GothamBold
-	dnaLabel.TextStrokeTransparency = 0.5
-	dnaLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-	dnaLabel.Parent = statsBar
-
-	-- ============================================
 	-- 3. Ammo Display
 	-- ============================================
 	local ammoPanel = Instance.new("Frame")
 	ammoPanel.Name = "AmmoPanel"
 	ammoPanel.Size = UDim2.fromOffset(200, 100)
-	ammoPanel.Position = UDim2.fromScale(0.98, 0.95)
+	ammoPanel.Position = UDim2.fromScale(0.99, 0.95) -- Moved further right (0.98 -> 0.99)
 	ammoPanel.AnchorPoint = Vector2.new(1, 1)
 	ammoPanel.BackgroundTransparency = 1
 	ammoPanel.BorderSizePixel = 0
@@ -531,7 +487,7 @@ local function createHUD()
 	harvestTitle.Size = UDim2.new(1, 0, 0, 40)
 	harvestTitle.Position = UDim2.new(0,0,0,5)
 	harvestTitle.BackgroundTransparency = 1
-	harvestTitle.Text = "HARVEST SIZE"
+	harvestTitle.Text = "PRESS H TO HARVEST"
 	harvestTitle.TextColor3 = ARCADE_THEME.TEXT_WHITE
 	harvestTitle.TextSize = 24
 	harvestTitle.Font = Enum.Font.GothamBlack
@@ -645,7 +601,8 @@ local function createHUD()
 		ScreenGui = screenGui,
 		-- Top Widget
 		SizeLabel = sizeLabel,
-		TopKillsLabel = topKillsLabel,
+		DNALabel = dnaLabel,
+		KillsLabel = killsLabel,
 		
 		-- Health Widget
 		HealthText = healthText,
@@ -655,9 +612,6 @@ local function createHUD()
 		LevelLabel = xpText,
 		XPFill = xpFill,
 		XPText = xpText,
-		StatsBar = statsBar,
-		DNALabel = dnaLabel,
-		KillsLabel = killsLabel,
 		AmmoPanel = ammoPanel,
 		AmmoLabel = ammoLabel,
 		WeaponIcon = weaponIcon,
@@ -1155,6 +1109,22 @@ UserInputService.InputBegan:Connect(function(input, processed)
 			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 			UserInputService.MouseIconEnabled = false
 		end
+	elseif input.KeyCode == Enum.KeyCode.H then
+		-- Trigger Harvest if button is visible (meaning safe zone)
+		if hud.HarvestButton.Visible then
+			-- Simulate click
+			local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
+			local harvestRemote = remotes and remotes:FindFirstChild("Harvest")
+
+			if harvestRemote then
+				local success, msg = harvestRemote:InvokeServer()
+				if success then
+					playSound(SOUNDS.Purchase)
+				else
+					playSound(SOUNDS.Error)
+				end
+			end
+		end
 	end
 end)
 
@@ -1192,7 +1162,8 @@ local function updateXP()
 	end
 	
 	-- Update Size Label (optimized string formatting)
-	hud.SizeLabel.Text = string.format("SIZE: %d", level)
+	-- Update Size Label (optimized string formatting)
+	hud.SizeLabel.Text = string.format("BIOMASS: %d", biomass)
 
 	local tween = TweenService:Create(
 		hud.XPFill,
@@ -1205,9 +1176,8 @@ end
 local function updateKills()
 	local kills = player:GetAttribute("Kills") or 0
 	-- Optimized string formatting
-	hud.TopKillsLabel.Text = string.format("KILLS: %d", kills)
 	hud.KillsStatLabel.Text = string.format("Kills: %d", kills)
-	hud.KillsLabel.Text = string.format("Kills: %d", kills)
+	hud.KillsLabel.Text = string.format("KILLS: %d", kills)
 end
 
 local function updateAmmo()

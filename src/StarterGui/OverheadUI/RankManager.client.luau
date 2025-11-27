@@ -17,7 +17,7 @@ local function createOverheadUI()
 	billboard.Size = UDim2.fromScale(4, 1.5) -- Increased height to fit health bar
 	billboard.StudsOffset = OFFSET
 	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 600 -- Increased from 100 to 2000 (Long range)
+	billboard.MaxDistance = 600 -- Default, will be updated dynamically
 	billboard.Enabled = false -- Hidden by default
 
 	local textLabel = Instance.new("TextLabel")
@@ -89,7 +89,7 @@ local function setupEntity(entity: Model, dataSource: Instance)
 	if dataSource == Players.LocalPlayer then return end
 
 	-- Use a longer timeout for streaming/loading
-	local head = entity:WaitForChild("Head", 30)
+	local head = entity:WaitForChild("Head", 60)
 	if not head then return end
 	
 	-- Check if already exists
@@ -110,7 +110,7 @@ local function setupEntity(entity: Model, dataSource: Instance)
 	end)
 	
 	-- Setup Health Bar
-	local humanoid = entity:WaitForChild("Humanoid", 30)
+	local humanoid = entity:WaitForChild("Humanoid", 60)
 	if humanoid then
 		-- Disable default Roblox health bar
 		humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
@@ -119,7 +119,8 @@ local function setupEntity(entity: Model, dataSource: Instance)
 		
 		-- Visibility Logic
 		local lastDamageTime = 0
-		local VISIBILITY_RANGE = 600 -- Matched to MaxDistance
+		local PASSIVE_VISIBILITY_RANGE = 100
+		local COMBAT_VISIBILITY_RANGE = 600
 		local DAMAGE_SHOW_DURATION = 10
 		-- Distance at which UI is smallest
 		
@@ -170,21 +171,23 @@ local function setupEntity(entity: Model, dataSource: Instance)
 			local dist = (camera.CFrame.Position - head.Position).Magnitude
 			local recentlyDamaged = wasDamagedByPlayer and (tick() - lastDamageTime) < DAMAGE_SHOW_DURATION
 			
+			local currentVisibilityRange = recentlyDamaged and COMBAT_VISIBILITY_RANGE or PASSIVE_VISIBILITY_RANGE
+			
 			-- Visibility with smooth fade
-			if dist <= VISIBILITY_RANGE or recentlyDamaged then
+			if dist <= currentVisibilityRange then
 				ui.Enabled = true
 				
-				-- Fade based on distance (0 = fully visible, VISIBILITY_RANGE = transparent)
-				-- Fade starts at 100 studs, full fade at 200 studs
-				local fadeStart = 400
-				local fadeAlpha = math.clamp((dist - fadeStart) / (VISIBILITY_RANGE - fadeStart), 0, 1)
+				-- Fade based on distance (0 = fully visible, currentVisibilityRange = transparent)
+				-- Fade starts at 80% of range
+				local fadeStart = currentVisibilityRange * 0.8
+				local fadeAlpha = math.clamp((dist - fadeStart) / (currentVisibilityRange - fadeStart), 0, 1)
 				
-				-- Force visibility if recently damaged
+				-- Force visibility if recently damaged (override fade)
 				if recentlyDamaged then
 					fadeAlpha = 0
-					ui.MaxDistance = math.huge -- Infinite range
+					ui.MaxDistance = math.huge -- Infinite range within combat logic
 				else
-					ui.MaxDistance = VISIBILITY_RANGE -- Reset to normal range
+					ui.MaxDistance = currentVisibilityRange
 				end
 				
 				-- Apply transparency to all UI elements

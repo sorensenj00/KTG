@@ -19,68 +19,69 @@ local CollectionService = game:GetService("CollectionService")
 local SafeZoneManager = {}
 
 -- Constants
-local SAFE_ZONE_SIZE = Vector3.new(60, 40, 60)
+local SAFE_ZONE_SIZE = Vector3.new(120, 120, 120)
 local SAFE_ZONE_COLOR = Color3.fromRGB(0, 255, 100)
-local SAFE_ZONE_POS = Vector3.new(100, 20, 100) -- Example location, can be adjusted
+local SAFE_ZONE_LOCATIONS = {
+	Vector3.new(2998, 105, 280), -- Original
+	Vector3.new(2208, 104, -611) -- Second Zone
+}
 
 -- State
-local safeZonePart = nil
+local safeZoneParts = {}
 
 -- Helper: Create Visual Zone
-local function createSafeZone()
-	-- Check if exists
-	local existing = Workspace:FindFirstChild("SafeZone")
-	if existing then existing:Destroy() end
+-- Helper: Create Visual Zones
+local function createSafeZones()
+	-- Clear existing
+	for _, part in ipairs(safeZoneParts) do
+		part:Destroy()
+	end
+	safeZoneParts = {}
 
-	local part = Instance.new("Part")
-	part.Name = "SafeZone"
-	part.Size = SAFE_ZONE_SIZE
-	part.Position = SAFE_ZONE_POS
-	part.Anchored = true
-	part.CanCollide = false
-	part.Transparency = 0.8
-	part.Color = SAFE_ZONE_COLOR
-	part.Material = Enum.Material.ForceField
-	part.CastShadow = false
-	part.Parent = Workspace
+	for i, pos in ipairs(SAFE_ZONE_LOCATIONS) do
+		local part = Instance.new("Part")
+		part.Name = "SafeZone_" .. i
+		part.Size = SAFE_ZONE_SIZE
+		part.Position = pos
+		part.Anchored = true
+		part.CanCollide = false
+		part.Transparency = 0.6
+		part.Color = SAFE_ZONE_COLOR
+		part.Material = Enum.Material.ForceField
+		part.CastShadow = false
+		part.Parent = Workspace
 
-	-- Create label
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "SafeZoneLabel"
-	billboard.Size = UDim2.fromScale(10, 2)
-	billboard.StudsOffset = Vector3.new(0, SAFE_ZONE_SIZE.Y/2 + 5, 0)
-	billboard.AlwaysOnTop = true
-	billboard.Parent = part
+		-- Create label
+		local billboard = Instance.new("BillboardGui")
+		billboard.Name = "SafeZoneLabel"
+		-- Increased size for visibility from distance
+		billboard.Size = UDim2.fromScale(60, 12) 
+		billboard.StudsOffset = Vector3.new(0, SAFE_ZONE_SIZE.Y/2 + 15, 0)
+		billboard.AlwaysOnTop = true
+		billboard.MaxDistance = 1000 -- Visible up to 1000 studs
+		billboard.Parent = part
 
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Text = "SAFE ZONE (HARVEST)"
-	label.TextColor3 = SAFE_ZONE_COLOR
-	label.TextStrokeTransparency = 0
-	label.TextScaled = true
-	label.Font = Enum.Font.GothamBlack
-	label.Parent = billboard
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 1
+		label.Text = "SAFE ZONE (HARVEST)"
+		label.TextColor3 = SAFE_ZONE_COLOR
+		label.TextStrokeTransparency = 0
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBlack
+		label.Parent = billboard
 
-	safeZonePart = part
-
-	-- Add ZoneChecker Tag for potential future use or debugging
-	part:SetAttribute("IsSafeZone", true)
-
-	return part
+		table.insert(safeZoneParts, part)
+		
+		-- Add ZoneChecker Tag
+		part:SetAttribute("IsSafeZone", true)
+	end
 end
 
 -- Check logic loop
 -- We need to check if players are inside the box.
 -- Using GetPartsInPart is accurate.
 local function updateSafeZones()
-	if not safeZonePart then return end
-
-	local overlapParams = OverlapParams.new()
-	overlapParams.FilterType = Enum.RaycastFilterType.Include
-	-- We want to check against all character root parts
-	-- Getting all players is cheaper than filtering world
-
 	local safePlayers = {}
 
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -88,15 +89,15 @@ local function updateSafeZones()
 		if char then
 			local root = char:FindFirstChild("HumanoidRootPart")
 			if root then
-				-- Simple AABB check first for speed (assuming axis aligned box)
-				-- Or just magnitude check if zone is simple? Box is better.
+				-- Check against all safe zones
+				for _, zonePart in ipairs(safeZoneParts) do
+					local relPos = zonePart.CFrame:PointToObjectSpace(root.Position)
+					local size = zonePart.Size
 
-				-- Using simple bounding box math for "Inside" check
-				local relPos = safeZonePart.CFrame:PointToObjectSpace(root.Position)
-				local size = safeZonePart.Size
-
-				if math.abs(relPos.X) <= size.X/2 and math.abs(relPos.Y) <= size.Y/2 and math.abs(relPos.Z) <= size.Z/2 then
-					safePlayers[player] = true
+					if math.abs(relPos.X) <= size.X/2 and math.abs(relPos.Y) <= size.Y/2 and math.abs(relPos.Z) <= size.Z/2 then
+						safePlayers[player] = true
+						break -- Found one, no need to check others
+					end
 				end
 			end
 		end
@@ -151,7 +152,7 @@ end
 function SafeZoneManager.Start()
 	print("--- Starting SafeZoneManager ---")
 
-	createSafeZone()
+	createSafeZones()
 
 	-- Update loop
 	RunService.Heartbeat:Connect(function()

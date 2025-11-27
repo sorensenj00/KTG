@@ -97,10 +97,10 @@ local function initializePlayer(player: Player)
 	stats.Name = "leaderstats"
 	stats.Parent = player
 
-	-- Size (Primary Stat for Leaderboard)
-	local sizeVal = stats:FindFirstChild("Size") or Instance.new("IntValue")
-	sizeVal.Name = "Size"
-	sizeVal.Value = player:GetAttribute("Level")
+	-- Biomass (Primary Stat for Leaderboard)
+	local sizeVal = stats:FindFirstChild("Biomass") or Instance.new("IntValue")
+	sizeVal.Name = "Biomass"
+	sizeVal.Value = player:GetAttribute("Biomass")
 	sizeVal.Parent = stats
 
 	-- Kills
@@ -118,7 +118,10 @@ local function initializePlayer(player: Player)
 	player:GetAttributeChangedSignal("Level"):Connect(function()
 		local newLevel = player:GetAttribute("Level")
 		lvl.Value = newLevel
-		sizeVal.Value = newLevel -- Size maps directly to Level
+	end)
+
+	player:GetAttributeChangedSignal("Biomass"):Connect(function()
+		sizeVal.Value = player:GetAttribute("Biomass")
 	end)
 
 	player:GetAttributeChangedSignal("Kills"):Connect(function()
