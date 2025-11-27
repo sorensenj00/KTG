@@ -70,8 +70,8 @@ local function initializePlayer(player: Player)
 	if not player:GetAttribute("Level") then
 		player:SetAttribute("Level", 1)
 	end
-	if not player:GetAttribute("XP") then
-		player:SetAttribute("XP", 0)
+	if not player:GetAttribute("Biomass") then
+		player:SetAttribute("Biomass", 0)
 	end
 	if not player:GetAttribute("Kills") then
 		player:SetAttribute("Kills", 0)
@@ -113,8 +113,8 @@ local function initializePlayer(player: Player)
 	setupPlayerScaling(player)
 end
 
--- Public API: Add XP
-function ProgressionManager.AddXP(target: Instance, amount: number)
+-- Public API: Add Biomass (Formerly XP)
+function ProgressionManager.AddBiomass(target: Instance, amount: number)
 	local isPlayer = target:IsA("Player")
 	local isBot = target:IsA("Model") and CollectionService:HasTag(target, "BotAI")
 
@@ -127,20 +127,20 @@ function ProgressionManager.AddXP(target: Instance, amount: number)
 		return
 	end
 
-	local currentXP = target:GetAttribute("XP") or 0
-	local totalXP = currentXP + amount
+	local currentBiomass = target:GetAttribute("Biomass") or 0
+	local totalBiomass = currentBiomass + amount
 	local levelsGained = 0
 
 	-- Calc Level Up
 	while true do
 		if currentLevel >= ScalingConfig.MAX_LEVEL then
-			totalXP = 0
+			totalBiomass = 0
 			break
 		end
 
-		local xpRequired = ScalingConfig.GetXPRequired(currentLevel)
-		if totalXP >= xpRequired then
-			totalXP = totalXP - xpRequired
+		local biomassRequired = ScalingConfig.GetXPRequired(currentLevel) -- Config still uses "XP" naming for math
+		if totalBiomass >= biomassRequired then
+			totalBiomass = totalBiomass - biomassRequired
 			currentLevel = currentLevel + 1
 			levelsGained = levelsGained + 1
 		else
@@ -148,22 +148,31 @@ function ProgressionManager.AddXP(target: Instance, amount: number)
 		end
 	end
 
-	-- Update Attributes ONLY (The loop will handle the physical growth later)
+	-- Update Attributes
 	target:SetAttribute("Level", currentLevel)
-	target:SetAttribute("XP", totalXP)
+	target:SetAttribute("Biomass", totalBiomass)
 
-	-- Track Session XP for meta-progression (only for players)
-	if isPlayer and target:IsA("Player") then
-		MetaProgressionManager.AddSessionXP(target, amount)
-		MetaProgressionManager.AddBiomassFromXP(target, amount)
-	end
+	-- Track Session Data handled in MetaProgression separately now, or not needed?
+	-- In new logic: Biomass is the session progress. DNA is the permanent currency.
+	-- We don't "add session XP" to meta anymore because meta uses DNA.
+	-- However, MetaProgression might want to know for 'Score' or 'Stats'.
+
+	-- Legacy hook for session stats if needed:
+	-- if isPlayer and target:IsA("Player") then
+	-- 	MetaProgressionManager.AddSessionBiomass(target, amount)
+	-- end
 
 	if levelsGained > 0 then
-		print(string.format("⬆️ %s leveled up to %d (Growth pending next loop)", target.Name, currentLevel))
+		-- print(string.format("⬆️ %s leveled up to %d", target.Name, currentLevel))
 		if currentLevel >= ScalingConfig.MAX_LEVEL then
 			ProgressionManager.PlayerReachedMaxLevel:Fire(target)
 		end
 	end
+end
+
+-- Alias for backwards compatibility if needed, but we should switch callers
+function ProgressionManager.AddXP(target, amount)
+	ProgressionManager.AddBiomass(target, amount)
 end
 
 local function resolveEntity(argument)
@@ -197,13 +206,33 @@ function ProgressionManager.Start()
 	local function setupCharacterAdded(player)
 		player.CharacterAdded:Connect(function(character)
 			local humanoid = character:WaitForChild("Humanoid", 5)
+            if not humanoid then return end
 
 			humanoid.Died:Connect(function()
-				player:SetAttribute("Level", 1)
-				player:SetAttribute("XP", 0)
+				-- Death Logic is now handled partially here (Reset) and partially in MetaProgression (Currency conversion)
+				-- MetaProgression listens to Died or Eliminated.
+
+				-- We reset attributes here, but MetaProgression needs to read them BEFORE reset.
+				-- Since 'Died' fires on multiple scripts, we need to ensure order or handle it centrally.
+				-- However, attributes don't clear instantly on death unless we set them.
+
+				-- Let's NOT reset here immediately if we want Meta to read them.
+				-- But typically player respawns fresh.
+				-- The standard Roblox behavior is Player keeps attributes.
+				-- We should let MetaProgression handle the "On Death" logic (Conversion)
+				-- and THEN reset the stats.
+
+				-- Since we can't guarantee order, we will delegate the Reset to MetaProgression's Death Handler?
+				-- Or we simply wait a frame?
+
+				-- Actually, MetaProgressionManager hooks into Humanoid.Died as well.
+				-- We will let MetaProgressionManager handle the calculation and reset.
+				-- Removing the reset code from here to avoid race conditions.
+				-- player:SetAttribute("Level", 1)
+				-- player:SetAttribute("Biomass", 0)
 			end)
 
-			-- Meta Check
+			-- Meta Check (Born Big)
 			local currentLevel = player:GetAttribute("Level") or 1
 			if currentLevel == 1 then
 				local startMult = MetaProgressionManager.GetStatMultiplier(player, "StartLevel")
@@ -255,30 +284,30 @@ function ProgressionManager.Start()
 						end
 					end
 
-					-- Award XP to killer (existing behavior)
+					-- Award Biomass to killer
 					if killer then
 						local xpAmount = ScalingConfig.KILL_BASE_REWARD
 						if victim then
 							local victimLevel = victim:GetAttribute("Level") or 1
 							xpAmount = ScalingConfig.GetXPReward(victimLevel)
 						end
-						ProgressionManager.AddXP(killer, xpAmount)
+						ProgressionManager.AddBiomass(killer, xpAmount)
 
 						-- Increment Kill Count
 						local currentKills = killer:GetAttribute("Kills") or 0
 						killer:SetAttribute("Kills", currentKills + 1)
 					end
 
-					-- Award XP to all players who damaged the victim (equal to damage dealt)
+					-- Award Biomass to all players who damaged the victim (equal to damage dealt)
 					if victimChar then
 						local damageDealers = DamageTracker.GetDamageDealers(victimChar)
 						for attacker, damageAmount in pairs(damageDealers) do
-							-- Only award XP to players, not bots
+							-- Only award to players, not bots
 							if attacker and attacker:IsA("Player") then
-								ProgressionManager.AddXP(attacker, damageAmount)
+								ProgressionManager.AddBiomass(attacker, damageAmount)
 								print(
 									string.format(
-										"💰 %s earned %d XP from damage dealt to %s",
+										"💰 %s earned %d Biomass from damage dealt to %s",
 										attacker.Name,
 										damageAmount,
 										victimChar.Name
