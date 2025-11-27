@@ -1,6 +1,6 @@
 --[[
     Module: XPOrbManager
-    Description: Manages spawning and lifecycle of XP orbs using object pooling.
+    Description: Manages spawning and lifecycle of Biomass orbs using object pooling.
     
     Dependencies:
     - Workspace
@@ -217,12 +217,12 @@ local function spawnOrb()
 			local xpValue = orb:GetAttribute("XPValue") or 100
 
 			if player then
-				getProgressionManager().AddXP(player, xpValue)
+				getProgressionManager().AddBiomass(player, xpValue)
 			else
 				-- Check for bot
 				local CollectionService = game:GetService("CollectionService")
 				if CollectionService:HasTag(character, "BotAI") then
-					getProgressionManager().AddXP(character, xpValue)
+					getProgressionManager().AddBiomass(character, xpValue)
 				end
 			end
 
