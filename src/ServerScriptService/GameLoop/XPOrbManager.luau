@@ -2,6 +2,7 @@
     Module: XPOrbManager
     Description: Manages spawning and lifecycle of XP orbs.
                  Refactored for "Explosion" loot drops and Client-Side Vacuum pickup.
+    Description: Manages spawning and lifecycle of Biomass orbs using object pooling.
     
     Dependencies:
     - Workspace
@@ -213,6 +214,24 @@ local function onCollectOrb(player, orb)
 			-- warn(player.Name .. " tried to collect orb from too far: " .. dist)
 			return
 		end
+		local character = hit.Parent
+		local humanoid = character:FindFirstChild("Humanoid")
+		if humanoid and humanoid.Health > 0 then
+			collected = true
+
+			-- Award XP
+			local player = game:GetService("Players"):GetPlayerFromCharacter(character)
+			local xpValue = orb:GetAttribute("XPValue") or 100
+
+			if player then
+				getProgressionManager().AddBiomass(player, xpValue)
+			else
+				-- Check for bot
+				local CollectionService = game:GetService("CollectionService")
+				if CollectionService:HasTag(character, "BotAI") then
+					getProgressionManager().AddBiomass(character, xpValue)
+				end
+			end
 
 		-- Award XP
 		getProgressionManager().AddXP(player, xpValue)
