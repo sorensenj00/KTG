@@ -24,6 +24,7 @@ local DamageEffectController = require(Controllers.DamageEffectController)
 local BlasterController = require(Controllers.BlasterController)
 local BeaconController = require(Controllers.BeaconController)
 local LeaderboardController = require(Controllers.LeaderboardController)
+local IKController = require(Controllers.IKController)
 
 -- Initialize controllers in proper order
 print("🚀 GameClient: Starting initialization...")
@@ -106,6 +107,16 @@ if not success then
 	warn("❌ GameClient: Failed to initialize LeaderboardController:", err)
 else
 	print("✅ GameClient: LeaderboardController initialized")
+end
+
+-- 8. IKController
+success, err = pcall(function()
+	IKController.Start()
+end)
+if not success then
+	warn("❌ GameClient: Failed to initialize IKController:", err)
+else
+	print("✅ GameClient: IKController initialized")
 end
 
 print("🎉 GameClient: All controllers initialized successfully!")
