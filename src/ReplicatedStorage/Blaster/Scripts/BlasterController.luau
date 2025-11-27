@@ -6,7 +6,7 @@ local Constants = require(ReplicatedStorage.Blaster.Constants)
 local AimAssistController = require(ReplicatedStorage.Blaster.Scripts.AimAssistController)
 local AimAssistEnum = require(ReplicatedStorage.Blaster.Scripts.AimAssistController.AimAssistEnum)
 local TouchInputController = require(ReplicatedStorage.Blaster.Scripts.TouchInputController)
-local CameraRecoiler = require(ReplicatedStorage.Blaster.Scripts.CameraRecoiler)
+-- CameraRecoiler removed: ViewModelController now handles all recoil
 local CameraShaker = require(ReplicatedStorage.Blaster.Scripts.CameraShaker)
 local ViewModelController = require(ReplicatedStorage.Blaster.Scripts.ViewModelController)
 local CharacterAnimationController = require(ReplicatedStorage.Blaster.Scripts.CharacterAnimationController)
@@ -21,7 +21,7 @@ local camera = Workspace.CurrentCamera
 local remotes = ReplicatedStorage.Blaster:WaitForChild("Remotes")
 local shootRemote = remotes:WaitForChild("Shoot")
 local reloadRemote = remotes:WaitForChild("Reload")
-local random = Random.new()
+-- random removed: no longer needed since recoil is handled by ViewModelController
 local BlasterController = {}
 BlasterController.__index = BlasterController
 function BlasterController.new(blaster: Tool)
@@ -62,13 +62,17 @@ function BlasterController:canReload(): boolean
 	return self:isHumanoidAlive() and self.equipped and self.ammo < magazineSize and not self.reloading
 end
 function BlasterController:recoil()
-	-- Use cached values (optimized)
-	local xDif = self.recoilMax.X - self.recoilMin.X
-	local yDif = self.recoilMax.Y - self.recoilMin.Y
-	local x = self.recoilMin.X + random:NextNumber() * xDif
-	local y = self.recoilMin.Y + random:NextNumber() * yDif
-	local recoil = Vector2.new(math.rad(-x), math.rad(y))
-	CameraRecoiler.recoil(recoil)
+	-- DISABLED: Camera recoil is now handled entirely by ViewModelController
+	-- ViewModelController applies visual recoil to the weapon model using Spring physics
+	-- This prevents the camera from being forced to look at the ground when shooting
+	
+	-- Recoil calculation kept for potential future use
+	-- local xDif = self.recoilMax.X - self.recoilMin.X
+	-- local yDif = self.recoilMax.Y - self.recoilMin.Y
+	-- local x = self.recoilMin.X + random:NextNumber() * xDif
+	-- local y = self.recoilMin.Y + random:NextNumber() * yDif
+	-- local recoil = Vector2.new(math.rad(-x), math.rad(y))
+	-- CameraRecoiler.recoil(recoil)
 end
 function BlasterController:shoot()
 	-- Use cached weapon stats (optimized)

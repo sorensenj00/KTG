@@ -25,9 +25,9 @@ end
 local XPOrbManager = {}
 
 -- Configuration
-local SPAWN_INTERVAL = 0.25
-local ORB_LIFETIME = 45
-local MAX_ORBS = 600
+local SPAWN_INTERVAL = 1
+local ORB_LIFETIME = 30
+local MAX_ORBS = 100
 local POOL_SIZE = 50
 local MAGNET_RADIUS = 50
 local MIN_MAGNET_SPEED = 10

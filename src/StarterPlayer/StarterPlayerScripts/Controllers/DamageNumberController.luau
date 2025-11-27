@@ -76,7 +76,7 @@ local function createDamageNumberPrefab(): Part
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Display"
-	billboard.Size = UDim2.fromScale(4, 2)
+	billboard.Size = UDim2.fromScale(6, 3)
 	billboard.Adornee = part
 	billboard.AlwaysOnTop = true -- Borderlands style visibility
 	billboard.Parent = part
@@ -169,18 +169,18 @@ local function spawnDamageNumber(amount: number, position: Vector3, isKill: bool
 		if isHealing then
 			text = "+" .. text
 			label.TextColor3 = COLORS.HEALING
-			bb.Size = UDim2.fromScale(3, 1.5)
+			bb.Size = UDim2.fromScale(6, 3)
 		elseif isKill then
 			text = "☠ " .. text .. "!" -- Kill flare
 			label.TextColor3 = COLORS.KILL
-			bb.Size = UDim2.fromScale(6, 3) -- Big for kills
+			bb.Size = UDim2.fromScale(12, 6) -- Big for kills
 		elseif isCrit or absAmount >= 50 then
 			text = text .. "!"
 			label.TextColor3 = COLORS.CRITICAL
-			bb.Size = UDim2.fromScale(5, 2.5)
+			bb.Size = UDim2.fromScale(10, 5)
 		else
 			label.TextColor3 = COLORS.NORMAL
-			bb.Size = UDim2.fromScale(4, 2)
+			bb.Size = UDim2.fromScale(8, 4)
 		end
 
 		if xpAmount then
