@@ -82,11 +82,28 @@ function YeetCannonController:toggleVisuals(isInside)
 	end
 end
 
-function YeetCannonController:onSeated()
+function YeetCannonController:onSeated(seat)
 	if self.isSeated then
 		return
 	end
+	
+	-- Verify this is a YeetCannon seat
+	local model = seat:FindFirstAncestorWhichIsA("Model")
+	if not model or not string.match(model.Name, "^YeetCannon") then
+		return
+	end
+	
+	self.cannon = model
+	self.seat = seat
 	self.isSeated = true
+	
+	-- Find prompt (optional, just to disable it locally)
+	for _, desc in ipairs(self.cannon:GetDescendants()) do
+		if desc:IsA("ProximityPrompt") then
+			self.prompt = desc
+			break
+		end
+	end
 
 	camera.CameraType = Enum.CameraType.Scriptable
 	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
@@ -96,9 +113,7 @@ function YeetCannonController:onSeated()
 	self.targetPitch = 0
 	self.targetYaw = 0
 
-	if self.cannon and self.seat then
-		self.originalPivot = self.seat.CFrame
-	end
+	self.originalPivot = self.seat.CFrame
 
 	if self.prompt then
 		self.prompt.Enabled = false
@@ -152,6 +167,12 @@ function YeetCannonController:onUnseated()
 		self.targetPitch = 0
 		self.targetYaw = 0
 	end
+	
+	-- Clear references
+	self.cannon = nil
+	self.seat = nil
+	self.prompt = nil
+	self.originalPivot = nil
 end
 
 function YeetCannonController:connectInputEvents()
@@ -264,41 +285,28 @@ function YeetCannonController:removeHighlight()
 	end
 end
 
-function YeetCannonController:checkSeat()
-	if not self.seat then
-		return
-	end
-	local char = player.Character
-	if not char then
-		return
-	end
-	local hum = char:FindFirstChild("Humanoid")
-
-	if self.seat.Occupant == hum and not self.isSeated then
-		self:onSeated()
-	elseif self.seat.Occupant ~= hum and self.isSeated then
-		self:onUnseated()
-	end
-end
-
 function YeetCannonController:start()
-	RunService.Heartbeat:Connect(function()
-		if not self.cannon then
-			self:findCannon()
-		else
-			self:checkSeat()
+	-- Listen for character added to bind Seated event
+	local function onCharacterAdded(char)
+		local hum = char:WaitForChild("Humanoid", 10)
+		if hum then
+			hum.Seated:Connect(function(active, seatPart)
+				if active and seatPart then
+					self:onSeated(seatPart)
+				else
+					self:onUnseated()
+				end
+			end)
 		end
-	end)
+	end
+
+	if player.Character then
+		onCharacterAdded(player.Character)
+	end
+	player.CharacterAdded:Connect(onCharacterAdded)
 end
 
 local controller = YeetCannonController.new()
-player.CharacterAdded:Connect(function()
-	task.wait(1)
-	controller:start()
-end)
-
-if player.Character then
-	controller:start()
-end
+controller:start()
 
 return YeetCannonController

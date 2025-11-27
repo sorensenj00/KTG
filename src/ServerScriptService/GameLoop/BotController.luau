@@ -1,7 +1,23 @@
+--[[
+    Module: BotController
+    Description:
+        Optimized Bot AI with Pathfinding, Spatial Queries, and Network Ownership Transfer.
+        Implements distributed updates for performance and instant combat reaction.
+        Non-blocking pathfinding to prevent frame drops.
+
+    Dependencies:
+    - PathfindingService, CollectionService, RunService
+    - ScalingConfig, castRays, ProgressionManager, DamageTracker
+
+    Author: Jules (Optimized)
+    Last Updated: 2025-01-22
+]]
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
+local PathfindingService = game:GetService("PathfindingService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
@@ -10,98 +26,166 @@ local castRays = require(ServerScriptService.Utility.castRays)
 local ProgressionManager = require(script.Parent.ProgressionManager)
 local DamageTracker = require(script.Parent.DamageTracker)
 
--- Events
+-- === Constants ===
+local UPDATE_INTERVAL = 15 -- Run AI logic every 15 frames (approx 4 times/sec)
+local AGGRO_DURATION = 8
+local NETWORK_OWNERSHIP_RADIUS = 200 -- Transfer ownership if player is within 200 studs
+local ORB_SEARCH_INTERVAL = 1.0 -- Search for orbs once per second
+local STUCK_THRESHOLD = 0.5
+local STUCK_TIME = 1.0
+
+-- === Events ===
 local eliminatedEvent
 task.spawn(function()
-	eliminatedEvent = ServerScriptService.Blaster:WaitForChild("Events"):WaitForChild("Eliminated", 10)
+	eliminatedEvent = ServerScriptService:WaitForChild("Blaster", 10):WaitForChild("Events"):WaitForChild("Eliminated", 10)
+end)
+
+local replicateShotRemote
+task.spawn(function()
+	replicateShotRemote = ReplicatedStorage:WaitForChild("Blaster", 10):WaitForChild("Remotes"):WaitForChild("ReplicateShot", 10)
 end)
 
 local BotController = {}
 
--- Aggro System: [bot] = { [player] = timestamp }
--- Module-level so it's accessible to RecordAggro function
-local botAggroTable = {}
+-- === State Management ===
+-- Storing state locally for speed
+local botStates = {}
+-- Structure:
+-- botStates[bot] = {
+--    Target = Instance | nil,
+--    State = "IDLE" | "COMBAT" | "ORB",
+--    NextOrbSearch = number,
+--    Path = Path | nil,
+--    PathWaypoints = {} | nil,
+--    CurrentWaypointIndex = 1,
+--    IsPathfinding = boolean,
+--    LastPathTime = number,
+--    LastPos = Vector3,
+--    LastMoveTime = number,
+--    StuckSince = number | nil,
+--    AggroTable = { [player] = timestamp },
+--    LastShot = number,
+--    StrafeDir = 1,
+--    NextStrafeChange = number
+-- }
 
--- Aggro duration in seconds
-local AGGRO_DURATION = 5
-
--- Record aggro when a bot is damaged by a player
-local function recordBotAggro(bot, attackerPlayer)
-	if not bot or not attackerPlayer or not attackerPlayer:IsA("Player") then
-		return
+-- Initialize State
+local function getBotState(bot)
+	if not botStates[bot] then
+		botStates[bot] = {
+			Target = nil,
+			State = "IDLE",
+			NextOrbSearch = 0,
+			AggroTable = {},
+			LastPos = bot.PrimaryPart and bot.PrimaryPart.Position or Vector3.zero,
+			LastMoveTime = os.clock(),
+			StuckSince = nil,
+			LastShot = 0,
+			StrafeDir = 1,
+			NextStrafeChange = 0,
+			IsPathfinding = false,
+			LastPathTime = 0
+		}
 	end
-
-	if not botAggroTable[bot] then
-		botAggroTable[bot] = {}
-	end
-
-	local now = Workspace:GetServerTimeNow()
-	botAggroTable[bot][attackerPlayer] = now
+	return botStates[bot]
 end
 
--- Public API for recording aggro (called from blaster system)
-function BotController.RecordAggro(bot, attackerPlayer)
-	recordBotAggro(bot, attackerPlayer)
-end
+-- === Helper: Network Ownership ===
+local function updateNetworkOwnership(bot, target)
+	local root = bot:FindFirstChild("HumanoidRootPart")
+	if not root then return end
 
--- Check if a player has aggro on a bot (within duration)
-local function hasAggro(bot, player)
-	-- Defensive checks: ensure bot and player are valid
-	if not bot or not player then
-		return false
-	end
+	local newOwner = nil
+	local shortestDist = NETWORK_OWNERSHIP_RADIUS
 
-	-- Ensure player is actually a Player instance
-	if not player:IsA("Player") then
-		return false
-	end
-
-	-- Check if bot entry exists in aggro table
-	if not botAggroTable[bot] then
-		return false
-	end
-
-	-- Check if player entry exists for this bot
-	if not botAggroTable[bot][player] then
-		return false
-	end
-
-	local now = Workspace:GetServerTimeNow()
-	local aggroTime = botAggroTable[bot][player]
-	return (now - aggroTime) <= AGGRO_DURATION
-end
-
--- Clean up stale aggro entries
-local function cleanupAggro(bot, now)
-	if not botAggroTable[bot] then
-		return
-	end
-
-	for player, timestamp in pairs(botAggroTable[bot]) do
-		if (now - timestamp) > AGGRO_DURATION then
-			botAggroTable[bot][player] = nil
+	-- Priority 1: The Target (if it's a player)
+	if target and target:IsA("Model") then
+		local player = Players:GetPlayerFromCharacter(target)
+		if player then
+			local dist = (target.HumanoidRootPart.Position - root.Position).Magnitude
+			if dist < NETWORK_OWNERSHIP_RADIUS then
+				newOwner = player
+			end
 		end
 	end
 
-	-- Remove bot entry if empty
-	if next(botAggroTable[bot]) == nil then
-		botAggroTable[bot] = nil
+	-- Priority 2: Any nearby player (if no target or target is bot)
+	if not newOwner then
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+				local dist = (player.Character.HumanoidRootPart.Position - root.Position).Magnitude
+				if dist < shortestDist then
+					shortestDist = dist
+					newOwner = player
+				end
+			end
+		end
+	end
+
+	-- Apply Ownership
+	if root:IsDescendantOf(Workspace) and not root.Anchored then
+		local success, currentOwner = pcall(function() return root:GetNetworkOwner() end)
+		if success and currentOwner ~= newOwner then
+			pcall(function() root:SetNetworkOwner(newOwner) end)
+		end
 	end
 end
 
-function BotController.Start()
-	print("--- Starting Smart BotController ---")
+-- === Helper: Spatial Orb Search ===
+local orbOverlapParams = OverlapParams.new()
+orbOverlapParams.FilterType = Enum.RaycastFilterType.Include
+-- Note: FilterDescendantsInstances is set dynamically to the Orbs folder
 
-	local replicateShotRemote = ReplicatedStorage.Blaster.Remotes.ReplicateShot
-	local botData = {} -- [Model] = { NextDecision = 0, Target = nil, StuckTime = 0, LastPos = Vector3, LastMovementTime = 0 }
+local function findNearestOrb(bot, range)
+	local root = bot.PrimaryPart
+	if not root then return nil end
 
-	local function getBotRanges(bot)
-		local level = bot:GetAttribute("Level") or 1
-		local scale = ScalingConfig.GetSizeMultiplier(level)
-		return {
-			Detect = 150 * scale,
-		}
+	local orbsFolder = Workspace:FindFirstChild("Orbs")
+	if not orbsFolder then return nil end
+
+	-- Update params (inexpensive if done once per check)
+	orbOverlapParams.FilterDescendantsInstances = { orbsFolder }
+
+	-- Use spatial query instead of iterating all orbs
+	-- Optimization: Scan a box around the bot
+	local regionSize = Vector3.new(range * 2, 100, range * 2)
+	local cframe = root.CFrame
+
+	local parts = Workspace:GetPartBoundsInBox(cframe, regionSize, orbOverlapParams)
+
+	local bestOrb = nil
+	local bestDist = range
+
+	for _, part in ipairs(parts) do
+		if part.Name == "XPOrb" then
+			local dist = (part.Position - root.Position).Magnitude
+			if dist < bestDist then
+				bestDist = dist
+				bestOrb = part
+			end
+		end
 	end
+
+	return bestOrb
+end
+
+-- === Helper: Target Validation & Scoring ===
+local function isValidTarget(bot, target)
+	if not target or not target.Parent then return false end
+	local hum = target:FindFirstChild("Humanoid")
+	if not hum or hum.Health <= 0 then return false end
+	return true
+end
+
+-- === Pathfinding ===
+local function moveToPath(bot, state, targetPos)
+	local root = bot.PrimaryPart
+	local hum = bot:FindFirstChild("Humanoid")
+	if not root or not hum then return end
+
+	-- Update Waypoint Logic
+	if state.Path and state.PathWaypoints and state.CurrentWaypointIndex <= #state.PathWaypoints then
+		local waypoint = state.PathWaypoints[state.CurrentWaypointIndex]
 
 	-- Find closest enemy (player or bot) and nearest orb
 	-- ✅ IMPROVED: Spatial partitioning for bot target detection
@@ -156,223 +240,210 @@ function BotController.Start()
 			end
 		end
 
-		-- Find orbs (optimized: scan only Orbs folder)
-		local bestOrb = nil
-		local orbDist = math.huge
+		if distToWaypoint < (botRadius + 2) then
+			-- Reached, move to next
+			state.CurrentWaypointIndex = state.CurrentWaypointIndex + 1
+			if state.CurrentWaypointIndex <= #state.PathWaypoints then
+				hum:MoveTo(state.PathWaypoints[state.CurrentWaypointIndex].Position)
 
-		local orbsFolder = Workspace:FindFirstChild("Orbs")
-		if orbsFolder then
-			for _, child in ipairs(orbsFolder:GetChildren()) do
-				if child.Name == "XPOrb" and child:IsA("BasePart") then
-					local dist = (child.Position - rootPos).Magnitude
-					if dist < orbDist then
-						orbDist = dist
-						bestOrb = child
+				-- Jump if needed
+				if waypoint.Action == Enum.PathWaypointAction.Jump then
+					hum.Jump = true
+				end
+			else
+				-- End of path, move directly to target
+				hum:MoveTo(targetPos)
+				state.Path = nil
+			end
+		else
+			-- Continue to current waypoint
+			hum:MoveTo(waypoint.Position)
+		end
+	else
+		-- No path, create one?
+		-- Only create path if direct line is blocked (Optimization)
+		local direction = (targetPos - root.Position)
+		local distance = direction.Magnitude
+
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		rayParams.FilterDescendantsInstances = { bot, Workspace:FindFirstChild("Orbs") }
+
+		local blocked = Workspace:Raycast(root.Position, direction.Unit * math.min(distance, 50), rayParams)
+
+		if blocked and (blocked.Instance.CanCollide or blocked.Instance.Transparency < 0.9) then
+			-- Blocked
+
+			-- 1. Check if already pathfinding or cooldown
+			if state.IsPathfinding then return end
+			if os.clock() - state.LastPathTime < 1.0 then
+				-- On cooldown, wait (stand still)
+				hum:MoveTo(root.Position)
+				return
+			end
+
+			-- 2. Start Async Pathfinding
+			state.IsPathfinding = true
+			state.LastPathTime = os.clock()
+
+			local botLevel = bot:GetAttribute("Level") or 1
+			local agentRadius = 2 * ScalingConfig.GetSizeMultiplier(botLevel)
+			local agentHeight = 5 * ScalingConfig.GetSizeMultiplier(botLevel)
+			local startPos = root.Position
+
+			task.spawn(function()
+				local path = PathfindingService:CreatePath({
+					AgentRadius = agentRadius,
+					AgentHeight = agentHeight,
+					AgentCanJump = true,
+					Costs = {
+						Water = 20
+					}
+				})
+
+				local success, errorMessage = pcall(function()
+					path:ComputeAsync(startPos, targetPos)
+				end)
+
+				if success and path.Status == Enum.PathStatus.Success then
+					if botStates[bot] then -- Ensure bot still exists
+						state.Path = path
+						state.PathWaypoints = path:GetWaypoints()
+						state.CurrentWaypointIndex = 2 -- Skip first (current pos)
+					end
+				end
+
+				if botStates[bot] then
+					state.IsPathfinding = false
+				end
+			end)
+
+			-- While waiting, stand still or look at target
+			hum:MoveTo(root.Position)
+		else
+			-- Clear, move directly
+			hum:MoveTo(targetPos)
+			state.Path = nil -- Clear old path
+		end
+	end
+end
+
+-- === Combat Logic ===
+local function handleCombat(bot, state, now)
+	local target = state.Target
+	if not isValidTarget(bot, target) then
+		state.Target = nil
+		state.State = "IDLE"
+		return
+	end
+
+	local root = bot.PrimaryPart
+	local targetRoot = target:FindFirstChild("HumanoidRootPart")
+	if not root or not targetRoot then return end
+
+	local dist = (targetRoot.Position - root.Position).Magnitude
+
+	-- Movement: Strafe or Chase
+	if dist < 30 then
+		-- Close range: Strafe
+		if now > state.NextStrafeChange then
+			state.StrafeDir = -state.StrafeDir
+			state.NextStrafeChange = now + math.random(2, 4)
+		end
+		
+		local toEnemy = (targetRoot.Position - root.Position).Unit
+		local right = Vector3.new(-toEnemy.Z, 0, toEnemy.X)
+		local strafePos = root.Position + (right * state.StrafeDir * 10) + (toEnemy * math.random(-5, 5))
+		
+		-- Use direct move for strafing (responsive)
+		-- Check path clear for strafe?
+		-- For optimization, we assume short strafes are clear, or collision handles it
+		bot.Humanoid:MoveTo(strafePos)
+	else
+		-- Long range: Chase
+		moveToPath(bot, state, targetRoot.Position)
+	end
+
+	-- Shooting Logic
+	-- Check cooldown
+	if now - state.LastShot > 0.15 then -- Fire rate limit
+
+		-- Raycast for LOS
+		local origin = bot.Head.Position
+		local targetHead = target:FindFirstChild("Head") or targetRoot
+		local aimPos = targetHead.Position
+
+		-- Add Inaccuracy
+		local spread = math.clamp(dist / 50, 0.5, 4.0)
+		local inaccuracy = Vector3.new(
+			math.random() - 0.5,
+			math.random() - 0.5,
+			math.random() - 0.5
+		) * spread
+		
+		local dir = ((aimPos + inaccuracy) - origin).Unit * 300
+		
+		-- Check LOS before firing to save Raycasts? No, castRays handles it.
+		-- Actually, we should check if we are shooting a wall
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		rayParams.FilterDescendantsInstances = { bot }
+
+		local los = Workspace:Raycast(origin, (aimPos - origin).Unit * dist, rayParams)
+		if not los or los.Instance:IsDescendantOf(target) then
+			-- Clear shot
+			state.LastShot = now
+
+			-- Fire
+			local results = castRays(bot, origin, { dir }, 1)
+
+			-- Replicate
+			if replicateShotRemote then
+				replicateShotRemote:FireAllClients(
+					bot:FindFirstChildWhichIsA("Tool"),
+					origin,
+					{ { position = origin + dir, normal = Vector3.yAxis, instance = nil } }
+				)
+			end
+
+			-- Damage
+			for _, hit in ipairs(results) do
+				if hit.taggedHumanoid then
+					local baseDamage = 10 * ScalingConfig.GetDamageMultiplier(bot:GetAttribute("Level") or 1)
+					hit.taggedHumanoid:TakeDamage(baseDamage)
+					DamageTracker.RecordDamage(bot, hit.taggedHumanoid.Parent, baseDamage)
+
+					if hit.taggedHumanoid.Health <= 0 and eliminatedEvent then
+						eliminatedEvent:Fire(nil, bot, hit.taggedHumanoid.Parent, bot:FindFirstChildWhichIsA("Tool"))
+						ProgressionManager.AddXP(bot, 50)
 					end
 				end
 			end
 		end
-
-		return bestTarget, bestOrb
 	end
+end
 
-	-- Check if path from bot to target position is clear of obstacles
-	local function checkPathClear(bot, fromPos, toPos, excludeTarget)
-		local direction = toPos - fromPos
-		local distance = direction.Magnitude
-		if distance < 0.1 then
-			return true -- Already at target
-		end
-
-		local rayDirection = direction.Unit
-
-		-- Build exclude list: bot's character and optionally the target
-		local exclude = { bot }
-		if excludeTarget then
-			table.insert(exclude, excludeTarget)
-		end
-
-		-- Create raycast params
-		local params = RaycastParams.new()
-		params.FilterType = Enum.RaycastFilterType.Exclude
-		params.FilterDescendantsInstances = exclude
-		params.IgnoreWater = true
-
-		-- Cast ray from bot position to target
-		local rayResult = Workspace:Raycast(fromPos, rayDirection * distance, params)
-
-		-- Path is clear if no hit, or if hit is very close to target (within 5 studs)
-		if not rayResult then
-			return true
-		end
-
-		-- If we hit something, check if it's close to the target (might be the target itself)
-		local hitDistance = (rayResult.Position - fromPos).Magnitude
-		local targetDistance = distance
-
-		-- Path is considered clear if hit is within 5 studs of target (accounting for target size)
-		return (targetDistance - hitDistance) < 5
-	end
-
-	local function shootAt(bot, target)
-		local tool = bot:FindFirstChildWhichIsA("Tool")
-		if not tool or not target then
-			return
-		end
-
-		-- Simple cooldown check
-		local now = Workspace:GetServerTimeNow()
-		if botData[bot].LastShot and (now - botData[bot].LastShot < 0.2) then
-			return
-		end
-		
-		-- === HUMANIZED AIMING: Reaction Delay ===
-		-- Bot needs time to "notice" the target before shooting
-		if botData[bot].Target ~= target then
-			-- New target detected, start reaction timer
-			botData[bot].Target = target
-			botData[bot].TargetAcquiredTime = now
-			botData[bot].MissCount = 0
-			return -- Don't shoot immediately
-		end
-		
-		-- Check if reaction time has passed (0.2-0.4 seconds)
-		local reactionTime = 0.2 + math.random() * 0.2
-		if now - (botData[bot].TargetAcquiredTime or 0) < reactionTime then
-			return -- Still reacting, don't shoot yet
-		end
-
-		-- Aim Logic: Calculate from bot's Head to target's HumanoidRootPart
-		local origin = bot.Head.Position
-		local targetRootPart = target:FindFirstChild("HumanoidRootPart")
-		if not targetRootPart then
-			return
-		end
-
-		local targetPos = targetRootPart.Position
-		
-		-- 1. Line of Sight Check (Prevent shooting through walls)
-		local losDirection = (targetPos - origin)
-		local losDistance = losDirection.Magnitude
-		local losParams = RaycastParams.new()
-		losParams.FilterType = Enum.RaycastFilterType.Exclude
-		losParams.FilterDescendantsInstances = {bot, target}
-		losParams.IgnoreWater = true
-		
-		local losResult = Workspace:Raycast(origin, losDirection.Unit * losDistance, losParams)
-		if losResult then
-			-- Obstructed by something that isn't the bot or the target
-			-- Increment miss count or just return
-			botData[bot].MissCount = (botData[bot].MissCount or 0) + 1
-			if botData[bot].MissCount > 10 then
-				-- Reset target if we can't see/hit it for too long
-				botData[bot].Target = nil
-				botData[bot].MissCount = 0
-			end
-			return
-		end
-
-		local botLevel = bot:GetAttribute("Level") or 1
-		local isGiant = botLevel > 20
-
-		-- Calculate base direction
-		local baseDirection = (targetPos - origin)
-		local dist = baseDirection.Magnitude
-
-		-- For giant bots, add downward angle adjustment to account for size difference
-		local direction = baseDirection.Unit
-		if isGiant then
-			-- Calculate size difference
-			local botScale = ScalingConfig.GetSizeMultiplier(botLevel)
-			local targetLevel = target:GetAttribute("Level") or (target:FindFirstChild("Humanoid") and 1) or 1
-			if target:IsA("Model") then
-				local targetPlayer = Players:GetPlayerFromCharacter(target)
-				if targetPlayer then
-					targetLevel = targetPlayer:GetAttribute("Level") or 1
-				end
-			end
-			local targetScale = ScalingConfig.GetSizeMultiplier(targetLevel)
-
-			-- If bot is much larger, aim slightly downward
-			local sizeRatio = botScale / math.max(targetScale, 0.1)
-			if sizeRatio > 1.5 then
-				-- Calculate downward compensation based on distance and size difference
-				local downwardCompensation = math.rad(5 + (sizeRatio - 1.5) * 10) -- 5-30 degrees downward
-				local horizontalDist = Vector3.new(baseDirection.X, 0, baseDirection.Z).Magnitude
-				local verticalAdjustment = -math.tan(downwardCompensation) * horizontalDist
-				direction = (baseDirection + Vector3.new(0, verticalAdjustment, 0)).Unit
-			end
-		end
-
-		-- === HUMANIZED AIMING: Dynamic Inaccuracy ===
-	-- Base spread: worse at range, better up close
-	-- INCREASED: Made 3x worse to make bots dodge-able
-	local baseSpread = math.clamp(dist / 33, 0.3, 6.0) -- 0.3 at close, 6.0 at 200+ studs
+-- === Public API: Aggro ===
+function BotController.RecordAggro(bot, attacker)
+	if not bot or not attacker then return end
+	if not attacker:IsA("Player") and not CollectionService:HasTag(attacker, "BotAI") then return end
 	
-	-- Movement penalty: bot is less accurate while moving/strafing
-	-- INCREASED: Made 2x worse
-	local humanoid = bot:FindFirstChild("Humanoid")
-	local movementPenalty = 0
-	if humanoid and humanoid.MoveDirection.Magnitude > 0.1 then
-		movementPenalty = 2.0 -- Add 2.0 spread while moving (was 1.0)
-	end
+	local state = getBotState(bot)
+	local now = os.clock()
 	
-	-- Total spread
-	local totalSpread = baseSpread + movementPenalty
+	-- Record timestamp
+	state.AggroTable[attacker] = now
 	
-	-- Apply random spread in 3D
-	local inaccuracy = Vector3.new(
-		(math.random() - 0.5) * 2,
-		(math.random() - 0.5) * 2,
-		(math.random() - 0.5) * 2
-	) * totalSpread
+	-- Instant Reaction: Switch target immediately if not already locked on a player
+	local currentTargetIsPlayer = state.Target and Players:GetPlayerFromCharacter(state.Target)
 
-		local finalDirection = (direction * dist + inaccuracy).Unit
-		local rayDir = finalDirection * 300 -- Range
-
-		-- Update last shot time
-		botData[bot].LastShot = now
-
-		-- Fire
-		local result = castRays(bot, origin, { rayDir }, 1)
-
-		-- Visuals
-		replicateShotRemote:FireAllClients(
-			tool,
-			origin,
-			{ { position = origin + rayDir, normal = Vector3.yAxis, instance = nil } }
-		)
-
-		-- Damage
-		local hitSomething = false
-		for _, hit in ipairs(result) do
-			if hit.taggedHumanoid then
-				hitSomething = true
-				local baseDamage = 10
-				local victimChar = hit.taggedHumanoid.Parent
-				hit.taggedHumanoid:TakeDamage(baseDamage) -- Base damage
-
-				-- Record damage for XP tracking
-				DamageTracker.RecordDamage(bot, victimChar, baseDamage)
-
-				if hit.taggedHumanoid.Health <= 0 and eliminatedEvent then
-					eliminatedEvent:Fire(nil, bot, hit.taggedHumanoid.Parent, tool)
-					ProgressionManager.AddXP(bot, 50)
-				end
-			end
-		end
-		
-		if hitSomething then
-			botData[bot].MissCount = 0
-		else
-			botData[bot].MissCount = (botData[bot].MissCount or 0) + 1
-			if botData[bot].MissCount > 10 then
-				-- Reset target if we keep missing
-				botData[bot].Target = nil
-				botData[bot].MissCount = 0
-			end
-		end
+	if not currentTargetIsPlayer then
+		state.Target = attacker.Character or attacker -- Handle Player object vs Character model
+		state.State = "COMBAT"
+		state.Path = nil -- Clear old path
+		-- print("Bot " .. bot.Name .. " instantly reacted to " .. attacker.Name)
 	end
+end
 
 	-- Update Loop
 	-- Queue system for time-slicing bot updates
@@ -408,249 +479,126 @@ function BotController.Start()
 			-- Clean up stale aggro entries for this bot
 			cleanupAggro(bot, now)
 
-			local root = bot.PrimaryPart
-			if not root then
-				-- Try to find HumanoidRootPart as fallback
-				root = bot:FindFirstChild("HumanoidRootPart")
-				if root then
-					bot.PrimaryPart = root
-				else
-					continue -- Skip if no root part
-				end
-			end
+	RunService.Heartbeat:Connect(function(dt)
+		local now = os.clock()
+		frameCount = frameCount + 1
 
-			local data = botData[bot]
-				or {
-					NextDecision = 0,
-					StuckCount = 0,
-					LastPos = root.Position,
-					LastMovementTime = nil, -- Initialize as nil, set on first stuck detection
-					IsRecovering = false,
-				}
-			botData[bot] = data
+		local bots = CollectionService:GetTagged("BotAI")
 
-			local hum = bot.Humanoid
+		for i, bot in ipairs(bots) do
+			local hum = bot:FindFirstChild("Humanoid")
+			local root = bot:FindFirstChild("HumanoidRootPart")
 
-			-- Get bot scale for scaled thresholds
-			local level = bot:GetAttribute("Level") or 1
-			local scale = ScalingConfig.GetSizeMultiplier(level)
-			local stuckThreshold = 0.5 * scale -- Scale stuck detection with bot size
-
-			-- 1. Improved Stuck Detection (Time-based)
-			local movedDistance = (root.Position - data.LastPos).Magnitude
-			local moveDirMag = hum.MoveDirection.Magnitude
-			local isTryingToMove = moveDirMag > 0.1 -- Use threshold to account for floating point precision
-
-			if movedDistance < stuckThreshold and isTryingToMove then
-				-- Bot is trying to move but hasn't moved much
-				-- Initialize LastMovementTime on first stuck detection
-				if not data.LastMovementTime then
-					data.LastMovementTime = now
-				end
-
-				local timeStuck = now - data.LastMovementTime
-
-				-- If stuck for 1 second, trigger recovery
-				if timeStuck >= 1.0 and not data.IsRecovering then
-					data.IsRecovering = true
-					data.RecoveryEndTime = now + 0.5 -- Recover for 0.5 seconds
-
-					-- Jump
-					hum.Jump = true
-
-					-- Move backward (opposite of current move direction, or random if zero)
-					local backwardDir
-					if moveDirMag > 0.1 then
-						backwardDir = -hum.MoveDirection.Unit
-					else
-						-- Random direction if MoveDirection is unreliable
-						local angle = math.random() * math.pi * 2
-						backwardDir = Vector3.new(math.cos(angle), 0, math.sin(angle))
-					end
-					local backwardPos = root.Position + backwardDir * (10 * scale)
-					hum:MoveTo(backwardPos)
-
-					data.NextDecision = now + 0.5 -- Force wait during recovery
-				elseif data.IsRecovering and now >= data.RecoveryEndTime then
-					-- Recovery complete, resume normal movement
-					data.IsRecovering = false
-					data.LastMovementTime = now
-				end
-			else
-				-- Bot is moving normally
-				if movedDistance >= stuckThreshold then
-					data.LastMovementTime = now
-					data.IsRecovering = false
-				end
-			end
-			data.LastPos = root.Position
-
-			-- 2. Decision Making (Throttle) - Skip if recovering from stuck
-			if now < data.NextDecision or data.IsRecovering then
+			if not hum or hum.Health <= 0 or not root then
+				botStates[bot] = nil
 				continue
 			end
 
-			local ranges = getBotRanges(bot)
-			local enemy, orb = scanSurroundings(bot, root.Position, ranges.Detect)
+			local state = getBotState(bot)
 
-			-- === PRIORITY: Orbs over Combat ===
-			-- If there's an orb within 50 studs, prioritize it over fighting
-			if orb then
-				local orbDist = (orb.Position - root.Position).Magnitude
-				if orbDist < 50 then
-					-- ORB COLLECTION MODE: Prioritize orbs
-					hum:MoveTo(orb.Position)
-					data.NextDecision = now + 0.3
-					
-					-- Still shoot at enemies if they're VERY close (< 20 studs) while collecting orbs
-					if enemy then
-						local enemyRoot = enemy:FindFirstChild("HumanoidRootPart")
-						if enemyRoot then
-							local enemyDist = (enemyRoot.Position - root.Position).Magnitude
-							if enemyDist < 20 then
-								shootAt(bot, enemy)
+			-- 1. Network Ownership (Frequent Check for Smoothness)
+			-- Distribute this check: 1/10th of bots per frame
+			if (i + frameCount) % 10 == 0 then
+				updateNetworkOwnership(bot, state.Target)
+			end
+
+			-- 2. AI Decision Throttling
+			-- Distribute updates: Only update if it's this bot's turn in the bucket
+			-- HOWEVER: If State is COMBAT, we allow pass-through to the high-freq combat check
+			if (i + frameCount) % UPDATE_INTERVAL ~= 0 and state.State ~= "COMBAT" then
+				continue
+			end
+
+			-- High Frequency Combat Checks (Every 3 frames for combat bots)
+			if state.State == "COMBAT" and (i + frameCount) % 3 == 0 then
+				handleCombat(bot, state, now)
+				continue
+			end
+
+			-- 3. Main State Machine (Low Frequency / Fallthrough)
+
+			-- Clean Aggro
+			for attacker, time in pairs(state.AggroTable) do
+				if now - time > AGGRO_DURATION then
+					state.AggroTable[attacker] = nil
+				end
+			end
+
+			-- Stuck Detection
+			local moved = (root.Position - state.LastPos).Magnitude
+			if moved < STUCK_THRESHOLD and hum.MoveDirection.Magnitude > 0.1 then
+				if not state.StuckSince then state.StuckSince = now end
+				if now - state.StuckSince > STUCK_TIME then
+					-- Unstick: Jump and random move
+					hum.Jump = true
+					local randomDir = Vector3.new(math.random()-0.5, 0, math.random()-0.5).Unit * 15
+					hum:MoveTo(root.Position + randomDir)
+					state.Path = nil -- Reset path
+					state.StuckSince = nil -- Reset and wait
+					state.LastPos = root.Position
+					continue
+				end
+			else
+				state.StuckSince = nil
+			end
+			state.LastPos = root.Position
+
+			
+			-- Target Selection
+			if state.State == "COMBAT" then
+				if not isValidTarget(bot, state.Target) then
+					state.State = "IDLE"
+					state.Target = nil
+					state.Path = nil
+				end
+			end
+
+			if state.State == "IDLE" or state.State == "ORB" then
+				-- Look for Aggro Targets first
+				local bestAggro = nil
+				local bestTime = 0
+				for attacker, time in pairs(state.AggroTable) do
+					if time > bestTime and isValidTarget(bot, attacker.Character or attacker) then
+						bestAggro = attacker.Character or attacker
+						bestTime = time
+					end
+				end
+				
+				if bestAggro then
+					state.Target = bestAggro
+					state.State = "COMBAT"
+				else
+					-- Look for Orbs
+					if now > state.NextOrbSearch then
+						local level = bot:GetAttribute("Level") or 1
+						local searchRange = 100 * ScalingConfig.GetSizeMultiplier(level)
+						local orb = findNearestOrb(bot, searchRange)
+
+						if orb then
+							state.State = "ORB"
+							state.Target = orb
+							-- Move to orb
+							moveToPath(bot, state, orb.Position)
+						else
+							state.State = "IDLE"
+							-- Roam logic
+							if hum.MoveDirection.Magnitude < 0.1 then
+								local roamPos = root.Position + Vector3.new(math.random(-50,50), 0, math.random(-50,50))
+								moveToPath(bot, state, roamPos)
 							end
 						end
-					end
-					continue
-				end
-			end
-
-			if enemy then
-				-- ATTACK STATE: Move to enemy and shoot
-				local enemyRoot = enemy:FindFirstChild("HumanoidRootPart")
-				if not enemyRoot then
-					continue
-				end
-				
-				-- === HUMANIZED BEHAVIOR: Retreat when low health ===
-				local healthPercent = hum.Health / hum.MaxHealth
-				if healthPercent < 0.3 then
-					-- Low health! Try to retreat and find cover
-					-- Move away from enemy
-					local awayFromEnemy = (root.Position - enemyRoot.Position).Unit
-					local retreatPos = root.Position + awayFromEnemy * 30
-					
-					-- Try to path to retreat position
-					hum:MoveTo(retreatPos)
-					
-					-- Still shoot while retreating (suppressive fire)
-					shootAt(bot, enemy)
-					
-					-- Force next decision soon to re-evaluate
-					data.NextDecision = now + 0.5
-					continue
-				end
-
-				-- Combat Spacing: Maintain distance from enemy
-				local toEnemy = (enemyRoot.Position - root.Position)
-				local distance = toEnemy.Magnitude
-			
-			-- Initialize strafe direction if not set
-			if not data.StrafeDirection then
-				data.StrafeDirection = math.random() > 0.5 and 1 or -1
-				data.NextStrafeChange = now + math.random(2, 4)
-			end
-			
-			-- Randomly change strafe direction every 2-4 seconds
-			if now >= data.NextStrafeChange then
-				data.StrafeDirection = -data.StrafeDirection
-				data.NextStrafeChange = now + math.random(2, 4)
-			end
-
-			if distance < 15 then
-				-- CLOSE RANGE: Strafe/circle around enemy while maintaining distance
-				local forward = toEnemy.Unit
-				local right = Vector3.new(-forward.Z, 0, forward.X) -- Perpendicular vector
-				
-				-- Strafe movement: move perpendicular to enemy direction
-				-- REDUCED: Was 12, now 6 - less desync for better hit detection
-				local strafeOffset = right * (6 * data.StrafeDirection)
-				local targetPos = root.Position + strafeOffset
-				
-				-- Add slight forward/backward component randomly for more dynamic movement
-				local fbOffset = math.random(-3, 3)
-				targetPos = targetPos + forward * fbOffset
-				
-				hum:MoveTo(targetPos)
-			elseif distance < 30 then
-				-- MEDIUM RANGE: Advance while strafing
-				local forward = toEnemy.Unit
-				local right = Vector3.new(-forward.Z, 0, forward.X)
-				
-				-- Move toward enemy with some lateral movement
-				-- REDUCED: Was 8, now 5 - less desync for better hit detection
-				local strafeOffset = right * (5 * data.StrafeDirection)
-				local targetPos = enemyRoot.Position + strafeOffset
-				
-				-- Check if path is clear
-				if checkPathClear(bot, root.Position, targetPos, enemy) then
-					hum:MoveTo(targetPos)
-				else
-					-- Path blocked, just strafe
-					hum:MoveTo(root.Position + strafeOffset)
-				end
-			else
-					-- Check if path to enemy is clear
-					local pathClear = checkPathClear(bot, root.Position, enemyRoot.Position, enemy)
-
-					if pathClear then
-						-- Path is clear, move to enemy
-						hum:MoveTo(enemyRoot.Position)
-					else
-						-- Path is blocked, try to move to a position closer that avoids obstacle
-						-- Move towards enemy but stop short if blocked
-						local direction = toEnemy.Unit
-
-						-- Try moving to a position 70% of the way to enemy
-						local alternativePos = root.Position + direction * (distance * 0.7)
-
-						-- Check if alternative path is clear
-						if checkPathClear(bot, root.Position, alternativePos, enemy) then
-							hum:MoveTo(alternativePos)
+						state.NextOrbSearch = now + ORB_SEARCH_INTERVAL
+					elseif state.State == "ORB" and state.Target then
+						-- Continue moving to orb
+						if (state.Target.Position - root.Position).Magnitude < 5 then
+							-- close enough, wait for pickup
+						else
+							moveToPath(bot, state, state.Target.Position)
 						end
-						-- If still blocked, don't move but still shoot
 					end
 				end
-
-				-- Always try to shoot (shooting uses its own raycast that handles obstacles)
-				shootAt(bot, enemy)
-
-				-- Note: Removed instant CFrame snap - bots now continue moving while shooting
-				-- This makes combat more dynamic and visually appealing
-
-				data.NextDecision = now + 0.1 -- Update 10 times a second during combat
-			else
-				-- ORB STATE: Always run to nearest orb
-				if orb then
-					-- Smart Pathfinding: Add random offset to prevent clumping
-					local randomOffset = Vector3.new(math.random(-3, 3), 0, math.random(-3, 3))
-					local targetOrbPos = orb.Position + randomOffset
-
-					-- Check if path to orb is clear
-					local pathClear = checkPathClear(bot, root.Position, targetOrbPos, orb)
-
-					if pathClear then
-						-- Path is clear, move to orb with random offset
-						hum:MoveTo(targetOrbPos)
-					else
-						-- Path is blocked, try to find alternative path
-						local toOrb = (targetOrbPos - root.Position)
-						local distance = toOrb.Magnitude
-						local direction = toOrb.Unit
-
-						-- Try moving to a position closer to orb that might avoid obstacle
-						local alternativePos = root.Position + direction * (distance * 0.8)
-
-						-- Check if alternative path is clear
-						if checkPathClear(bot, root.Position, alternativePos, orb) then
-							hum:MoveTo(alternativePos)
-						end
-						-- If still blocked, skip movement this frame and try again next poll
-					end
-				end
-				data.NextDecision = now + 0.5 -- Poll for orbs every 0.5 seconds
 			end
+
 		end
 	end)
 end

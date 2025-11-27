@@ -20,33 +20,12 @@ local screenShake = Vector2.new()
 local screenShakeDecay = 15 -- How fast screen shake decays
 
 local function onRenderStepped(deltaTime: number)
-	-- Update Springs
-	recoilSpringX:update(deltaTime)
-	recoilSpringY:update(deltaTime)
-
-	-- Get current spring offsets
-	local pitch = recoilSpringX:getPosition()
-	local yaw = recoilSpringY:getPosition()
-
-	-- Apply Recoil (Spring-based)
-	-- Note: CameraRecoiler originally applied angles via multiplication.
-	-- If we want the camera to "kick up" and "return", we apply the offset from 0.
-	-- The original code did: camera.CFrame *= CFrame.Angles(recoil.Y * dt, ...)
-	-- That accumulated rotation over time (changing aim).
-	-- Visual recoil usually ADDS an offset to the camera CFrame but preserves the "True Aim" center?
-	-- Or does it actually move the aim?
-	-- The user said: "Snap UP and slide back DOWN". This implies it returns to the original point (Visual Recoil).
-	-- If it changed the aim, it wouldn't slide back down to the original point fully.
-	-- However, the original code `recoil.Y * deltaTime` implies it was rotating the camera continuously while recoil > 0?
-	-- Actually, `CFrame *= Angles` *accumulates*. But `recoil` decayed to zero.
-	-- So it moved the camera UP, then stopped moving it. It didn't "return" down. It just stopped going up.
-	-- That is "Aim Recoil".
-
-	-- USER REQUEST: "Camera snap UP (Force) and slide back DOWN (Recovery)."
-	-- This describes VISUAL RECOIL (the camera bumps up but the crosshair effectively stays or returns).
-	-- So we apply the spring position as a *temporary* CFrame offset.
-
-	camera.CFrame = camera.CFrame * CFrame.Angles(pitch, yaw, 0)
+	-- DISABLED: Camera recoil is now handled entirely by ViewModelController
+	-- The ViewModelController applies visual recoil to the weapon model using Spring physics
+	
+	-- Springs are kept for potential future use but not currently updating
+	-- recoilSpringX:update(deltaTime)
+	-- recoilSpringY:update(deltaTime)
 
 	-- Apply Zoom
 	camera.FieldOfView = Constants.RECOIL_DEFAULT_FOV + zoom

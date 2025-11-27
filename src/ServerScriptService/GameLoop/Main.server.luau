@@ -25,14 +25,17 @@
     - ServerScriptService.GameLoop.PlayerSpawner
     - ServerScriptService.GameLoop.BotSpawner
     - ServerScriptService.GameLoop.VehicleSpawner
-    - ServerScriptService.GameLoop.YeetCannonSpawner
     
     Author: System
     Last Updated: 2025-01-20
 ]]
 
 local ServerScriptService = game:GetService("ServerScriptService")
+local Players = game:GetService("Players")
 local GameLoop = ServerScriptService.GameLoop
+
+-- Disable automatic character loading
+Players.CharacterAutoLoads = false
 
 print("-----------------------------------------")
 print("       INITIALIZING KILL TO GROW         ")
@@ -59,34 +62,10 @@ end)
 
 -- 1. Initialize Blaster System
 print(">> Initializing Blaster System...")
-local blasterFolder = ServerScriptService.Blaster
-local blasterSetup = blasterFolder:FindFirstChild("setup")
-
-if blasterSetup then
-	-- setup.server.luau is a Script (runs automatically), not a ModuleScript
-	-- We can't require it, but we can wait for it to finish by checking for the Events folder
-	if blasterSetup:IsA("ModuleScript") then
-		-- If it's a ModuleScript, we can require it
-		local success, err = pcall(function()
-			require(blasterSetup)
-		end)
-		if success then
-			print("✅ GameServer: Blaster setup initialized")
-		else
-			warn("❌ GameServer: Failed to initialize Blaster setup:", err)
-		end
-	else
-		-- It's a Script, so it runs automatically - just wait for Events folder to be created
-		local events = blasterFolder:WaitForChild("Events", 5)
-		if events then
-			print("✅ GameServer: Blaster setup initialized")
-		else
-			warn("❌ GameServer: Blaster Events folder not created after 5 seconds")
-		end
-	end
-else
-	warn("❌ GameServer: Blaster setup script not found!")
-end
+initializeSystem("BlasterSetup", function()
+	local BlasterSetup = require(ServerScriptService.Blaster.setup)
+	BlasterSetup.Initialize()
+end)
 
 -- 2. Load Modules (Definitions)
 print(">> Loading Modules...")
@@ -98,7 +77,6 @@ local BotController = require(GameLoop.BotController)
 local BotSpawner = require(GameLoop.BotSpawner)
 local PlayerSpawner = require(GameLoop.PlayerSpawner)
 local VehicleSpawner = require(GameLoop.VehicleSpawner)
-local YeetCannonSpawner = require(GameLoop.YeetCannonSpawner)
 local YeetCannonManager = require(GameLoop.YeetCannonManager)
 local KillfeedManager = require(GameLoop.KillfeedManager)
 local KillstreakManager = require(GameLoop.KillstreakManager)
@@ -164,9 +142,6 @@ initializeSystem("BotSpawner", function()
 end)
 initializeSystem("VehicleSpawner", function()
 	VehicleSpawner.Start()
-end)
-initializeSystem("YeetCannonSpawner", function()
-	YeetCannonSpawner.Start()
 end)
 
 print("-----------------------------------------")

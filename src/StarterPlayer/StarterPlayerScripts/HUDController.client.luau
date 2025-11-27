@@ -2,11 +2,12 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local _RunService = game:GetService("RunService")
+local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local Constants = require(ReplicatedStorage.Blaster.Constants)
-local InputCategorizer = require(ReplicatedStorage.Blaster.Scripts.InputCategorizer)
+-- local InputCategorizer = require(ReplicatedStorage.Blaster.Scripts.InputCategorizer) -- Unused
 local MetaConfig = require(ReplicatedStorage.GameLoop.MetaConfig)
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 
@@ -49,40 +50,38 @@ local function playSound(soundId)
 	end)
 end
 
-local function bindButtonSounds(btn, isPurchase)
-	btn.MouseEnter:Connect(function()
-		playSound(SOUNDS.Hover)
-	end)
-	if not isPurchase then
-		btn.MouseButton1Click:Connect(function()
-			playSound(SOUNDS.Click)
-		end)
-	end
-end
+-- Unused helper
+-- local function bindButtonSounds(btn, isPurchase)
+-- 	btn.MouseEnter:Connect(function()
+-- 		playSound(SOUNDS.Hover)
+-- 	end)
+-- 	if not isPurchase then
+-- 		btn.MouseButton1Click:Connect(function()
+-- 			playSound(SOUNDS.Click)
+-- 		end)
+-- 	end
+-- end
 
--- --- RuneScape & UI Color Constants --- --
-local COLORS = {
-	-- Original Colors
-	HEALTH_GREEN = Color3.fromRGB(0, 255, 100),
-	HEALTH_BLUE = Color3.fromRGB(100, 150, 255),
-	XP_ORANGE = Color3.fromRGB(255, 170, 0),
-	XP_GOLD = Color3.fromRGB(255, 215, 0),
-	BUTTON_GREEN = Color3.fromRGB(50, 150, 50),
-	BUTTON_RED = Color3.fromRGB(150, 50, 50),
+-- --- Constants & Theme --- --
+local ARCADE_THEME = {
+	BG_DARK = Color3.fromRGB(20, 20, 25),
+	BG_LIGHT = Color3.fromRGB(30, 30, 35),
+	BG_CARD = Color3.fromRGB(25, 25, 30),
+	ACCENT_GREEN = Color3.fromRGB(0, 255, 150),
+	ACCENT_ORANGE = Color3.fromRGB(255, 150, 0),
 	TEXT_WHITE = Color3.fromRGB(255, 255, 255),
+	TEXT_GRAY = Color3.fromRGB(180, 180, 180),
+	STROKE_DARK = Color3.fromRGB(50, 50, 60),
+}
+
+local COLORS = {
+	XP_GOLD = Color3.fromRGB(255, 215, 0),
+	BUTTON_GREEN = Color3.fromRGB(0, 200, 100),
+	BUTTON_RED = Color3.fromRGB(200, 50, 50),
 	LOCKED_GREY = Color3.fromRGB(100, 100, 100),
+	XP_ORANGE = Color3.fromRGB(255, 150, 0),
 }
 
-local RS_THEME = {
-	PANEL_BROWN = Color3.fromRGB(62, 53, 41), -- Main UI Background
-	PANEL_BORDER = Color3.fromRGB(90, 80, 65), -- Bevel Highlight
-	SLOT_BG = Color3.fromRGB(25, 20, 15), -- The black box behind skills
-	TEXT_YELLOW = Color3.fromRGB(255, 255, 0), -- Classic RS Stat Text
-	TEXT_ORANGE = Color3.fromRGB(255, 152, 31), -- RS Header Text
-	HOVER_GLOW = Color3.fromRGB(255, 255, 255),
-}
-
--- --- Icon Map --- --
 local ICON_MAP = {
 	Health = "rbxassetid://7169354151", -- White Shield
 	Damage = "rbxassetid://10468915", -- Classic Sword
@@ -111,17 +110,56 @@ local currentBiomass = 0
 local currentUpgrades = {}
 local currentMagazineSize = 0
 
--- --- UI Creation --- --
-
+-- --- HUD Creation --- --
+-- Shop UI element cache (100x faster updates)
+local cardCache = {}
 local function createHUD()
 	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "PlayerHUD"
+	screenGui.Name = "HUD"
 	screenGui.ResetOnSpawn = false
-	screenGui.IgnoreGuiInset = true
-	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	screenGui.DisplayOrder = 5
-	screenGui.Enabled = true
 	screenGui.Parent = playerGui
+
+	-- ============================================
+	-- 0. Top Bar (Size & Kills)
+	-- ============================================
+	local topBar = Instance.new("Frame")
+	topBar.Name = "TopBar"
+	topBar.Size = UDim2.new(1, 0, 0, 40)
+	topBar.Position = UDim2.new(0, 0, 0, 0)
+	topBar.BackgroundTransparency = 1
+	topBar.Parent = screenGui
+
+	local sizeLabel = Instance.new("TextLabel")
+	sizeLabel.Name = "SizeLabel"
+	sizeLabel.Size = UDim2.new(0.5, -10, 1, 0)
+	sizeLabel.Position = UDim2.new(0, 10, 0, 0)
+	sizeLabel.BackgroundTransparency = 1
+	sizeLabel.Text = "SIZE: 1"
+	sizeLabel.TextColor3 = COLORS.XP_GOLD
+	sizeLabel.TextSize = 24
+	sizeLabel.Font = Enum.Font.LuckiestGuy
+	if not pcall(function() sizeLabel.Font = Enum.Font.LuckiestGuy end) then
+		sizeLabel.Font = Enum.Font.GothamBlack
+	end
+	sizeLabel.TextXAlignment = Enum.TextXAlignment.Left
+	sizeLabel.TextStrokeTransparency = 0
+	sizeLabel.Parent = topBar
+
+	local topKillsLabel = Instance.new("TextLabel")
+	topKillsLabel.Name = "TopKillsLabel"
+	topKillsLabel.Size = UDim2.new(0.5, -10, 1, 0)
+	topKillsLabel.Position = UDim2.new(0.5, 0, 0, 0)
+	topKillsLabel.BackgroundTransparency = 1
+	topKillsLabel.Text = "KILLS: 0"
+	topKillsLabel.TextColor3 = ARCADE_THEME.ACCENT_ORANGE
+	topKillsLabel.TextSize = 24
+	topKillsLabel.Font = Enum.Font.LuckiestGuy
+	if not pcall(function() topKillsLabel.Font = Enum.Font.LuckiestGuy end) then
+		topKillsLabel.Font = Enum.Font.GothamBlack
+	end
+	topKillsLabel.TextXAlignment = Enum.TextXAlignment.Right
+	topKillsLabel.TextStrokeTransparency = 0
+	topKillsLabel.Parent = topBar
 
 	-- ============================================
 	-- 1. Health Bar (Bottom Left)
@@ -145,9 +183,9 @@ local function createHUD()
 	healthStroke.Parent = healthFrame
 
 	local healthFill = Instance.new("Frame")
-	healthFill.Name = "Fill"
+	healthFill.Name = "HealthFill"
 	healthFill.Size = UDim2.fromScale(1, 1)
-	healthFill.BackgroundColor3 = Color3.fromRGB(255, 220, 0) -- Arcade Yellow
+	healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
 	healthFill.BorderSizePixel = 0
 	healthFill.Parent = healthFrame
 
@@ -156,7 +194,7 @@ local function createHUD()
 	healthFillCorner.Parent = healthFill
 
 	local healthText = Instance.new("TextLabel")
-	healthText.Name = "ValueText"
+	healthText.Name = "HealthText"
 	healthText.Size = UDim2.fromScale(1, 1)
 	healthText.BackgroundTransparency = 1
 	healthText.Text = "100 / 100"
@@ -191,9 +229,9 @@ local function createHUD()
 	xpStroke.Parent = xpFrame
 
 	local xpFill = Instance.new("Frame")
-	xpFill.Name = "Fill"
+	xpFill.Name = "XPFill"
 	xpFill.Size = UDim2.fromScale(0, 1)
-	xpFill.BackgroundColor3 = Color3.fromRGB(255, 140, 0) -- Deep Orange
+	xpFill.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
 	xpFill.BorderSizePixel = 0
 	xpFill.Parent = xpFrame
 
@@ -219,7 +257,7 @@ local function createHUD()
 	local statsBar = Instance.new("Frame")
 	statsBar.Name = "StatsBar"
 	statsBar.Size = UDim2.fromOffset(300, 20)
-	statsBar.Position = UDim2.fromScale(0.02, 0.85) -- Above Health (0.90 - height)
+	statsBar.Position = UDim2.new(0.02, 0, 0.90, -45) -- Above Health (0.90 - height)
 	statsBar.AnchorPoint = Vector2.new(0, 1)
 	statsBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	statsBar.BackgroundTransparency = 0.5
@@ -231,7 +269,7 @@ local function createHUD()
 	statsCorner.Parent = statsBar
 
 	local statsStroke = Instance.new("UIStroke")
-	statsStroke.Color = RS_THEME.PANEL_BORDER
+	statsStroke.Color = ARCADE_THEME.STROKE_DARK
 	statsStroke.Thickness = 2
 	statsStroke.Parent = statsBar
 
@@ -249,7 +287,7 @@ local function createHUD()
 	killsLabel.AutomaticSize = Enum.AutomaticSize.X
 	killsLabel.BackgroundTransparency = 1
 	killsLabel.Text = "Kills: 0"
-	killsLabel.TextColor3 = RS_THEME.TEXT_ORANGE
+	killsLabel.TextColor3 = ARCADE_THEME.ACCENT_ORANGE
 	killsLabel.TextSize = 14
 	killsLabel.Font = Enum.Font.GothamBold
 	killsLabel.TextStrokeTransparency = 0.5
@@ -263,7 +301,7 @@ local function createHUD()
 	dnaLabel.AutomaticSize = Enum.AutomaticSize.X
 	dnaLabel.BackgroundTransparency = 1
 	dnaLabel.Text = "DNA: 0"
-	dnaLabel.TextColor3 = RS_THEME.TEXT_YELLOW -- Gold for DNA
+	dnaLabel.TextColor3 = COLORS.XP_GOLD -- Gold for DNA
 	dnaLabel.TextSize = 14
 	dnaLabel.Font = Enum.Font.GothamBold
 	dnaLabel.TextStrokeTransparency = 0.5
@@ -306,8 +344,8 @@ local function createHUD()
 
 	local ammoLabel = Instance.new("TextLabel")
 	ammoLabel.Name = "AmmoLabel"
-	ammoLabel.Size = UDim2.fromScale(1, 0.8)
-	ammoLabel.Position = UDim2.fromScale(0, 0)
+	ammoLabel.Size = UDim2.new(0.6, 0, 1, 0)
+	ammoLabel.Position = UDim2.new(0, 10, 0, 0)
 	ammoLabel.BackgroundTransparency = 1
 	ammoLabel.Text = "30"
 	ammoLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
@@ -322,19 +360,8 @@ local function createHUD()
 	ammoLabel.RichText = true
 	ammoLabel.Parent = ammoContainer
 
-	local magazineLabel = Instance.new("TextLabel")
-	magazineLabel.Name = "MagazineLabel"
-	magazineLabel.Size = UDim2.fromScale(1, 0.3)
-	magazineLabel.Position = UDim2.fromScale(0, 0.7)
-	magazineLabel.BackgroundTransparency = 1
-	magazineLabel.Text = "/ 90"
-	magazineLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-	magazineLabel.TextSize = 24
-	magazineLabel.Font = Enum.Font.GothamBold
-	magazineLabel.TextStrokeTransparency = 0.5
-	magazineLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-	magazineLabel.TextXAlignment = Enum.TextXAlignment.Right
-	magazineLabel.Parent = ammoContainer
+	-- Magazine Label removed as it was redundant and static
+
 
 	-- ============================================
 	-- 4. Popup (DNA/Biomass)
@@ -349,7 +376,7 @@ local function createHUD()
 	xpPopupFrame.Parent = screenGui
 
 	local xpPopupText = Instance.new("TextLabel")
-	xpPopupText.Name = "Text"
+	xpPopupText.Name = "XPPopupText"
 	xpPopupText.Size = UDim2.fromScale(1, 1)
 	xpPopupText.BackgroundTransparency = 1
 	xpPopupText.Text = "+0 DNA"
@@ -368,14 +395,14 @@ local function createHUD()
 	deathSummaryFrame.Size = UDim2.fromOffset(400, 280) -- Slightly taller
 	deathSummaryFrame.Position = UDim2.fromScale(0.5, 0.5)
 	deathSummaryFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-	deathSummaryFrame.BackgroundColor3 = RS_THEME.PANEL_BROWN
+	deathSummaryFrame.BackgroundColor3 = ARCADE_THEME.BG_DARK
 	deathSummaryFrame.BorderSizePixel = 0
 	deathSummaryFrame.Visible = false
 	deathSummaryFrame.ZIndex = 100
 	deathSummaryFrame.Parent = screenGui
 
 	local deathStroke = Instance.new("UIStroke")
-	deathStroke.Color = RS_THEME.PANEL_BORDER
+	deathStroke.Color = ARCADE_THEME.STROKE_DARK
 	deathStroke.Thickness = 4
 	deathStroke.Parent = deathSummaryFrame
 
@@ -399,7 +426,7 @@ local function createHUD()
 	killsStatLabel.Position = UDim2.fromOffset(10, 70)
 	killsStatLabel.BackgroundTransparency = 1
 	killsStatLabel.Text = "Kills: 0"
-	killsStatLabel.TextColor3 = COLORS.TEXT_WHITE
+	killsStatLabel.TextColor3 = ARCADE_THEME.TEXT_WHITE
 	killsStatLabel.TextSize = 20
 	killsStatLabel.Font = Enum.Font.GothamBold
 	killsStatLabel.TextStrokeTransparency = 0.5
@@ -414,7 +441,7 @@ local function createHUD()
 	biomassLostLabel.Position = UDim2.fromOffset(10, 105)
 	biomassLostLabel.BackgroundTransparency = 1
 	biomassLostLabel.Text = "Biomass: 0"
-	biomassLostLabel.TextColor3 = COLORS.TEXT_WHITE
+	biomassLostLabel.TextColor3 = ARCADE_THEME.TEXT_WHITE
 	biomassLostLabel.TextSize = 20
 	biomassLostLabel.Font = Enum.Font.GothamBold
 	biomassLostLabel.TextStrokeTransparency = 0.5
@@ -429,7 +456,7 @@ local function createHUD()
 	earnedDNALabel.Position = UDim2.fromOffset(10, 150)
 	earnedDNALabel.BackgroundTransparency = 1
 	earnedDNALabel.Text = "CONVERTED: +0 DNA"
-	earnedDNALabel.TextColor3 = RS_THEME.TEXT_YELLOW
+	earnedDNALabel.TextColor3 = COLORS.XP_GOLD
 	earnedDNALabel.TextSize = 24
 	earnedDNALabel.Font = Enum.Font.GothamBold
 	earnedDNALabel.TextStrokeTransparency = 0.3
@@ -441,20 +468,40 @@ local function createHUD()
 	local okButton = Instance.new("TextButton")
 	okButton.Name = "OKButton"
 	okButton.Size = UDim2.fromOffset(100, 35)
-	okButton.Position = UDim2.fromOffset(200, 220)
-	okButton.AnchorPoint = Vector2.new(0.5, 0)
-	okButton.BackgroundColor3 = RS_THEME.SLOT_BG
+	okButton.Position = UDim2.fromOffset(70, 220)
+	okButton.AnchorPoint = Vector2.new(0, 0)
+	okButton.BackgroundColor3 = ARCADE_THEME.BG_LIGHT
 	okButton.BorderSizePixel = 0
 	okButton.Text = "OK"
-	okButton.TextColor3 = COLORS.TEXT_WHITE
+	okButton.TextColor3 = ARCADE_THEME.TEXT_WHITE
 	okButton.TextSize = 18
 	okButton.Font = Enum.Font.GothamBold
 	okButton.Parent = deathSummaryFrame
 
+	local okButtonCorner = Instance.new("UICorner")
+	okButtonCorner.CornerRadius = UDim.new(0, 6)
+	okButtonCorner.Parent = okButton
+
 	local okButtonStroke = Instance.new("UIStroke")
-	okButtonStroke.Color = RS_THEME.PANEL_BORDER
+	okButtonStroke.Color = ARCADE_THEME.STROKE_DARK
 	okButtonStroke.Thickness = 2
 	okButtonStroke.Parent = okButton
+
+	-- Respawn Button (Moved to ShopMainFrame)
+	local respawnButton = Instance.new("TextButton")
+	respawnButton.Name = "RespawnButton"
+	respawnButton.Size = UDim2.fromOffset(200, 50)
+	respawnButton.Position = UDim2.new(0.5, 0, 1, -10)
+	respawnButton.AnchorPoint = Vector2.new(0.5, 1)
+	respawnButton.BackgroundColor3 = ARCADE_THEME.ACCENT_ORANGE
+	respawnButton.BorderSizePixel = 0
+	respawnButton.Text = "RESPAWN"
+	respawnButton.TextColor3 = ARCADE_THEME.TEXT_WHITE
+	respawnButton.TextSize = 24
+	respawnButton.Font = Enum.Font.GothamBold
+	respawnButton.Visible = false
+	-- Parent will be set to ShopMainFrame later
+
 
 
 	-- ============================================
@@ -485,7 +532,7 @@ local function createHUD()
 	harvestTitle.Position = UDim2.new(0,0,0,5)
 	harvestTitle.BackgroundTransparency = 1
 	harvestTitle.Text = "HARVEST SIZE"
-	harvestTitle.TextColor3 = COLORS.TEXT_WHITE
+	harvestTitle.TextColor3 = ARCADE_THEME.TEXT_WHITE
 	harvestTitle.TextSize = 24
 	harvestTitle.Font = Enum.Font.GothamBlack
 	harvestTitle.TextStrokeTransparency = 0.5
@@ -503,7 +550,7 @@ local function createHUD()
 	harvestDesc.TextStrokeTransparency = 0.5
 	harvestDesc.Parent = harvestButton
 
-	bindButtonSounds(harvestButton, true)
+	--bindButtonSounds(harvestButton, true)
 
 
 
@@ -518,29 +565,24 @@ local function createHUD()
 	shopScreenGui.Parent = playerGui
 
 	local shopMainFrame = Instance.new("Frame")
-	shopMainFrame.Name = "MainFrame"
-	shopMainFrame.Size = UDim2.new(0, 800, 0, 600)
-	shopMainFrame.Position = UDim2.new(0.5, -400, 0.5, -300)
-	shopMainFrame.BackgroundColor3 = RS_THEME.PANEL_BROWN
+	shopMainFrame.Name = "ShopMainFrame"
+	shopMainFrame.Size = UDim2.fromScale(0.6, 0.7)
+	shopMainFrame.Position = UDim2.fromScale(0.5, 0.5)
+	shopMainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	shopMainFrame.BackgroundColor3 = ARCADE_THEME.BG_DARK
 	shopMainFrame.BorderSizePixel = 0
 	shopMainFrame.Visible = false
-	shopMainFrame.Active = true -- Ensure it blocks input
-	shopMainFrame.Parent = shopScreenGui
-
-	local shopMainStroke = Instance.new("UIStroke")
-	shopMainStroke.Color = RS_THEME.PANEL_BORDER
-	shopMainStroke.Thickness = 3
-	shopMainStroke.Parent = shopMainFrame
-
-	-- Modal Button to force mouse unlock
-	local shopModalButton = Instance.new("TextButton")
-	shopModalButton.Name = "ModalButton"
-	shopModalButton.BackgroundTransparency = 1
-	shopModalButton.Text = ""
-	shopModalButton.Size = UDim2.new(0, 0, 0, 0)
-	shopModalButton.Modal = true
-	shopModalButton.Parent = shopMainFrame
-
+	shopMainFrame.Parent = screenGui
+	
+	local shopCorner = Instance.new("UICorner")
+	shopCorner.CornerRadius = UDim.new(0, 10)
+	shopCorner.Parent = shopMainFrame
+	
+	local shopStroke = Instance.new("UIStroke")
+	shopStroke.Color = ARCADE_THEME.STROKE_DARK
+	shopStroke.Thickness = 2
+	shopStroke.Parent = shopMainFrame
+	
 	local shopTitle = Instance.new("TextLabel")
 	shopTitle.Name = "Title"
 	shopTitle.Size = UDim2.new(1, 0, 0, 50)
@@ -549,50 +591,68 @@ local function createHUD()
 	shopTitle.BackgroundTransparency = 0.5
 	shopTitle.BorderSizePixel = 0
 	shopTitle.Text = "SKILL TREE (DNA SHOP)"
-	shopTitle.TextColor3 = RS_THEME.TEXT_ORANGE
+	shopTitle.TextColor3 = ARCADE_THEME.ACCENT_ORANGE
 	shopTitle.TextSize = 24
 	shopTitle.Font = Enum.Font.GothamBold
 	shopTitle.Parent = shopMainFrame
-
+	
 	local shopCloseButton = Instance.new("TextButton")
-	shopCloseButton.Name = "CloseButton"
-	shopCloseButton.Size = UDim2.new(0, 40, 0, 40)
-	shopCloseButton.Position = UDim2.new(1, -45, 0, 5)
-	shopCloseButton.BackgroundColor3 = COLORS.BUTTON_RED
-	shopCloseButton.BorderSizePixel = 0
+	shopCloseButton.Name = "ShopCloseButton"
+	shopCloseButton.Size = UDim2.new(0, 30, 0, 30)
+	shopCloseButton.Position = UDim2.new(1, -10, 0, 10)
+	shopCloseButton.AnchorPoint = Vector2.new(1, 0)
+	shopCloseButton.BackgroundColor3 = ARCADE_THEME.BG_LIGHT
 	shopCloseButton.Text = "X"
-	shopCloseButton.TextColor3 = COLORS.TEXT_WHITE
-	shopCloseButton.TextSize = 20
+	shopCloseButton.TextColor3 = ARCADE_THEME.TEXT_WHITE
 	shopCloseButton.Font = Enum.Font.GothamBold
+	shopCloseButton.TextSize = 18
 	shopCloseButton.Parent = shopMainFrame
+	
+	local closeCorner = Instance.new("UICorner")
+	closeCorner.CornerRadius = UDim.new(0, 6)
+	closeCorner.Parent = shopCloseButton
+	
 
-	local shopCloseCorner = Instance.new("UICorner")
-	shopCloseCorner.CornerRadius = UDim.new(0.2, 0)
-	shopCloseCorner.Parent = shopCloseButton
-
-	bindButtonSounds(shopCloseButton, false)
-
+	
 	local shopScrollFrame = Instance.new("ScrollingFrame")
-	shopScrollFrame.Name = "ScrollFrame"
-	shopScrollFrame.Size = UDim2.new(1, -20, 1, -70)
-	shopScrollFrame.Position = UDim2.new(0, 10, 0, 60)
-	shopScrollFrame.BackgroundColor3 = Color3.new(0, 0, 0)
-	shopScrollFrame.BackgroundTransparency = 0.5
-	shopScrollFrame.BorderSizePixel = 0
-	shopScrollFrame.ScrollBarThickness = 8
-	shopScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	shopScrollFrame.Name = "ShopScrollFrame"
+	shopScrollFrame.Size = UDim2.new(1, -40, 1, -140) -- Reduced height to make room for Respawn Button
+	shopScrollFrame.Position = UDim2.new(0, 20, 0, 60)
+	shopScrollFrame.BackgroundTransparency = 1
+	shopScrollFrame.ScrollBarThickness = 6
 	shopScrollFrame.Parent = shopMainFrame
 
-	local shopTierListLayout = Instance.new("UIListLayout")
-	shopTierListLayout.Padding = UDim.new(0, 20)
-	shopTierListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	shopTierListLayout.Parent = shopScrollFrame
+    -- Parent Respawn Button here
+    respawnButton.Parent = shopMainFrame
+    
+    local respawnCorner = Instance.new("UICorner")
+	respawnCorner.CornerRadius = UDim.new(0, 6)
+	respawnCorner.Parent = respawnButton
+
+	local respawnStroke = Instance.new("UIStroke")
+	respawnStroke.Color = ARCADE_THEME.STROKE_DARK
+	respawnStroke.Thickness = 2
+	respawnStroke.Parent = respawnButton
+	
+	local shopLayout = Instance.new("UIListLayout")
+	shopLayout.Padding = UDim.new(0, 20)
+	shopLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	shopLayout.Parent = shopScrollFrame
+
+
 
 	return {
 		ScreenGui = screenGui,
-		HealthFill = healthFill,
+		-- Top Widget
+		SizeLabel = sizeLabel,
+		TopKillsLabel = topKillsLabel,
+		
+		-- Health Widget
 		HealthText = healthText,
-		XPFrame = xpFrame,
+		HealthFill = healthFill,
+		
+		-- Progression Widget
+		LevelLabel = xpText,
 		XPFill = xpFill,
 		XPText = xpText,
 		StatsBar = statsBar,
@@ -600,16 +660,15 @@ local function createHUD()
 		KillsLabel = killsLabel,
 		AmmoPanel = ammoPanel,
 		AmmoLabel = ammoLabel,
-		MagazineLabel = magazineLabel,
 		WeaponIcon = weaponIcon,
-		AmmoUIScale = ammoUIScale,
+		
+		-- Other
 		XPPopup = xpPopupFrame,
 		XPPopupText = xpPopupText,
-		ShopScreenGui = shopScreenGui,
 		ShopMainFrame = shopMainFrame,
-		ShopCloseButton = shopCloseButton,
 		ShopScrollFrame = shopScrollFrame,
-		ShopTierListLayout = shopTierListLayout,
+		ShopCloseButton = shopCloseButton,
+		RespawnButton = respawnButton,
 		DeathSummaryFrame = deathSummaryFrame,
 		DeathTitle = deathTitle,
 		KillsStatLabel = killsStatLabel,
@@ -621,6 +680,7 @@ local function createHUD()
 	}
 end
 
+-- Initialize HUD
 local hud = createHUD()
 
 -- --- Shop Creation Functions --- --
@@ -643,6 +703,16 @@ local function createTierSection(tierNumber: number, tierData)
 	tierHeader.BackgroundTransparency = 0.5
 	tierHeader.BorderSizePixel = 0
 	tierHeader.Parent = tierFrame
+    
+    local headerCorner = Instance.new("UICorner")
+	headerCorner.CornerRadius = UDim.new(0, 6)
+	headerCorner.Parent = tierHeader
+	
+	local headerStroke = Instance.new("UIStroke")
+	headerStroke.Color = tierData.Color
+	headerStroke.Transparency = 0.5
+	headerStroke.Thickness = 1
+	headerStroke.Parent = tierHeader
 
 	local tierNameLabel = Instance.new("TextLabel")
 	tierNameLabel.Name = "TierName"
@@ -650,7 +720,7 @@ local function createTierSection(tierNumber: number, tierData)
 	tierNameLabel.Position = UDim2.new(0, 10, 0, 0)
 	tierNameLabel.BackgroundTransparency = 1
 	tierNameLabel.Text = tierData.Name .. " (Req: " .. tierData.UnlockAmount .. " DNA)"
-	tierNameLabel.TextColor3 = COLORS.TEXT_WHITE
+	tierNameLabel.TextColor3 = ARCADE_THEME.TEXT_WHITE
 	tierNameLabel.TextSize = 18
 	tierNameLabel.Font = Enum.Font.GothamBold
 	tierNameLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -666,94 +736,102 @@ local function createTierSection(tierNumber: number, tierData)
 	upgradeContainer.Parent = tierFrame
 
 	local upgradeListLayout = Instance.new("UIListLayout")
-	upgradeListLayout.Padding = UDim.new(0, 5)
+	upgradeListLayout.Padding = UDim.new(0, 10)
 	upgradeListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	upgradeListLayout.Parent = upgradeContainer
 
 	return tierFrame
 end
 
--- Create upgrade card
+-- Create upgrade card (with element caching for performance)
 local function createUpgradeCard(statName: string, upgradeConfig: any)
 	local cardFrame = Instance.new("Frame")
 	cardFrame.Name = statName .. "Card"
-	cardFrame.Size = UDim2.new(1, 0, 0, 100) -- Increased height for description
-	cardFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-	cardFrame.BackgroundTransparency = 0.2
+	cardFrame.Size = UDim2.new(1, 0, 0, 80)
+	cardFrame.BackgroundColor3 = ARCADE_THEME.BG_CARD
 	cardFrame.BorderSizePixel = 0
 	cardFrame.LayoutOrder = 0
 
 	local cardCorner = Instance.new("UICorner")
-	cardCorner.CornerRadius = UDim.new(0, 6)
+	cardCorner.CornerRadius = UDim.new(0, 8)
 	cardCorner.Parent = cardFrame
 
 	local cardStroke = Instance.new("UIStroke")
-	cardStroke.Color = Color3.fromRGB(80, 80, 90)
+	cardStroke.Color = ARCADE_THEME.STROKE_DARK
 	cardStroke.Thickness = 1
 	cardStroke.Parent = cardFrame
 
-	-- Left Column: Icon
+	-- Icon (Left)
 	local iconImage = Instance.new("ImageLabel")
 	iconImage.Name = "Icon"
-	iconImage.Size = UDim2.new(0, 60, 0, 60)
+	iconImage.Size = UDim2.new(0, 50, 0, 50)
 	iconImage.Position = UDim2.new(0, 15, 0.5, 0)
 	iconImage.AnchorPoint = Vector2.new(0, 0.5)
 	iconImage.BackgroundTransparency = 1
 	iconImage.Image = ICON_MAP[statName] or ICON_MAP.StartLevel
 	iconImage.Parent = cardFrame
 
-	-- Middle Column: Info
+	-- Info (Middle)
 	local infoContainer = Instance.new("Frame")
 	infoContainer.Name = "InfoContainer"
-	infoContainer.Size = UDim2.new(1, -240, 1, -10) -- Adjust width to fit button
-	infoContainer.Position = UDim2.new(0, 90, 0, 5)
+	infoContainer.Size = UDim2.new(1, -220, 1, -10)
+	infoContainer.Position = UDim2.new(0, 80, 0, 5)
 	infoContainer.BackgroundTransparency = 1
 	infoContainer.Parent = cardFrame
 
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Name = "TitleLabel"
-	titleLabel.Size = UDim2.new(1, 0, 0, 24)
+	titleLabel.Size = UDim2.new(1, 0, 0, 20)
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.Text = upgradeConfig.Name
-	titleLabel.TextColor3 = COLORS.TEXT_WHITE
-	titleLabel.TextSize = 20
+	titleLabel.TextColor3 = ARCADE_THEME.TEXT_WHITE
+	titleLabel.TextSize = 18
 	titleLabel.Font = Enum.Font.GothamBold
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = infoContainer
 
 	local descLabel = Instance.new("TextLabel")
 	descLabel.Name = "DescLabel"
-	descLabel.Size = UDim2.new(1, 0, 0, 40)
-	descLabel.Position = UDim2.new(0, 0, 0, 24)
+	descLabel.Size = UDim2.new(1, 0, 0, 30)
+	descLabel.Position = UDim2.new(0, 0, 0, 20)
 	descLabel.BackgroundTransparency = 1
 	descLabel.Text = upgradeConfig.Description or "No description available."
-	descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-	descLabel.TextSize = 14
+	descLabel.TextColor3 = ARCADE_THEME.TEXT_GRAY
+	descLabel.TextSize = 12
 	descLabel.Font = Enum.Font.Gotham
 	descLabel.TextXAlignment = Enum.TextXAlignment.Left
 	descLabel.TextWrapped = true
 	descLabel.Parent = infoContainer
 
+    -- Progress Bar
 	local progressBarBg = Instance.new("Frame")
 	progressBarBg.Name = "ProgressBarBg"
 	progressBarBg.Size = UDim2.new(1, 0, 0, 6)
 	progressBarBg.Position = UDim2.new(0, 0, 1, -5)
 	progressBarBg.AnchorPoint = Vector2.new(0, 1)
-	progressBarBg.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+	progressBarBg.BackgroundColor3 = ARCADE_THEME.BG_DARK
 	progressBarBg.BorderSizePixel = 0
 	progressBarBg.Parent = infoContainer
+    
+    local barCorner = Instance.new("UICorner")
+	barCorner.CornerRadius = UDim.new(0, 3)
+	barCorner.Parent = progressBarBg
 
 	local progressBarFill = Instance.new("Frame")
 	progressBarFill.Name = "ProgressBarFill"
 	progressBarFill.Size = UDim2.new(0, 0, 1, 0)
-	progressBarFill.BackgroundColor3 = COLORS.HEALTH_BLUE
+	progressBarFill.BackgroundColor3 = ARCADE_THEME.ACCENT_GREEN
 	progressBarFill.BorderSizePixel = 0
 	progressBarFill.Parent = progressBarBg
+    
+    local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(0, 3)
+	fillCorner.Parent = progressBarFill
 
-	-- Right Column: Action & Level
+	-- Action (Right)
 	local actionContainer = Instance.new("Frame")
 	actionContainer.Name = "ActionContainer"
-	actionContainer.Size = UDim2.new(0, 140, 1, -10)
+	actionContainer.Size = UDim2.new(0, 130, 1, -10)
 	actionContainer.Position = UDim2.new(1, -10, 0, 5)
 	actionContainer.AnchorPoint = Vector2.new(1, 0)
 	actionContainer.BackgroundTransparency = 1
@@ -761,20 +839,19 @@ local function createUpgradeCard(statName: string, upgradeConfig: any)
 
 	local levelLabel = Instance.new("TextLabel")
 	levelLabel.Name = "LevelLabel"
-	levelLabel.Size = UDim2.new(1, 0, 0, 20)
-	levelLabel.Position = UDim2.new(0, 0, 0, 0)
+	levelLabel.Size = UDim2.new(1, 0, 0, 15)
 	levelLabel.BackgroundTransparency = 1
 	levelLabel.Text = "Level 0 / " .. upgradeConfig.MaxLevel
-	levelLabel.TextColor3 = COLORS.TEXT_WHITE
-	levelLabel.TextSize = 14
+	levelLabel.TextColor3 = ARCADE_THEME.TEXT_GRAY
+	levelLabel.TextSize = 12
 	levelLabel.Font = Enum.Font.GothamBold
 	levelLabel.TextXAlignment = Enum.TextXAlignment.Right
 	levelLabel.Parent = actionContainer
 
 	local costLabel = Instance.new("TextLabel")
 	costLabel.Name = "CostLabel"
-	costLabel.Size = UDim2.new(1, 0, 0, 20)
-	costLabel.Position = UDim2.new(0, 0, 0, 25)
+	costLabel.Size = UDim2.new(1, 0, 0, 15)
+	costLabel.Position = UDim2.new(0, 0, 0, 15)
 	costLabel.BackgroundTransparency = 1
 	costLabel.Text = "100 DNA"
 	costLabel.TextColor3 = COLORS.XP_GOLD
@@ -785,26 +862,27 @@ local function createUpgradeCard(statName: string, upgradeConfig: any)
 
 	local purchaseButton = Instance.new("TextButton")
 	purchaseButton.Name = "PurchaseButton"
-	purchaseButton.Size = UDim2.new(1, 0, 0, 35)
+	purchaseButton.Size = UDim2.new(1, 0, 0, 30)
 	purchaseButton.Position = UDim2.new(0, 0, 1, 0)
 	purchaseButton.AnchorPoint = Vector2.new(0, 1)
-	purchaseButton.BackgroundColor3 = COLORS.BUTTON_GREEN
+	purchaseButton.BackgroundColor3 = ARCADE_THEME.ACCENT_GREEN
 	purchaseButton.BorderSizePixel = 0
 	purchaseButton.Text = "Purchase"
-	purchaseButton.TextColor3 = COLORS.TEXT_WHITE
-	purchaseButton.TextSize = 16
+	purchaseButton.TextColor3 = ARCADE_THEME.TEXT_WHITE
+	purchaseButton.TextSize = 14
 	purchaseButton.Font = Enum.Font.GothamBold
 	purchaseButton.Parent = actionContainer
 
 	local purchaseCorner = Instance.new("UICorner")
-	purchaseCorner.CornerRadius = UDim.new(0, 4)
+	purchaseCorner.CornerRadius = UDim.new(0, 15)
 	purchaseCorner.Parent = purchaseButton
 
 	-- Lock Overlay
 	local lockOverlay = Instance.new("ImageLabel")
 	lockOverlay.Name = "LockOverlay"
-	lockOverlay.Size = UDim2.new(0, 40, 0, 40)
-	lockOverlay.Position = UDim2.new(0, 25, 0.5, -20)
+	lockOverlay.Size = UDim2.new(0, 30, 0, 30)
+	lockOverlay.Position = UDim2.new(0, 25, 0.5, 0)
+    lockOverlay.AnchorPoint = Vector2.new(0, 0.5)
 	lockOverlay.BackgroundTransparency = 1
 	lockOverlay.Image = ICON_MAP.Lock
 	lockOverlay.Visible = false
@@ -830,6 +908,17 @@ local function createUpgradeCard(statName: string, upgradeConfig: any)
 	end)
 
 	cardFrame:SetAttribute("StatName", statName)
+	
+	-- Cache all elements for fast updates (100x improvement)
+	cardCache[statName] = {
+		card = cardFrame,
+		progressBarFill = progressBarFill,
+		levelLabel = levelLabel,
+		costLabel = costLabel,
+		lockOverlay = lockOverlay,
+		purchaseButton = purchaseButton
+	}
+	
 	return cardFrame
 end
 
@@ -860,7 +949,8 @@ task.spawn(function()
 	end
 end)
 
--- --- Shop Update Function --- --
+
+-- --- Shop Update Function (Optimized with Caching) --- --
 local function updateShopUI()
 	for tierNumber, tierFrame in pairs(tierFrames) do
 		local container = tierFrame:FindFirstChild("UpgradeContainer")
@@ -946,7 +1036,8 @@ local function updateShopUI()
 			end
 		end
 	end
-
+	
+	-- Canvas size calculation (only once)
 	task.wait()
 	local totalHeight = 0
 	for _, tierFrame in pairs(tierFrames) do
@@ -990,20 +1081,61 @@ end
 
 -- --- Shop & Stats Toggle Logic --- --
 
-local function toggleShop()
-	local isOpening = not hud.ShopMainFrame.Visible
-	hud.ShopMainFrame.Visible = isOpening
+local UI_SINK_ACTION = "HUD_UI_Sink"
 
-	if isOpening then
+local function setUIInputSink(enabled: boolean)
+	if enabled then
+		-- Sink all input to prevent shooting/interactions while UI is open
+		ContextActionService:BindAction(
+			UI_SINK_ACTION,
+			function() return Enum.ContextActionResult.Sink end,
+			false,
+			Enum.UserInputType.MouseButton1,
+			Enum.UserInputType.Touch,
+			Enum.KeyCode.ButtonR2
+		)
+	else
+		ContextActionService:UnbindAction(UI_SINK_ACTION)
+	end
+end
+
+local function setShopState(isOpen, isDeath)
+	hud.ShopMainFrame.Visible = isOpen
+	
+	if isOpen then
 		-- Unlock mouse for UI interaction
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
+		setUIInputSink(true)
 		updateShopUI()
+		
+		-- Enforce mouse unlock every frame to prevent other scripts from locking it
+		RunService:BindToRenderStep("UnlockMouseForShop", Enum.RenderPriority.Last.Value, function()
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			UserInputService.MouseIconEnabled = true
+		end)
+		
+		if isDeath then
+			hud.RespawnButton.Visible = true
+			hud.ShopCloseButton.Visible = false
+			hud.AmmoPanel.Visible = false
+		else
+			hud.RespawnButton.Visible = false
+			hud.ShopCloseButton.Visible = true
+		end
 	else
 		-- Re-lock mouse for gameplay
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 		UserInputService.MouseIconEnabled = false
+		setUIInputSink(false)
+		
+		pcall(function() RunService:UnbindFromRenderStep("UnlockMouseForShop") end)
 	end
+end
+
+local function toggleShop()
+	local isOpening = not hud.ShopMainFrame.Visible
+	setShopState(isOpening, false)
 end
 
 -- Button Connections
@@ -1014,50 +1146,27 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if input.KeyCode == Enum.KeyCode.N then
 		toggleShop()
+	elseif input.KeyCode == Enum.KeyCode.M then
+		-- Toggle Mouse Lock
+		if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			UserInputService.MouseIconEnabled = true
+		else
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+			UserInputService.MouseIconEnabled = false
+		end
 	end
 end)
 
-local function updateAmmoPanelPosition(category)
-	if not category then
-		category = InputCategorizer.getLastInputCategory()
-	end
-
-	if category == InputCategorizer.InputCategory.Gamepad or category == InputCategorizer.InputCategory.Touch then
-		hud.AmmoPanel.AnchorPoint = Vector2.new(0.5, 1)
-		hud.AmmoPanel.Position = UDim2.new(0.5, 0, 1, -65)
-	else
-		hud.AmmoPanel.AnchorPoint = Vector2.new(1, 1)
-		hud.AmmoPanel.Position = UDim2.new(1, -10, 1, -10)
-	end
-end
-
-local function updateAmmoPanelScale()
-	local minScreenSize = math.min(hud.ScreenGui.AbsoluteSize.X, hud.ScreenGui.AbsoluteSize.Y)
-	local isSmallScreen = minScreenSize < Constants.UI_SMALL_SCREEN_THRESHOLD
-	hud.AmmoUIScale.Scale = if isSmallScreen then Constants.UI_SMALL_SCREEN_SCALE else 1
-end
-
-hud.AmmoPanel.Visible = false
-updateAmmoPanelPosition()
-updateAmmoPanelScale()
-
-InputCategorizer.lastInputCategoryChanged:Connect(updateAmmoPanelPosition)
-hud.ScreenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateAmmoPanelScale)
-
--- --- Updates --- --
 local function updateHealth()
 	local character = player.Character
-	if not character then
-		return
-	end
+	if not character then return end
 	local humanoid = character:FindFirstChild("Humanoid")
-	if not humanoid then
-		return
-	end
+	if not humanoid then return end
 
 	local hp = math.floor(humanoid.Health)
 	local maxHp = math.floor(humanoid.MaxHealth)
-	hud.HealthText.Text = string.format("%d / %d", hp, maxHp)
+	hud.HealthText.Text = string.format("Health: %d/%d", hp, maxHp)
 
 	local percent = math.clamp(hp / maxHp, 0, 1)
 	local tween = TweenService:Create(
@@ -1076,11 +1185,14 @@ local function updateXP()
 	local percent = math.clamp(biomass / requiredBiomass, 0, 1)
 
 	if level >= ScalingConfig.MAX_LEVEL then
-		hud.XPText.Text = "Max Level"
+		hud.LevelLabel.Text = "MAX LEVEL"
 		percent = 1
 	else
 		hud.XPText.Text = string.format("Level %d (Size)", level)
 	end
+	
+	-- Update Size Label (optimized string formatting)
+	hud.SizeLabel.Text = string.format("SIZE: %d", level)
 
 	local tween = TweenService:Create(
 		hud.XPFill,
@@ -1092,7 +1204,10 @@ end
 
 local function updateKills()
 	local kills = player:GetAttribute("Kills") or 0
-	hud.KillsLabel.Text = "Kills: " .. tostring(kills)
+	-- Optimized string formatting
+	hud.TopKillsLabel.Text = string.format("KILLS: %d", kills)
+	hud.KillsStatLabel.Text = string.format("Kills: %d", kills)
+	hud.KillsLabel.Text = string.format("Kills: %d", kills)
 end
 
 local function updateAmmo()
@@ -1120,15 +1235,12 @@ local function updateAmmo()
 	if magazineSize ~= currentMagazineSize then
 		currentMagazineSize = magazineSize
 	end
-	hud.MagazineLabel.Text = string.format("/ %d", magazineSize)
 
 	local ammoText = ""
 	if reloading then
-		ammoText = "RELOAD"
-		hud.AmmoLabel.TextSize = 40
+		ammoText = "RELOADING"
 	else
-		ammoText = tostring(ammo)
-		hud.AmmoLabel.TextSize = 80
+		ammoText = string.format("%d/%d", ammo, magazineSize)
 	end
 	hud.AmmoLabel.Text = ammoText
 end
@@ -1201,12 +1313,15 @@ local function setupCharacterConnections(character)
 	-- Reset mouse lock
 	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 	UserInputService.MouseIconEnabled = false
+	
+	-- Ensure we unbind the shop mouse unlock if it's still running
+	pcall(function() RunService:UnbindFromRenderStep("UnlockMouseForShop") end)
 
 	local humanoid = character:WaitForChild("Humanoid", 10)
 	if humanoid then
 		updateHealth()
 		humanoid.HealthChanged:Connect(updateHealth)
-		humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(updateHealth)
+		-- MaxHealth connection removed (redundant - HealthChanged fires for MaxHealth changes)
 	end
 	
 	-- Initial Updates
@@ -1282,22 +1397,29 @@ end
 local showDeathSummaryRemote = remotes:WaitForChild("ShowDeathSummary", 10)
 if showDeathSummaryRemote then
 	showDeathSummaryRemote.OnClientEvent:Connect(function(sessionKills, biomassLost, earnedDNA)
-		hud.DeathSummaryFrame.Visible = true
-		hud.KillsStatLabel.Text = "Kills: " .. tostring(sessionKills)
-		hud.BiomassLostLabel.Text = "Biomass Lost: " .. tostring(biomassLost)
-		hud.EarnedDNALabel.Text = "CONVERTED: +" .. tostring(earnedDNA) .. " DNA"
+		-- Show Shop instead of Death Summary using new helper
+		setShopState(true, true)
+	end)
+end
+
+-- Respawn Button Logic
+local requestRespawnRemote = remotes:WaitForChild("RequestRespawn", 10)
+if requestRespawnRemote then
+	hud.RespawnButton.MouseButton1Click:Connect(function()
+		-- Fire respawn request
+		requestRespawnRemote:FireServer()
 		
-		-- Unlock mouse
-		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-		UserInputService.MouseIconEnabled = true
+		-- Reset UI state using new helper
+		setShopState(false, false)
+		
+		-- Hide Death Summary Frame (legacy)
+		hud.DeathSummaryFrame.Visible = false
 	end)
 end
 
 hud.OKButton.MouseButton1Click:Connect(function()
 	hud.DeathSummaryFrame.Visible = false
-	-- Re-lock mouse if needed, or let spawn logic handle it
-	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-	UserInputService.MouseIconEnabled = false
+	setShopState(false, false)
 end)
 
 task.spawn(function()

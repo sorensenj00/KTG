@@ -29,6 +29,7 @@ local COLORS = {
 	RANK_3 = Color3.fromRGB(205, 127, 50), -- Bronze
 	RANK_OTHER = Color3.fromRGB(40, 40, 40), -- Dark Grey
 	TEXT_WHITE = Color3.fromRGB(255, 255, 255),
+	TEXT_SUB = Color3.fromRGB(200, 200, 200),
 }
 
 -- State
@@ -51,7 +52,7 @@ local function createLeaderboardUI()
 
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Name = "Container"
-	mainFrame.Size = UDim2.new(0, 600, 0, 100)
+	mainFrame.Size = UDim2.new(0, 600, 0, 120) -- Increased height slightly
 	mainFrame.Position = UDim2.new(0.5, 0, 0, 10) -- Top Center
 	mainFrame.AnchorPoint = Vector2.new(0.5, 0)
 	mainFrame.BackgroundTransparency = 1
@@ -62,16 +63,16 @@ local function createLeaderboardUI()
 	listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	listLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	listLayout.Padding = UDim.new(0, 10)
+	listLayout.Padding = UDim.new(0, 15)
 	listLayout.Parent = mainFrame
 
 	return screenGui, mainFrame
 end
 
-local function createEntry(rank, playerObj, level)
+local function createEntry(rank, playerObj, level, kills)
 	local entryFrame = Instance.new("Frame")
 	entryFrame.Name = "Entry"
-	entryFrame.Size = UDim2.fromOffset(80, 100)
+	entryFrame.Size = UDim2.fromOffset(90, 110)
 	entryFrame.BackgroundTransparency = 1
 	entryFrame.LayoutOrder = rank
 
@@ -133,22 +134,50 @@ local function createEntry(rank, playerObj, level)
 	rankCorner.CornerRadius = UDim.new(0.5, 0)
 	rankCorner.Parent = rankLabel
 
-	-- Level Label (Below Avatar)
-	local levelLabel = Instance.new("TextLabel")
-	levelLabel.Name = "Level"
-	levelLabel.Size = UDim2.new(1, 0, 0, 30)
-	levelLabel.Position = UDim2.new(0, 0, 1, 5)
-	levelLabel.BackgroundTransparency = 1
-	levelLabel.Text = tostring(level)
-	levelLabel.TextColor3 = COLORS.RANK_1 -- Gold text for level
-	levelLabel.TextSize = 24
-	levelLabel.Font = Enum.Font.LuckiestGuy
-	if not pcall(function() levelLabel.Font = Enum.Font.LuckiestGuy end) then
-		levelLabel.Font = Enum.Font.GothamBlack
+	-- Stats Container (Below Avatar)
+	local statsFrame = Instance.new("Frame")
+	statsFrame.Name = "Stats"
+	statsFrame.Size = UDim2.new(1, 0, 0, 40)
+	statsFrame.Position = UDim2.new(0, 0, 1, 5)
+	statsFrame.BackgroundTransparency = 1
+	statsFrame.Parent = avatarBg
+
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	listLayout.Padding = UDim.new(0, 2)
+	listLayout.Parent = statsFrame
+
+	-- Size Label
+	local sizeLabel = Instance.new("TextLabel")
+	sizeLabel.Name = "SizeLabel"
+	sizeLabel.Size = UDim2.new(1, 0, 0, 18)
+	sizeLabel.BackgroundTransparency = 1
+	sizeLabel.Text = "SIZE: " .. tostring(level)
+	sizeLabel.TextColor3 = COLORS.RANK_1 -- Gold text for size
+	sizeLabel.TextSize = 16
+	sizeLabel.Font = Enum.Font.LuckiestGuy
+	if not pcall(function() sizeLabel.Font = Enum.Font.LuckiestGuy end) then
+		sizeLabel.Font = Enum.Font.GothamBlack
 	end
-	levelLabel.TextStrokeTransparency = 0
-	levelLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-	levelLabel.Parent = avatarBg
+	sizeLabel.TextStrokeTransparency = 0
+	sizeLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	sizeLabel.LayoutOrder = 1
+	sizeLabel.Parent = statsFrame
+
+	-- Kills Label
+	local killsLabel = Instance.new("TextLabel")
+	killsLabel.Name = "KillsLabel"
+	killsLabel.Size = UDim2.new(1, 0, 0, 14)
+	killsLabel.BackgroundTransparency = 1
+	killsLabel.Text = "KILLS: " .. tostring(kills)
+	killsLabel.TextColor3 = COLORS.TEXT_SUB
+	killsLabel.TextSize = 12
+	killsLabel.Font = Enum.Font.GothamBold
+	killsLabel.TextStrokeTransparency = 0.5
+	killsLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	killsLabel.LayoutOrder = 2
+	killsLabel.Parent = statsFrame
 
 	return entryFrame
 end
@@ -163,9 +192,11 @@ local function updateLeaderboard()
 	
 	for _, p in ipairs(Players:GetPlayers()) do
 		local level = p:GetAttribute("Level") or 1
+		local kills = p:GetAttribute("Kills") or 0
 		table.insert(playerList, {
 			Player = p,
 			Level = level,
+			Kills = kills,
 			IsBot = false
 		})
 	end
@@ -175,6 +206,9 @@ local function updateLeaderboard()
 
 	-- Sort by Level Descending
 	table.sort(playerList, function(a, b)
+		if a.Level == b.Level then
+			return a.Kills > b.Kills -- Tie-break with kills
+		end
 		return a.Level > b.Level
 	end)
 
@@ -188,7 +222,7 @@ local function updateLeaderboard()
 	-- Create Top Entries
 	for i = 1, math.min(#playerList, MAX_ENTRIES) do
 		local data = playerList[i]
-		local entry = createEntry(i, data.Player, data.Level)
+		local entry = createEntry(i, data.Player, data.Level, data.Kills)
 		entry.Parent = container
 	end
 end

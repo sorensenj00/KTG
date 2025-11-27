@@ -9,7 +9,7 @@ local CollectionService = game:GetService("CollectionService")
 local TEXT_SIZE = 14
 local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
 local STROKE_TRANSPARENCY = 0
-local OFFSET = Vector3.new(0, 3, 0) -- Above head
+local OFFSET = Vector3.new(0, 1, 0) -- Above head
 
 local function createOverheadUI()
 	local billboard = Instance.new("BillboardGui")
@@ -17,7 +17,7 @@ local function createOverheadUI()
 	billboard.Size = UDim2.fromScale(4, 1.5) -- Increased height to fit health bar
 	billboard.StudsOffset = OFFSET
 	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 2000 -- Increased from 100 to 2000 (Long range)
+	billboard.MaxDistance = 600 -- Increased from 100 to 2000 (Long range)
 	billboard.Enabled = false -- Hidden by default
 
 	local textLabel = Instance.new("TextLabel")
@@ -29,6 +29,7 @@ local function createOverheadUI()
 	textLabel.TextStrokeTransparency = STROKE_TRANSPARENCY
 	textLabel.TextSize = TEXT_SIZE
 	textLabel.Font = Enum.Font.GothamBold
+	textLabel.TextScaled = true
 	textLabel.Parent = billboard
 	
 	-- Health Bar Background
@@ -84,7 +85,11 @@ local function updateHealthBar(humanoid: Humanoid, fill: Frame)
 end
 
 local function setupEntity(entity: Model, dataSource: Instance)
-	local head = entity:WaitForChild("Head", 10)
+	-- Don't show overhead for local player
+	if dataSource == Players.LocalPlayer then return end
+
+	-- Use a longer timeout for streaming/loading
+	local head = entity:WaitForChild("Head", 30)
 	if not head then return end
 	
 	-- Check if already exists
@@ -105,7 +110,7 @@ local function setupEntity(entity: Model, dataSource: Instance)
 	end)
 	
 	-- Setup Health Bar
-	local humanoid = entity:FindFirstChild("Humanoid")
+	local humanoid = entity:WaitForChild("Humanoid", 30)
 	if humanoid then
 		-- Disable default Roblox health bar
 		humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
@@ -114,9 +119,9 @@ local function setupEntity(entity: Model, dataSource: Instance)
 		
 		-- Visibility Logic
 		local lastDamageTime = 0
-		local VISIBILITY_RANGE = 400
+		local VISIBILITY_RANGE = 600 -- Matched to MaxDistance
 		local DAMAGE_SHOW_DURATION = 10
-		local SCALE_DISTANCE_MAX = 400 -- Distance at which UI is smallest
+		-- Distance at which UI is smallest
 		
 		-- Track if this entity was damaged by the local player
 		local wasDamagedByPlayer = false
@@ -170,12 +175,16 @@ local function setupEntity(entity: Model, dataSource: Instance)
 				ui.Enabled = true
 				
 				-- Fade based on distance (0 = fully visible, VISIBILITY_RANGE = transparent)
-				-- Fade starts at 300 studs, full fade at 400 studs
-				local fadeStart = 300
-				local fadeAlpha = 0
-
-				if not recentlyDamaged then
-					fadeAlpha = math.clamp((dist - fadeStart) / (VISIBILITY_RANGE - fadeStart), 0, 1)
+				-- Fade starts at 100 studs, full fade at 200 studs
+				local fadeStart = 400
+				local fadeAlpha = math.clamp((dist - fadeStart) / (VISIBILITY_RANGE - fadeStart), 0, 1)
+				
+				-- Force visibility if recently damaged
+				if recentlyDamaged then
+					fadeAlpha = 0
+					ui.MaxDistance = math.huge -- Infinite range
+				else
+					ui.MaxDistance = VISIBILITY_RANGE -- Reset to normal range
 				end
 				
 				-- Apply transparency to all UI elements
@@ -198,10 +207,18 @@ local function setupEntity(entity: Model, dataSource: Instance)
 				ui.Enabled = false
 			end
 			
-			-- Distance-based scaling (closer = larger, farther = smaller)
-			-- Scale from 1.5x at 0 distance to 0.5x at SCALE_DISTANCE_MAX
-			local scaleFactor = math.clamp(1.5 - (dist / SCALE_DISTANCE_MAX), 0.5, 1.5)
+			-- Distance-based scaling that grows with distance for readability
+			-- Base: grows from 1x at close range to larger at distance
+			local scaleFactor = math.max(1.0, dist / 25)
+			
+			if recentlyDamaged then
+				-- When damaged: slightly larger and grows faster, but capped
+				-- Cap at 20x scale (approx 500 studs worth of scaling) to prevent massive UI at 10k studs
+				scaleFactor = math.min(20, math.max(1.5, dist / 20))
+			end
+			
 			ui.Size = UDim2.fromScale(4 * scaleFactor, 1.5 * scaleFactor)
+			ui.StudsOffset = OFFSET * scaleFactor
 		end)
 		
 		if healthFill then
@@ -220,17 +237,17 @@ end
 
 local function onPlayerAdded(player: Player)
 	player.CharacterAdded:Connect(function(character)
-		setupEntity(character, player)
+		task.spawn(setupEntity, character, player)
 	end)
 	
 	if player.Character then
-		setupEntity(player.Character, player)
+		task.spawn(setupEntity, player.Character, player)
 	end
 end
 
 local function onBotAdded(bot: Instance)
 	if bot:IsA("Model") then
-		setupEntity(bot, bot)
+		task.spawn(setupEntity, bot, bot)
 	end
 end
 

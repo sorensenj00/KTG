@@ -91,6 +91,11 @@ local function spawnBot()
 		return
 	end
 
+	-- Disable ALL default Roblox UI (health bar and name display)
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	humanoid.NameDisplayDistance = 0
+
 	bot.PrimaryPart = rootPart
 
 	-- === FIX 4: Reset Pivot Offset ===
@@ -299,6 +304,11 @@ function BotSpawner.SpawnDisplayBots()
 		
 		local humanoid = bot:WaitForChild("Humanoid")
 		local rootPart = bot:WaitForChild("HumanoidRootPart")
+		
+		-- Disable ALL default Roblox UI (health bar and name display)
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+		humanoid.NameDisplayDistance = 0
 		
 		-- Reset Pivot to ensure consistent spawning
 		rootPart.PivotOffset = CFrame.new()

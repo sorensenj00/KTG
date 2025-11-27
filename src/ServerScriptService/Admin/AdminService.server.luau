@@ -74,7 +74,7 @@ end)
 addGlobalXPEvent.OnServerEvent:Connect(function(player, amount)
 	if typeof(amount) ~= "number" then return end
 	print("👮 Admin:", player.Name, "added", amount, "GlobalXP")
-	MetaProgressionManager.AddGlobalXP(player, amount)
+	MetaProgressionManager.AddDNA(player, amount)
 end)
 
 -- God Mode

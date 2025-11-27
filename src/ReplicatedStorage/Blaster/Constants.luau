@@ -77,10 +77,10 @@ local Constants = {
 	LASER_BEAM_VISUAL_SPEED = 200,
 	
 	-- Sway & Bobbing
-	SWAY_AMOUNT = 0.6,
-	SWAY_SMOOTHNESS = 12, -- Spring dampening
+	SWAY_AMOUNT = 0.2,  -- Reduced from 0.6 to minimize wobbly feeling
+	SWAY_SMOOTHNESS = 20, -- Spring dampening (increased for less bounce)
 	WALK_BOB_SPEED = 14,
-	WALK_BOB_MAGNITUDE = 0.15,
+	WALK_BOB_MAGNITUDE = 0.08,  -- Reduced from 0.15 for subtler bobbing
 	
 	-- Recoil (Spring Physics)
 	RECOIL_KICK_BACK = 0.5, -- Z axis

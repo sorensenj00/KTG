@@ -14,6 +14,9 @@ local MetaProgressionManager = require(ServerScriptService.GameLoop.MetaProgress
 
 ProgressionManager.PlayerReachedMaxLevel = Instance.new("BindableEvent")
 
+-- Cache for throttling updates: [Entity] = lastEffectiveLevel
+local lastUpdateCache = {}
+
 -- Helper: Apply Stats to a specific character (Used by the Loop)
 local function enforceEntityStats(entity: Instance, character: Model)
 	if not character then
@@ -25,15 +28,31 @@ local function enforceEntityStats(entity: Instance, character: Model)
 	end
 
 	local level = entity:GetAttribute("Level") or 1
+	local xp = entity:GetAttribute("XP") or 0
+	local xpReq = ScalingConfig.GetXPRequired(level)
+	
+	-- Calculate Effective Level (Float)
+	local progress = 0
+	if xpReq > 0 then
+		progress = math.clamp(xp / xpReq, 0, 0.99)
+	end
+	local effectiveLevel = level + progress
+	
+	-- Throttling: Only update if change is significant (> 0.05)
+	local lastLevel = lastUpdateCache[entity] or 0
+	if math.abs(effectiveLevel - lastLevel) < 0.05 then
+		return -- Skip update to save physics
+	end
+	lastUpdateCache[entity] = effectiveLevel
 
 	-- 1. Apply Size (ScalingEngine handles the heavy lifting)
 	-- We wrap this in pcall just in case ScalingEngine errors out
 	task.spawn(function()
-		ScalingEngine.ResizeCharacter(character, level)
+		ScalingEngine.ResizeCharacter(character, effectiveLevel)
 	end)
 
 	-- 2. Calculate Speed
-	local baseSpeed = ScalingConfig.GetWalkSpeed(level)
+	local baseSpeed = ScalingConfig.GetWalkSpeed(effectiveLevel)
 	local speedMult = 1
 
 	-- Apply Meta Multipliers only for players
@@ -52,17 +71,14 @@ end
 
 -- Helper: Setup player scaling via attribute signals (replaces expensive polling)
 local function setupPlayerScaling(player: Player)
-	local lastKnownLevel = player:GetAttribute("Level") or 1
-
-	player:GetAttributeChangedSignal("Level"):Connect(function()
-		local newLevel = player:GetAttribute("Level") or 1
-		if newLevel ~= lastKnownLevel then
-			lastKnownLevel = newLevel
-			if player.Character then
-				enforceEntityStats(player, player.Character)
-			end
+	local function onStatsChanged()
+		if player.Character then
+			enforceEntityStats(player, player.Character)
 		end
-	end)
+	end
+
+	player:GetAttributeChangedSignal("Level"):Connect(onStatsChanged)
+	player:GetAttributeChangedSignal("XP"):Connect(onStatsChanged)
 end
 
 -- Helper: Initialize Data
@@ -143,6 +159,19 @@ function ProgressionManager.AddBiomass(target: Instance, amount: number)
 			totalBiomass = totalBiomass - biomassRequired
 			currentLevel = currentLevel + 1
 			levelsGained = levelsGained + 1
+			
+			-- Heal on level up
+			if isPlayer and target:IsA("Player") and target.Character then
+				local humanoid = target.Character:FindFirstChild("Humanoid")
+				if humanoid then
+					humanoid.Health = humanoid.MaxHealth
+				end
+			elseif isBot and target:IsA("Model") then
+				local humanoid = target:FindFirstChild("Humanoid")
+				if humanoid then
+					humanoid.Health = humanoid.MaxHealth
+				end
+			end
 		else
 			break
 		end
@@ -329,35 +358,29 @@ function ProgressionManager.Start()
 	-- =====================================================
 	-- Setup reactive scaling for bots via CollectionService tag events
 	CollectionService:GetInstanceAddedSignal("BotAI"):Connect(function(bot)
-		local lastKnownLevel = bot:GetAttribute("Level") or 1
-
-		-- Setup attribute changed signal for this bot (fires when bot levels up)
-		bot:GetAttributeChangedSignal("Level"):Connect(function()
-			local newLevel = bot:GetAttribute("Level") or 1
-			if newLevel ~= lastKnownLevel then
-				lastKnownLevel = newLevel
-				if bot:FindFirstChild("Humanoid") and bot.Humanoid.Health > 0 then
-					enforceEntityStats(bot, bot)
-				end
+		local function onBotStatsChanged()
+			if bot:FindFirstChild("Humanoid") and bot.Humanoid.Health > 0 then
+				enforceEntityStats(bot, bot)
 			end
-		end)
+		end
+
+		-- Setup attribute changed signal for this bot (fires when bot levels up or gains XP)
+		bot:GetAttributeChangedSignal("Level"):Connect(onBotStatsChanged)
+		bot:GetAttributeChangedSignal("XP"):Connect(onBotStatsChanged)
 
 		-- Note: No initial enforcement here as bots are already scaled correctly in BotSpawner
 	end)
 
 	-- Setup scaling for existing bots
 	for _, bot in ipairs(CollectionService:GetTagged("BotAI")) do
-		local lastKnownLevel = bot:GetAttribute("Level") or 1
-
-		bot:GetAttributeChangedSignal("Level"):Connect(function()
-			local newLevel = bot:GetAttribute("Level") or 1
-			if newLevel ~= lastKnownLevel then
-				lastKnownLevel = newLevel
-				if bot:FindFirstChild("Humanoid") and bot.Humanoid.Health > 0 then
-					enforceEntityStats(bot, bot)
-				end
+		local function onBotStatsChanged()
+			if bot:FindFirstChild("Humanoid") and bot.Humanoid.Health > 0 then
+				enforceEntityStats(bot, bot)
 			end
-		end)
+		end
+
+		bot:GetAttributeChangedSignal("Level"):Connect(onBotStatsChanged)
+		bot:GetAttributeChangedSignal("XP"):Connect(onBotStatsChanged)
 	end
 end
 

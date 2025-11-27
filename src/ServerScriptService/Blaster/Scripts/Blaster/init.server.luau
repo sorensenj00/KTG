@@ -37,6 +37,7 @@ local shootRemote = remotes:WaitForChild("Shoot")
 local reloadRemote = remotes:WaitForChild("Reload")
 local replicateShotRemote = remotes:WaitForChild("ReplicateShot")
 local damageNumberRemote = remotes:WaitForChild("DamageNumber")
+local playerDamagedRemote = remotes:WaitForChild("PlayerDamagedEntity", 5)
 
 -- Get the Eliminated Event
 local eliminatedEvent
@@ -88,9 +89,18 @@ local function onShoot(player, now, tool, originCF, tagged)
 		end
 	end
 
-	-- Scaling Damage Logic (Session Level)
+	-- Scaling Damage Logic (Continuous Session Level)
 	local level = player:GetAttribute("Level") or 1
-	local damageMult = 1 + ((level - 1) * 0.1)
+	local xp = player:GetAttribute("XP") or 0
+	local xpReq = ScalingConfig.GetXPRequired(level)
+	
+	local progress = 0
+	if xpReq > 0 then
+		progress = math.clamp(xp / xpReq, 0, 0.99)
+	end
+	local effectiveLevel = level + progress
+	
+	local damageMult = ScalingConfig.GetDamageMultiplier(effectiveLevel)
 	damage = damage * damageMult
 
 	-- Golden Gun Logic
@@ -130,6 +140,11 @@ local function onShoot(player, now, tool, originCF, tagged)
 				if CollectionService:HasTag(targetChar, "BotAI") then
 					local BotController = require(ServerScriptService.GameLoop.BotController)
 					BotController.RecordAggro(targetChar, player)
+				end
+				
+				-- Notify client for UI visibility
+				if playerDamagedRemote then
+					playerDamagedRemote:FireClient(player, targetChar)
 				end
 
 				-- [META] Vampirism Logic

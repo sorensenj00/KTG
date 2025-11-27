@@ -36,7 +36,20 @@ local function getRemote()
 	return remote
 end
 
--- === HELPERS ===
+local function findAllYeetCannons()
+	local cannons = {}
+	
+	-- Iterate through ALL children of Workspace to find anything that looks like a YeetCannon
+	-- This handles "YeetCannon", "YeetCannon (2)", "YeetCannon_2", etc.
+	for _, child in ipairs(Workspace:GetChildren()) do
+		if child:IsA("Model") and string.match(child.Name, "^YeetCannon") then
+			table.insert(cannons, child)
+		end
+	end
+	
+	return cannons
+end
+
 local function createExplosion(muzzle)
 	local sound = Instance.new("Sound")
 	sound.SoundId = "rbxassetid://131961136"
