@@ -74,9 +74,6 @@
       "OverheadUI": {
         "$path": "src/StarterGui/OverheadUI"
       },
-      "PlayerHUD": {
-        "$path": "src/StarterGui/PlayerHUD"
-      },
       "AdminPanel": {
         "$path": "src/StarterGui/AdminPanel"
       },
