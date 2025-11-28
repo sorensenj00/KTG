@@ -59,11 +59,26 @@ local function onShoot(player, now, tool, originCF, tagged)
 		return
 	end
 
-	-- 2. Raycasting
+	-- Get Player Attributes
+	local character = player.Character
+	local scale = character and character:GetAttribute("Scale") or 1.0
+
+	-- 2. Raycasting with Impact Scaling
 	local spread = tool:GetAttribute(Constants.SPREAD_ATTRIBUTE)
 	local raysPerShot = tool:GetAttribute(Constants.RAYS_PER_SHOT_ATTRIBUTE)
 	local range = tool:GetAttribute(Constants.RANGE_ATTRIBUTE)
-	local rayRadius = tool:GetAttribute(Constants.RAY_RADIUS_ATTRIBUTE)
+	local baseRayRadius = tool:GetAttribute(Constants.RAY_RADIUS_ATTRIBUTE) or 0.5
+
+	-- "Impact" Mutation: Bullets get larger as you get larger
+	-- Logic: Base Radius = 0.5. Mutation Impact = Base + (Level * 0.1). Juggernaut Multiplier: * Scale.
+	-- Actually prompt says: "Impact Mutation Radius = Base + (Level * 0.1). Juggernaut Size Multiplier: Multiply radius by Scale."
+
+	local impactLevel = 0
+	if getMeta() then
+		impactLevel = getMeta().GetStatValue(player, "Impact") -- Returns level * 0.1
+	end
+
+	local rayRadius = (baseRayRadius + impactLevel) * scale
 
 	local rayDirections = getRayDirections(originCF, raysPerShot, math.rad(spread), now)
 	for index, direction in rayDirections do
@@ -89,21 +104,9 @@ local function onShoot(player, now, tool, originCF, tagged)
 		end
 	end
 
-	-- Scaling Damage Logic (Continuous Session Level)
+	-- Scaling Damage Logic
 	local level = player:GetAttribute("Level") or 1
-	local xp = player:GetAttribute("XP") or 0
-	local xpReq = ScalingConfig.GetXPRequired(level)
-	
-	local progress = 0
-	if xpReq > 0 then
-		progress = math.clamp(xp / xpReq, 0, 0.99)
-	end
-	local effectiveLevel = level + progress
-	
-	local damageMult = ScalingConfig.GetDamageMultiplier(effectiveLevel)
-	damage = damage * damageMult
-
-	-- Golden Gun Logic
+	-- damage = damage * ScalingConfig.GetDamageMultiplier(level) -- Currently 1
 
 	for _, result in ipairs(rayResults) do
 		local hitPart = result.instance
@@ -124,6 +127,49 @@ local function onShoot(player, now, tool, originCF, tagged)
 			if validateShot(player, now, tool, originCF) then
 				local finalDamage = damage
 
+				-- === JUGGERNAUT DAMAGE MODIFIERS ===
+
+				-- 1. Giant Slayer: +15% Damage (per level) to enemies larger than you.
+				if getMeta() then
+					local slayerBonus = getMeta().GetStatValue(player, "Giant Slayer") -- Returns % e.g., 0.15
+					if slayerBonus > 0 then
+						local targetScale = targetChar:GetAttribute("Scale") or 1.0
+						if targetScale > scale then
+							finalDamage = finalDamage * (1 + slayerBonus)
+						end
+					end
+				end
+
+				-- 2. Living Fortress (Target Side): 50% Less dmg from front
+				local targetPlayer = Players:GetPlayerFromCharacter(targetChar)
+				if targetPlayer and getMeta() then
+					local fortress = getMeta().GetStatValue(targetPlayer, "Living Fortress") -- 0.5 if has it
+					if fortress > 0 then
+						local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+						if targetRoot then
+							-- Check angle. Front = Dot Product > 0? No, Front is > 0.5?
+							-- Vector from Target to Attacker
+							local incomingDir = (originCF.Position - targetRoot.Position).Unit
+							local facingDir = targetRoot.CFrame.LookVector
+							local dot = incomingDir:Dot(facingDir)
+
+							-- If dot > 0, attacker is in front. (Roughly 180 deg arc)
+							if dot > 0 then
+								finalDamage = finalDamage * (1 - fortress) -- e.g. * 0.5
+								-- print("🛡️ Living Fortress blocked damage!")
+							end
+						end
+					end
+
+					-- 3. Iron Skin (Target Side): Flat Reduction
+					local ironSkin = getMeta().GetStatValue(targetPlayer, "Iron Skin") -- Flat val
+					if ironSkin > 0 then
+						finalDamage = math.max(1, finalDamage - ironSkin)
+					end
+				end
+
+				-- ===================================
+
 				local willKill = (hitHumanoid.Health - finalDamage) <= 0
 
 				-- Fire Kill Event
@@ -132,6 +178,18 @@ local function onShoot(player, now, tool, originCF, tagged)
 				end
 
 				hitHumanoid:TakeDamage(finalDamage)
+
+				-- Trigger Shedding Logic (via MutationManager hook if we had one, but we put shed logic in MutationManager via Blaster hook? No, MutationManager listens to events or we call it here.)
+				-- Calling MutationManager directly requires requiring it, which might cause circular dep if it requires Blaster (it doesn't yet).
+				-- Safest is RemoteEvent or Bindable, or simple require since MutationManager is higher level.
+				-- Let's stick to the event "PlayerDamagedEntity" which we already have, and MutationManager can listen to it if we convert it to Bindable?
+				-- Actually, we added `onTakeDamage` in MutationManager but didn't hook it up effectively yet.
+				-- Let's manually trigger Shedding logic here for simplicity? No, clean code -> use module.
+				-- Lazy load MutationManager
+				task.spawn(function()
+					local MM = require(ServerScriptService.GameLoop.MutationManager)
+					MM.OnDamage(targetChar, finalDamage)
+				end)
 
 				-- Record damage for XP tracking
 				DamageTracker.RecordDamage(player, targetChar, finalDamage)
@@ -142,7 +200,6 @@ local function onShoot(player, now, tool, originCF, tagged)
 					BotController.RecordAggro(targetChar, player)
 				end
 				
-				-- Notify client for UI visibility
 				if playerDamagedRemote then
 					playerDamagedRemote:FireClient(player, targetChar)
 				end
@@ -155,7 +212,6 @@ local function onShoot(player, now, tool, originCF, tagged)
 						local attackerHum = player.Character and player.Character:FindFirstChild("Humanoid")
 						if attackerHum and attackerHum.Health > 0 then
 							attackerHum.Health = math.min(attackerHum.Health + healAmount, attackerHum.MaxHealth)
-							-- Show Healing Text (Negative Damage)
 							if damageNumberRemote then
 								local head = player.Character:FindFirstChild("Head")
 								if head then
@@ -195,20 +251,17 @@ local function onShoot(player, now, tool, originCF, tagged)
 		})
 	end
 
-	-- Use Batch Replicator
-	ShotReplicator.Buffer(tool, originCF.Position, visualRayResults)
+	-- Pass scale-adjusted radius to replicator
+	ShotReplicator.Buffer(tool, originCF.Position, visualRayResults, rayRadius)
 end
 
 local function onReload(player, tool)
 	if validateReload(player, tool) then
 		local baseMag = tool:GetAttribute(Constants.MAGAZINE_SIZE_ATTRIBUTE)
-
-		-- [META] Ammo Capacity Upgrade
 		local ammoMult = 1
 		if getMeta() then
 			ammoMult = getMeta().GetStatMultiplier(player, "Ammo")
 		end
-
 		local newMagSize = math.floor(baseMag * ammoMult)
 
 		tool:SetAttribute(Constants.AMMO_ATTRIBUTE, newMagSize)
