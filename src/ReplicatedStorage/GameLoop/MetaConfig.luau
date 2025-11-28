@@ -9,6 +9,13 @@ MetaConfig.DEATH_BIOMASS_CONVERSION_PCT = 0.2 -- Converts 20% to DNA
 -- DNA (Currency)
 MetaConfig.DNA_PER_KILL = 5 -- Flat DNA bonus per kill (optional small drip)
 
+-- Import Mutation data from MutationConfig (for backward compatibility)
+-- These are defined in MutationConfig but referenced from MetaConfig in some scripts
+local MutationConfig = require(script.Parent.MutationConfig)
+MetaConfig.RarityWeights = MutationConfig.RarityWeights
+MetaConfig.Mutations = MutationConfig.Mutations
+MetaConfig.ROLL_COST = MutationConfig.ROLL_COST
+
 -- Define Tiers for UI Grouping and Unlocks
 -- Unlocks are based on TOTAL LIFETIME DNA EARNED (or Biomass Harvested),
 -- but for now we track "Lifetime DNA" or "Highest DNA" for tiers?
@@ -54,7 +61,6 @@ MetaConfig.Upgrades = {
 		BaseCost = 200,
 		CostExponent = 1.6,
 		Increment = 0.005,
-		MaxLevel = 20,
 		MaxLevel = 20,
 	},
 	MagnetRange = {
@@ -113,7 +119,6 @@ MetaConfig.Upgrades = {
 		BaseCost = 600,
 		CostExponent = 1.7,
 		Increment = 0.05,
-		MaxLevel = 10,
 		MaxLevel = 10,
 	},
 	JumpBoost = {
@@ -180,7 +185,6 @@ MetaConfig.Upgrades = {
 		CostExponent = 2.0,
 		Increment = 1,
 		MaxLevel = 1,
-		MaxLevel = 1,
 	},
 	CritChance = {
 		Name = "Critical Strike",
@@ -209,7 +213,6 @@ MetaConfig.Upgrades = {
 		BaseCost = 10000,
 		CostExponent = 2.2,
 		Increment = 0.5,
-		MaxLevel = 5,
 		MaxLevel = 5,
 	},
 	Greed = {

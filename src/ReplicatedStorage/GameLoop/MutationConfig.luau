@@ -150,6 +150,6 @@ function MutationConfig.GetUpgradeCost(rarity, level)
     return 100 -- Flat cost for now
 end
 
-function MutationConfig.ROLL_COST = 250 -- DNA per roll
+MutationConfig.ROLL_COST = 250 -- DNA per roll
 
 return MutationConfig
