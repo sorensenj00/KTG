@@ -722,7 +722,7 @@ local function createUpgradeCard(statName: string, upgradeConfig: any)
 	iconImage.Position = UDim2.new(0, 15, 0.5, 0)
 	iconImage.AnchorPoint = Vector2.new(0, 0.5)
 	iconImage.BackgroundTransparency = 1
-	iconImage.Image = ICON_MAP[statName] or ICON_MAP.StartLevel
+	iconImage.Image = upgradeConfig.ImageId or ICON_MAP[statName] or ICON_MAP.StartLevel
 	iconImage.Parent = cardFrame
 
 	-- Info (Middle)
@@ -1113,8 +1113,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		-- Trigger Harvest if button is visible (meaning safe zone)
 		if hud.HarvestButton.Visible then
 			-- Simulate click
-			local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
-			local harvestRemote = remotes and remotes:FindFirstChild("Harvest")
+			-- Simulate click
+			local harvestRemote = ReplicatedStorage:WaitForChild("Harvest", 2)
 
 			if harvestRemote then
 				local success, msg = harvestRemote:InvokeServer()

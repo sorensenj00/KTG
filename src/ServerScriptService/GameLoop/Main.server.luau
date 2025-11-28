@@ -53,13 +53,6 @@ local function initializeSystem(name, initFunc)
 	end
 end
 
--- 0. Initialize Lighting & Atmosphere First
-print(">> Initializing Lighting & Atmosphere...")
-local LightingSetup = require(GameLoop.LightingSetup)
-initializeSystem("LightingSetup", function()
-	LightingSetup.Start()
-end)
-
 -- 1. Initialize Blaster System
 print(">> Initializing Blaster System...")
 initializeSystem("BlasterSetup", function()

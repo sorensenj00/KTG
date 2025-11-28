@@ -179,16 +179,10 @@ local function onShoot(player, now, tool, originCF, tagged)
 
 				hitHumanoid:TakeDamage(finalDamage)
 
-				-- Trigger Shedding Logic (via MutationManager hook if we had one, but we put shed logic in MutationManager via Blaster hook? No, MutationManager listens to events or we call it here.)
-				-- Calling MutationManager directly requires requiring it, which might cause circular dep if it requires Blaster (it doesn't yet).
-				-- Safest is RemoteEvent or Bindable, or simple require since MutationManager is higher level.
-				-- Let's stick to the event "PlayerDamagedEntity" which we already have, and MutationManager can listen to it if we convert it to Bindable?
-				-- Actually, we added `onTakeDamage` in MutationManager but didn't hook it up effectively yet.
-				-- Let's manually trigger Shedding logic here for simplicity? No, clean code -> use module.
 				-- Lazy load MutationManager
 				task.spawn(function()
 					local MM = require(ServerScriptService.GameLoop.MutationManager)
-					MM.OnDamage(targetChar, finalDamage)
+					MM.OnDamage(targetChar, finalDamage, player)
 				end)
 
 				-- Record damage for XP tracking
@@ -252,7 +246,7 @@ local function onShoot(player, now, tool, originCF, tagged)
 	end
 
 	-- Pass scale-adjusted radius to replicator
-	ShotReplicator.Buffer(tool, originCF.Position, visualRayResults, rayRadius)
+	ShotReplicator.Buffer(tool, originCF.Position, visualRayResults)
 end
 
 local function onReload(player, tool)

@@ -23,6 +23,7 @@ ScalingConfig.HEALTH_GROWTH_FACTOR = 1.125
 -- Speed Constants
 ScalingConfig.SPEED_AT_LEVEL_1 = 100 -- Very Fast (Mouse) - Updated to 100 per request
 ScalingConfig.SPEED_AT_LEVEL_30 = 10 -- Very Slow (Titan)
+ScalingConfig.BASE_WALKSPEED = 16 -- Base Roblox humanoid walk speed
 -- Health
 ScalingConfig.HEALTH_BASE = 100
 ScalingConfig.HEALTH_EXPONENT = 2.5
@@ -48,6 +49,7 @@ ScalingConfig.SAFE_ZONE_MAX_LEVEL = 5
 -- Size Limits (Used by Camera Controllers)
 ScalingConfig.MIN_SIZE = 0.4
 ScalingConfig.MAX_SIZE = 20.0
+ScalingConfig.MAX_SIZE_CAP = 18.0 -- Threshold for "Star Mode" / Titan visuals
 
 
 
@@ -105,6 +107,23 @@ function ScalingConfig.GetDamageMultiplier(level: number): number
 	-- Level 1: 1.0x
 	-- Level 30: 1.0 + (29 * 0.83) = ~25.07x
 	return 1.0 + (level - 1) * 0.83
+end
+
+function ScalingConfig.GetScale(biomass: number): number
+	-- Convert Biomass to Scale/Level
+	-- This is the inverse of GetXPRequired
+	-- We need to solve: biomass = BIOMASS_BASE_REQ * (level ^ BIOMASS_EXPONENT)
+	-- Therefore: level = (biomass / BIOMASS_BASE_REQ) ^ (1 / BIOMASS_EXPONENT)
+	
+	if biomass <= 0 then
+		return 1
+	end
+	
+	local level = math.pow(biomass / ScalingConfig.BIOMASS_BASE_REQ, 1 / ScalingConfig.BIOMASS_EXPONENT)
+	level = math.max(1, math.min(level, ScalingConfig.MAX_LEVEL))
+	
+	-- Return the size multiplier for this level
+	return ScalingConfig.GetSizeMultiplier(level)
 end
 
 return ScalingConfig

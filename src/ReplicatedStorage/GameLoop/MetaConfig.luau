@@ -9,6 +9,13 @@ MetaConfig.DEATH_BIOMASS_CONVERSION_PCT = 0.2 -- Converts 20% to DNA
 -- DNA (Currency)
 MetaConfig.DNA_PER_KILL = 5 -- Flat DNA bonus per kill (optional small drip)
 
+-- Import Mutation data from MutationConfig (for backward compatibility)
+-- These are defined in MutationConfig but referenced from MetaConfig in some scripts
+local MutationConfig = require(script.Parent.MutationConfig)
+MetaConfig.RarityWeights = MutationConfig.RarityWeights
+MetaConfig.Mutations = MutationConfig.Mutations
+MetaConfig.ROLL_COST = MutationConfig.ROLL_COST
+
 -- Define Tiers for UI Grouping and Unlocks
 -- Unlocks are based on TOTAL LIFETIME DNA EARNED (or Biomass Harvested),
 -- but for now we track "Lifetime DNA" or "Highest DNA" for tiers?
@@ -54,7 +61,6 @@ MetaConfig.Upgrades = {
 		BaseCost = 200,
 		CostExponent = 1.6,
 		Increment = 0.005,
-		MaxLevel = 20,
 		MaxLevel = 20,
 	},
 	MagnetRange = {
@@ -113,7 +119,6 @@ MetaConfig.Upgrades = {
 		BaseCost = 600,
 		CostExponent = 1.7,
 		Increment = 0.05,
-		MaxLevel = 10,
 		MaxLevel = 10,
 	},
 	JumpBoost = {
@@ -180,7 +185,6 @@ MetaConfig.Upgrades = {
 		CostExponent = 2.0,
 		Increment = 1,
 		MaxLevel = 1,
-		MaxLevel = 1,
 	},
 	CritChance = {
 		Name = "Critical Strike",
@@ -210,7 +214,6 @@ MetaConfig.Upgrades = {
 		CostExponent = 2.2,
 		Increment = 0.5,
 		MaxLevel = 5,
-		MaxLevel = 5,
 	},
 	Greed = {
 		Name = "Greed",
@@ -221,7 +224,24 @@ MetaConfig.Upgrades = {
 		Increment = 0.01,
 		MaxLevel = 10,
 	},
+
 }
+
+-- Merge Mutations into Upgrades
+for name, mutation in pairs(MutationConfig.Mutations) do
+	MetaConfig.Upgrades[name] = {
+		Name = name,
+		Description = mutation.Description,
+		Tier = mutation.Rarity,
+		BaseCost = 100, -- Default base cost for mutations
+		CostExponent = 1.5, -- Default exponent
+		MaxLevel = mutation.MaxLevel,
+		Increment = 0, -- Handled by GetStat
+		IsMutation = true,
+		GetStat = mutation.GetStat,
+        ImageId = mutation.ImageId
+	}
+end
 
 -- Helper to check if player unlocks a specific upgrade
 function MetaConfig.IsUnlocked(playerLifetimeDNA, upgradeKey)
@@ -251,6 +271,12 @@ function MetaConfig.GetCost(stat: string, level: number): number
 	-- Note: level 0 -> cost 0 (technically), but we usually buy level 1.
 	-- If level is 0 (first purchase), we treat it as buying level 1.
 	local targetLevel = level + 1
+    
+    if upgrade.IsMutation then
+        -- Mutations might have linear scaling or fixed cost
+        return math.floor(upgrade.BaseCost * targetLevel)
+    end
+
 	return math.floor(upgrade.BaseCost * (targetLevel ^ upgrade.CostExponent))
 end
 
@@ -272,6 +298,11 @@ function MetaConfig.GetValue(stat: string, level: number): number
 	if not upgrade then
 		return 0
 	end
+    
+    if upgrade.GetStat then
+        return upgrade.GetStat(level)
+    end
+
     -- For flat values, it's usually Base + (Level * Increment) or just Level * Increment
     -- Based on the Increment logic above:
     return level * upgrade.Increment
