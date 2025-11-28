@@ -40,6 +40,10 @@ local MutationShopEvent = Instance.new("RemoteEvent")
 MutationShopEvent.Name = "MutationShopEvent"
 MutationShopEvent.Parent = ReplicatedStorage
 
+local HarvestFunc = Instance.new("RemoteFunction")
+HarvestFunc.Name = "Harvest"
+HarvestFunc.Parent = ReplicatedStorage
+
 -- Default Data
 local function getDefaultData()
     return {
@@ -218,22 +222,55 @@ function MetaProgressionManager.GetDNA(player)
     return PlayerMeta[player] and PlayerMeta[player].DNA or 0
 end
 
--- Cleanup
-Players.PlayerRemoving:Connect(function(player)
-    savePlayer(player)
-    PlayerMeta[player] = nil
-    PlayerDrafts[player] = nil
-end)
-
--- AutoSave
-task.spawn(function()
-    while true do
-        task.wait(60)
-        for player, _ in pairs(PlayerMeta) do
-            savePlayer(player)
-        end
+function MetaProgressionManager.Harvest(player)
+    -- Validate Safe Zone
+    if not player:GetAttribute("SafeZone") then
+        return false, "Not in Safe Zone"
     end
-end)
+
+    local biomass = player:GetAttribute("Biomass") or 0
+    if biomass <= 0 then
+        return false, "No Biomass to harvest"
+    end
+
+    -- Conversion Rate: 1 Biomass = 1 DNA
+    local dnaGain = biomass
+
+    -- Add DNA
+    MetaProgressionManager.AddDNA(player, dnaGain)
+
+    -- Reset Biomass
+    player:SetAttribute("Biomass", 0)
+    -- Also reset Level? Usually yes in this genre, but let's stick to Biomass for now.
+    -- If we reset Biomass, we should probably reset Level to 1 to reflect size change.
+    player:SetAttribute("Level", 1)
+    player:SetAttribute("XP", 0) -- Reset partial XP too
+
+    savePlayer(player)
+    
+    return true, "Harvested " .. dnaGain .. " DNA"
+end
+
+function MetaProgressionManager.Start()
+    -- Cleanup
+    Players.PlayerRemoving:Connect(function(player)
+        savePlayer(player)
+        PlayerMeta[player] = nil
+        PlayerDrafts[player] = nil
+    end)
+
+    -- AutoSave
+    task.spawn(function()
+        while true do
+            task.wait(60)
+            for player, _ in pairs(PlayerMeta) do
+                savePlayer(player)
+            end
+        end
+    end)
+    
+    print("MetaProgressionManager started")
+end
 
 -- Remote Functions
 local DraftFunc = Instance.new("RemoteFunction")
@@ -248,6 +285,10 @@ SelectFunc.Name = "SelectMutation"
 SelectFunc.Parent = ReplicatedStorage
 SelectFunc.OnServerInvoke = function(player, index)
     return MetaProgressionManager.SelectMutation(player, index)
+end
+
+HarvestFunc.OnServerInvoke = function(player)
+    return MetaProgressionManager.Harvest(player)
 end
 
 return MetaProgressionManager
