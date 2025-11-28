@@ -1,6 +1,6 @@
 --[[
     Module: ScalingEngine
-    Description: Handles resizing of character models (Players and Bots) based on level.
+    Description: Handles resizing of character models (Players and Bots) based on Biomass/Scale.
     
     Dependencies:
     - ReplicatedStorage.GameLoop.ScalingConfig
@@ -29,7 +29,8 @@ local function getMeta()
 	return MetaManager
 end
 
-function ScalingEngine.ResizeCharacter(character: Model, level: number)
+-- Main Resize Function
+function ScalingEngine.UpdateCharacter(character: Model, biomass: number)
 	local humanoid = character:FindFirstChild("Humanoid")
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 
@@ -37,72 +38,70 @@ function ScalingEngine.ResizeCharacter(character: Model, level: number)
 		return
 	end
 
-	-- 0. CRITICAL FIX: Ensure AutomaticScaling is enabled
-	-- This forces Roblox to handle the joint offsets and physics when we change the scale values
+	-- 0. Ensure AutomaticScaling
 	humanoid.AutomaticScalingEnabled = true
 
-	-- 0.5. Sanitize BaseHipHeight Attribute
-	-- Fix corrupted BaseHipHeight values from previous sessions (e.g., ~1050)
+	-- 0.5. Sanitize HipHeight
 	local baseHipHeight = character:GetAttribute("BaseHipHeight")
-	local isCorrupted = false
-
-	if baseHipHeight then
-		-- Check if value is corrupted (>5 or <0.1)
-		if baseHipHeight > 5 or baseHipHeight < 0.1 then
-			isCorrupted = true
-		end
-	else
-		-- Attribute doesn't exist, use current HipHeight if valid
-		local currentHip = humanoid.HipHeight
-		if currentHip > 0.1 and currentHip <= 5 then
-			baseHipHeight = currentHip
-		else
-			isCorrupted = true
-		end
+	if not baseHipHeight or baseHipHeight > 5 or baseHipHeight < 0.1 then
+		baseHipHeight = 2.0
+		character:SetAttribute("BaseHipHeight", baseHipHeight)
 	end
 
-	-- Reset to standard R15 value if corrupted or missing
-	if isCorrupted or not baseHipHeight then
-		baseHipHeight = 2.0 -- Standard R15 height
-	end
+	-- 1. Calculate Core Stats from Biomass
+	local scale = ScalingConfig.GetScale(biomass)
+	local baseMaxHealth = ScalingConfig.GetMaxHealth(scale)
+	local baseWalkSpeed = ScalingConfig.GetWalkSpeed(scale)
 
-	-- Always update the attribute with the sanitized value
-	character:SetAttribute("BaseHipHeight", baseHipHeight)
-
-	-- 1. Calculate Stats
-	local sizeMultiplier = ScalingConfig.GetSizeMultiplier(level)
-	local baseMaxHealth = ScalingConfig.GetMaxHealth(level)
-	local baseWalkSpeed = ScalingConfig.GetWalkSpeed(level)
-
-	-- Apply Meta Multipliers
+	-- 2. Apply Mutation Modifiers
 	local healthMult = 1
-	local speedMult = 1
+	local speedFlatBonus = 0
+	local speedPenaltyReduction = 0
 
 	local player = Players:GetPlayerFromCharacter(character)
 	if player and getMeta() then
-		healthMult = MetaManager.GetStatMultiplier(player, "Health")
-		speedMult = MetaManager.GetStatMultiplier(player, "Speed")
+		-- Dense Muscle: +5% Health per 100 Biomass
+		local denseMuscleLevel = getMeta().GetStatValue(player, "Dense Muscle") -- Returns % per 100 biomass e.g. 0.05
+		if denseMuscleLevel > 0 then
+			local biomassChunks = math.floor(biomass / 100)
+			healthMult = healthMult + (biomassChunks * denseMuscleLevel) -- e.g. 2 chunks * 0.05 = +10%
+		end
+
+		-- Quick Step: +% Base Speed
+		local quickStepBonus = getMeta().GetStatValue(player, "Quick Step") -- Returns % e.g. 0.03
+		if quickStepBonus > 0 then
+			-- Apply to base 16 speed? Or final? Usually base.
+			speedFlatBonus = ScalingConfig.BASE_WALKSPEED * quickStepBonus
+		end
+
+		-- Aerodynamics: Reduces speed penalty
+		local aeroReduction = getMeta().GetStatValue(player, "Aerodynamics") -- Returns % e.g. 0.10
+		if aeroReduction > 0 then
+			speedPenaltyReduction = aeroReduction
+		end
 	end
 
-	local finalMaxHealth = baseMaxHealth * healthMult
-	local finalWalkSpeed = baseWalkSpeed * speedMult
+	local finalMaxHealth = math.floor(baseMaxHealth * healthMult)
 
-	-- [FIX] Scale JumpPower/JumpHeight proportional to size
-	-- Default JumpPower is 50, JumpHeight is 7.2.
-	-- We scale it by sqrt(size) to make it feel weighty but functional, or linear?
-	-- Physics: To jump X times higher (relative to body), we need linear scaling if gravity is constant.
-	-- Since sizeMultiplier affects leg length, we want to jump relative to that.
-	-- Let's use linear scaling for now so a 10x giant jumps 10x high (which looks "normal" for their size).
-	local baseJumpHeight = 7.2
-	local finalJumpHeight = baseJumpHeight * sizeMultiplier
+	-- Calculate Speed with Penalty Reduction
+	-- Formula: Base / (Scale ^ 0.7)
+	-- The penalty is (Base - ScaledBase). We reduce that difference.
+	local rawScaledSpeed = ScalingConfig.GetWalkSpeed(scale) -- This includes the floor
+	local speedPenalty = ScalingConfig.BASE_WALKSPEED - rawScaledSpeed
 
-	-- 2. Scale Character Uniformly
-	-- We use ScaleTo which handles all parts, attachments, joints, and Humanoid properties (HipHeight) automatically.
-	-- This ensures the model is scaled uniformly without distortion.
-	character:ScaleTo(sizeMultiplier)
+	if speedPenaltyReduction > 0 then
+		speedPenalty = speedPenalty * (1 - speedPenaltyReduction)
+	end
 
-	-- 3. Stats Application
-	-- 3. Stats Application
+	local finalWalkSpeed = ScalingConfig.BASE_WALKSPEED - speedPenalty + speedFlatBonus
+
+	-- 3. Apply Visual Scale
+	character:ScaleTo(scale)
+
+	-- Store Scale Attribute for other scripts (e.g. Weapon Impact)
+	character:SetAttribute("Scale", scale)
+
+	-- 4. Apply Stats
 	local oldMaxHealth = humanoid.MaxHealth
 	humanoid.MaxHealth = finalMaxHealth
 	
@@ -111,18 +110,18 @@ function ScalingEngine.ResizeCharacter(character: Model, level: number)
 		local healthRatio = humanoid.Health / oldMaxHealth
 		humanoid.Health = finalMaxHealth * healthRatio
 	else
-		-- Initial spawn or invalid state, heal to full
 		humanoid.Health = finalMaxHealth
 	end
 	
 	humanoid.WalkSpeed = finalWalkSpeed
 
-	-- Use JumpHeight if available (newer Roblox standard), falling back to Power if needed.
+	-- Jump Height Scaling (Linear with Scale to look normal)
+	local baseJumpHeight = 7.2
 	humanoid.UseJumpPower = false
-	humanoid.JumpHeight = finalJumpHeight
+	humanoid.JumpHeight = baseJumpHeight * scale
 
-	-- 6. Star Mode Visuals (Titan Level)
-	if math.floor(level) >= ScalingConfig.MAX_LEVEL then
+	-- 5. Star Mode Visuals (Max Scale)
+	if scale >= ScalingConfig.MAX_SIZE_CAP then
 		for _, child in ipairs(character:GetChildren()) do
 			if child:IsA("BasePart") and child.Name ~= "HumanoidRootPart" then
 				child.Color = ScalingConfig.STAR_MODE_COLOR
@@ -135,7 +134,7 @@ function ScalingEngine.ResizeCharacter(character: Model, level: number)
 			local aura = Instance.new("ParticleEmitter")
 			aura.Name = "TitanAura"
 			aura.Color = ColorSequence.new(ScalingConfig.STAR_MODE_COLOR)
-			aura.Size = NumberSequence.new(0.5 * sizeMultiplier)
+			aura.Size = NumberSequence.new(0.5 * scale)
 			aura.Texture = "rbxassetid://243098098"
 			aura.EmissionDirection = Enum.NormalId.Top
 			aura.Lifetime = NumberRange.new(0.5, 1)
@@ -144,6 +143,14 @@ function ScalingEngine.ResizeCharacter(character: Model, level: number)
 			aura.Parent = rootPart
 		end
 	end
+end
+
+-- Alias for compatibility if needed (but we should call UpdateCharacter)
+function ScalingEngine.ResizeCharacter(character, level)
+	-- Deprecated: Use UpdateCharacter with Biomass
+	-- Try to fetch biomass from character
+	local biomass = character:GetAttribute("Biomass") or 0
+	ScalingEngine.UpdateCharacter(character, biomass)
 end
 
 return ScalingEngine
