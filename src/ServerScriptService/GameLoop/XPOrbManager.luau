@@ -92,7 +92,13 @@ local function getRandomSpawnPosition()
 	-- Raycast to find floor height
 	local rayOrigin = Vector3.new(targetX, 500, targetZ)
 	local rayDirection = Vector3.new(0, -1000, 0)
-	local rayResult = Workspace:Raycast(rayOrigin, rayDirection)
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.FilterDescendantsInstances = {getOrbsFolder(), game:GetService("Players")}
+    raycastParams.RespectCanCollide = true -- Ignore invisible/non-collidable triggers
+
+	local rayResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
 
 	local yPos = 10 -- Default height
 	if rayResult then

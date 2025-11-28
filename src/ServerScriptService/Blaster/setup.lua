@@ -27,19 +27,69 @@ function BlasterSetup.Initialize()
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	local rsBlaster = ReplicatedStorage:WaitForChild("Blaster", 10)
 	if rsBlaster then
-		local remotes = rsBlaster:WaitForChild("Remotes", 10)
-		if remotes then
-			local damageRemote = remotes:FindFirstChild("PlayerDamagedEntity")
-			if not damageRemote then
-				damageRemote = Instance.new("RemoteEvent")
-				damageRemote.Name = "PlayerDamagedEntity"
-				damageRemote.Parent = remotes
-				print("✅ Blaster Setup: Created PlayerDamagedEntity remote")
-			end
+		local remotes = rsBlaster:FindFirstChild("Remotes")
+		if not remotes then
+			remotes = Instance.new("Folder")
+			remotes.Name = "Remotes"
+			remotes.Parent = rsBlaster
+			print("✅ Blaster Setup: Created Remotes folder")
 		end
+		
+		-- PlayerDamagedEntity Remote
+		local damageRemote = remotes:FindFirstChild("PlayerDamagedEntity")
+		if not damageRemote then
+			damageRemote = Instance.new("RemoteEvent")
+			damageRemote.Name = "PlayerDamagedEntity"
+			damageRemote.Parent = remotes
+			print("✅ Blaster Setup: Created PlayerDamagedEntity remote")
+		end
+		
+		-- ShowDeathSummary Remote (fires to client on death)
+		local showDeathRemote = remotes:FindFirstChild("ShowDeathSummary")
+		if not showDeathRemote then
+			showDeathRemote = Instance.new("RemoteEvent")
+			showDeathRemote.Name = "ShowDeathSummary"
+			showDeathRemote.Parent = remotes
+			print("✅ Blaster Setup: Created ShowDeathSummary remote")
+		end
+		
+		-- RequestRespawn Remote (client fires to request respawn)
+		local respawnRemote = remotes:FindFirstChild("RequestRespawn")
+		if not respawnRemote then
+			respawnRemote = Instance.new("RemoteEvent")
+			respawnRemote.Name = "RequestRespawn"
+			respawnRemote.Parent = remotes
+			print("✅ Blaster Setup: Created RequestRespawn remote")
+		end
+		
+		-- UpdateMetaStats Remote (server fires to update client HUD)
+		local metaStatsRemote = remotes:FindFirstChild("UpdateMetaStats")
+		if not metaStatsRemote then
+			metaStatsRemote = Instance.new("RemoteEvent")
+			metaStatsRemote.Name = "UpdateMetaStats"
+			metaStatsRemote.Parent = remotes
+			print("✅ Blaster Setup: Created UpdateMetaStats remote")
+		end
+		
+		-- RequestMetaData Function (client requests current meta stats)
+		local requestMetaFunc = remotes:FindFirstChild("RequestMetaData")
+		if not requestMetaFunc then
+			requestMetaFunc = Instance.new("RemoteFunction")
+			requestMetaFunc.Name = "RequestMetaData"
+			requestMetaFunc.Parent = remotes
+			print("✅ Blaster Setup: Created RequestMetaData function")
+		end
+
+        -- PurchaseUpgrade Function (client requests purchase)
+        local purchaseUpgradeFunc = remotes:FindFirstChild("PurchaseUpgrade")
+        if not purchaseUpgradeFunc then
+            purchaseUpgradeFunc = Instance.new("RemoteFunction")
+            purchaseUpgradeFunc.Name = "PurchaseUpgrade"
+            purchaseUpgradeFunc.Parent = remotes
+            print("✅ Blaster Setup: Created PurchaseUpgrade function")
+        end
 	end
 	
-	-- Load the Blaster Handler (Phase 4 refactor)
 	-- Load the Blaster Handler (Phase 4 refactor)
 	-- local handler = blasterFolder:FindFirstChild("Handler")
 	-- if handler then

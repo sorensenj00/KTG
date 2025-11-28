@@ -68,21 +68,27 @@ local function savePlayer(player)
 end
 
 -- Weighted Random Selection
-local function getRandomRarity()
+local function getRandomRarity(minRarity)
+    minRarity = minRarity or 1
     local totalWeight = 0
+    local relevantWeights = {}
+    
     for _, entry in ipairs(MetaConfig.RarityWeights) do
-        totalWeight = totalWeight + entry.Weight
+        if entry.Rarity >= minRarity then
+            totalWeight = totalWeight + entry.Weight
+            table.insert(relevantWeights, entry)
+        end
     end
 
     local r = math.random() * totalWeight
     local current = 0
-    for _, entry in ipairs(MetaConfig.RarityWeights) do
+    for _, entry in ipairs(relevantWeights) do
         current = current + entry.Weight
         if r <= current then
             return entry.Rarity
         end
     end
-    return 1 -- Default Common
+    return minRarity -- Default
 end
 
 local function getRandomMutationOfRarity(rarity, excludeList)
@@ -134,7 +140,23 @@ function MetaProgressionManager.AddDNA(player, amount)
     if not data then return end
 
     data.DNA = data.DNA + amount
+    
+    -- Fire UpdateMetaEvent (for MutationHUDController)
     UpdateMetaEvent:FireClient(player, data)
+    
+    -- Also fire UpdateMetaStats (for HUDController)
+    task.spawn(function()
+        local blaster = ReplicatedStorage:FindFirstChild("Blaster")
+        if blaster then
+            local remotes = blaster:FindFirstChild("Remotes")
+            if remotes then
+                local updateMetaRemote = remotes:FindFirstChild("UpdateMetaStats")
+                if updateMetaRemote then
+                    updateMetaRemote:FireClient(player, data.DNA, data.Upgrades, 0)
+                end
+            end
+        end
+    end)
 end
 
 -- Gacha: Start Draft
@@ -152,7 +174,8 @@ function MetaProgressionManager.RequestDraft(player)
     local attempts = 0
     while #draft < 3 and attempts < 100 do
         attempts = attempts + 1
-        local rarity = getRandomRarity()
+        -- Gacha only drops Rare+ (Rarity >= 2)
+        local rarity = getRandomRarity(2)
         local mutationName = getRandomMutationOfRarity(rarity, draft)
 
         if mutationName then
@@ -196,9 +219,68 @@ function MetaProgressionManager.SelectMutation(player, index)
     -- Save & Notify
     savePlayer(player) -- Save immediately on purchase
     UpdateMetaEvent:FireClient(player, data)
+    
+    -- Also fire UpdateMetaStats for HUDController
+    task.spawn(function()
+        local blaster = ReplicatedStorage:FindFirstChild("Blaster")
+        if blaster then
+            local remotes = blaster:FindFirstChild("Remotes")
+            if remotes then
+                local updateMetaRemote = remotes:FindFirstChild("UpdateMetaStats")
+                if updateMetaRemote then
+                    updateMetaRemote:FireClient(player, data.DNA, data.Upgrades, 0)
+                end
+            end
+        end
+    end)
 
     print(player.Name .. " purchased mutation: " .. mutationName)
 
+    return true
+end
+
+function MetaProgressionManager.PurchaseUpgrade(player, statName)
+    local data = PlayerMeta[player]
+    if not data then return false, "No data" end
+
+    local upgradeConfig = MetaConfig.Upgrades[statName]
+    if not upgradeConfig then return false, "Invalid upgrade" end
+
+    local currentLevel = data.Upgrades[statName] or 0
+    if currentLevel >= upgradeConfig.MaxLevel then
+        return false, "Max level reached"
+    end
+
+    local cost = MetaConfig.GetCost(statName, currentLevel)
+    if data.DNA < cost then
+        return false, "Not enough DNA"
+    end
+
+    -- Deduct Cost
+    data.DNA = data.DNA - cost
+
+    -- Increment Level
+    data.Upgrades[statName] = currentLevel + 1
+
+    -- Save & Notify
+    savePlayer(player)
+    UpdateMetaEvent:FireClient(player, data)
+    
+    -- Also fire UpdateMetaStats for HUDController
+    task.spawn(function()
+        local blaster = ReplicatedStorage:FindFirstChild("Blaster")
+        if blaster then
+            local remotes = blaster:FindFirstChild("Remotes")
+            if remotes then
+                local updateMetaRemote = remotes:FindFirstChild("UpdateMetaStats")
+                if updateMetaRemote then
+                    updateMetaRemote:FireClient(player, data.DNA, data.Upgrades, 0)
+                end
+            end
+        end
+    end)
+
+    print(player.Name .. " purchased upgrade: " .. statName .. " (Lvl " .. (currentLevel + 1) .. ")")
     return true
 end
 
@@ -259,6 +341,16 @@ function MetaProgressionManager.Start()
         PlayerDrafts[player] = nil
     end)
 
+    -- Player Added
+    Players.PlayerAdded:Connect(function(player)
+        MetaProgressionManager.Initialize(player)
+    end)
+    
+    -- Initialize existing players
+    for _, player in ipairs(Players:GetPlayers()) do
+        MetaProgressionManager.Initialize(player)
+    end
+
     -- AutoSave
     task.spawn(function()
         while true do
@@ -290,5 +382,41 @@ end
 HarvestFunc.OnServerInvoke = function(player)
     return MetaProgressionManager.Harvest(player)
 end
+
+-- =====================================================
+-- 🔗 BLASTER.REMOTES INTEGRATION
+-- =====================================================
+-- HUDController uses Blaster.Remotes.UpdateMetaStats and RequestMetaData
+-- We need to hook these up to MetaProgressionManager
+
+task.spawn(function()
+    local blaster = ReplicatedStorage:WaitForChild("Blaster", 10)
+    if blaster then
+        local remotes = blaster:WaitForChild("Remotes", 10)
+        if remotes then
+            -- RequestMetaData: Client requests current DNA/mutations
+            local requestMetaFunc = remotes:WaitForChild("RequestMetaData", 10)
+            if requestMetaFunc then
+                requestMetaFunc.OnServerInvoke = function(player)
+                    local data = PlayerMeta[player]
+                    if data then
+                        return data.DNA, data.Upgrades, 0 -- Returns (dna, upgrades, biomass)
+                    end
+                    return 0, {}, 0
+                end
+                print("✅ MetaProgressionManager: RequestMetaData handler connected")
+            end
+
+            -- PurchaseUpgrade: Client requests to buy an upgrade
+            local purchaseUpgradeFunc = remotes:WaitForChild("PurchaseUpgrade", 10)
+            if purchaseUpgradeFunc then
+                purchaseUpgradeFunc.OnServerInvoke = function(player, statName)
+                    return MetaProgressionManager.PurchaseUpgrade(player, statName)
+                end
+                print("✅ MetaProgressionManager: PurchaseUpgrade handler connected")
+            end
+        end
+    end
+end)
 
 return MetaProgressionManager

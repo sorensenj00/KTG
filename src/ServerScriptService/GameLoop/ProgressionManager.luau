@@ -241,27 +241,37 @@ function ProgressionManager.Start()
             if not humanoid then return end
 
 			humanoid.Died:Connect(function()
-				-- Death Logic is now handled partially here (Reset) and partially in MetaProgression (Currency conversion)
-				-- MetaProgression listens to Died or Eliminated.
-
-				-- We reset attributes here, but MetaProgression needs to read them BEFORE reset.
-				-- Since 'Died' fires on multiple scripts, we need to ensure order or handle it centrally.
-				-- However, attributes don't clear instantly on death unless we set them.
-
-				-- Let's NOT reset here immediately if we want Meta to read them.
-				-- But typically player respawns fresh.
-				-- The standard Roblox behavior is Player keeps attributes.
-				-- We should let MetaProgression handle the "On Death" logic (Conversion)
-				-- and THEN reset the stats.
-
-				-- Since we can't guarantee order, we will delegate the Reset to MetaProgression's Death Handler?
-				-- Or we simply wait a frame?
-
-				-- Actually, MetaProgressionManager hooks into Humanoid.Died as well.
-				-- We will let MetaProgressionManager handle the calculation and reset.
-				-- Removing the reset code from here to avoid race conditions.
-				-- player:SetAttribute("Level", 1)
-				-- player:SetAttribute("Biomass", 0)
+				--Death Logic: Convert Biomass to DNA and show summary
+				local sessionKills = player:GetAttribute("Kills") or 0
+				local biomassLost = player:GetAttribute("Biomass") or 0
+				local earnedDNA = biomassLost -- 1:1 ratio
+				
+				-- Add DNA to player via MetaProgressionManager
+				if biomassLost > 0 then
+					MetaProgressionManager.AddDNA(player, earnedDNA)
+				end
+				
+				-- Fire death summary to client
+				task.delay(0.1, function()
+					local blaster = ReplicatedStorage:FindFirstChild("Blaster")
+					if blaster then
+						local remotes = blaster:FindFirstChild("Remotes")
+						if remotes then
+							local showDeathRemote = remotes:FindFirstChild("ShowDeathSummary")
+							if showDeathRemote then
+								showDeathRemote:FireClient(player, sessionKills, biomassLost, earnedDNA)
+								print(string.format("💀 %s died | Kills: %d | DNA Earned: %d", player.Name, sessionKills, earnedDNA))
+							end
+						end
+					end
+				end)
+				
+				-- Reset stats after death summary  is sent
+				task.delay(0.2, function()
+					player:SetAttribute("Level", 1)
+					player:SetAttribute("Biomass", 0)
+					player:SetAttribute("Kills", 0)
+				end)
 			end)
 
 			-- Meta Check (Born Big)
@@ -389,6 +399,30 @@ function ProgressionManager.Start()
 		bot:GetAttributeChangedSignal("Level"):Connect(onBotStatsChanged)
 		bot:GetAttributeChangedSignal("XP"):Connect(onBotStatsChanged)
 	end
+	
+	-- =====================================================
+	-- 🔄 RESPAWN HANDLER
+	-- =====================================================
+	task.spawn(function()
+		local blaster = ReplicatedStorage:WaitForChild("Blaster", 10)
+		if blaster then
+			local remotes = blaster:WaitForChild("Remotes", 10)
+			if remotes then
+				local respawnRemote = remotes:WaitForChild("RequestRespawn", 10)
+				if respawnRemote then
+					respawnRemote.OnServerEvent:Connect(function(player)
+						if player.Character then
+							player.Character:BreakJoints() -- Kills the player
+						end
+						task.wait(0.1)
+						player:LoadCharacter() -- Respawns them
+						print(string.format("�� %s respawned", player.Name))
+					end)
+					print("✅ ProgressionManager: Respawn handler connected")
+				end
+			end
+		end
+	end)
 end
 
 return ProgressionManager

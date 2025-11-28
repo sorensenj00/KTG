@@ -13,6 +13,7 @@
     
     Dependencies:
     - ServerScriptService.GameLoop.LightingSetup
+    - ServerScriptService.GameLoop.LightingSetup
     - ServerScriptService.Blaster.setup
     - ServerScriptService.GameLoop.ProgressionManager
     - ServerScriptService.GameLoop.MetaProgressionManager
@@ -53,11 +54,16 @@ local function initializeSystem(name, initFunc)
 	end
 end
 
--- 1. Initialize Blaster System
-print(">> Initializing Blaster System...")
+-- 1. Initialize Blaster System & Lighting
+print(">> Initializing Blaster System & Lighting...")
 initializeSystem("BlasterSetup", function()
 	local BlasterSetup = require(ServerScriptService.Blaster.setup)
 	BlasterSetup.Initialize()
+end)
+
+initializeSystem("LightingSetup", function()
+    local LightingSetup = require(GameLoop.LightingSetup)
+    LightingSetup.Start()
 end)
 
 -- 2. Load Modules (Definitions)
