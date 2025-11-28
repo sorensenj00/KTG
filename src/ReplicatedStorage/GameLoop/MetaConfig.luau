@@ -224,7 +224,24 @@ MetaConfig.Upgrades = {
 		Increment = 0.01,
 		MaxLevel = 10,
 	},
+
 }
+
+-- Merge Mutations into Upgrades
+for name, mutation in pairs(MutationConfig.Mutations) do
+	MetaConfig.Upgrades[name] = {
+		Name = name,
+		Description = mutation.Description,
+		Tier = mutation.Rarity,
+		BaseCost = 100, -- Default base cost for mutations
+		CostExponent = 1.5, -- Default exponent
+		MaxLevel = mutation.MaxLevel,
+		Increment = 0, -- Handled by GetStat
+		IsMutation = true,
+		GetStat = mutation.GetStat,
+        ImageId = mutation.ImageId
+	}
+end
 
 -- Helper to check if player unlocks a specific upgrade
 function MetaConfig.IsUnlocked(playerLifetimeDNA, upgradeKey)
@@ -254,6 +271,12 @@ function MetaConfig.GetCost(stat: string, level: number): number
 	-- Note: level 0 -> cost 0 (technically), but we usually buy level 1.
 	-- If level is 0 (first purchase), we treat it as buying level 1.
 	local targetLevel = level + 1
+    
+    if upgrade.IsMutation then
+        -- Mutations might have linear scaling or fixed cost
+        return math.floor(upgrade.BaseCost * targetLevel)
+    end
+
 	return math.floor(upgrade.BaseCost * (targetLevel ^ upgrade.CostExponent))
 end
 
@@ -275,6 +298,11 @@ function MetaConfig.GetValue(stat: string, level: number): number
 	if not upgrade then
 		return 0
 	end
+    
+    if upgrade.GetStat then
+        return upgrade.GetStat(level)
+    end
+
     -- For flat values, it's usually Base + (Level * Increment) or just Level * Increment
     -- Based on the Increment logic above:
     return level * upgrade.Increment
