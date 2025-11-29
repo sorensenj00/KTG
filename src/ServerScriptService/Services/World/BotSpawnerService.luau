@@ -15,7 +15,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 local ServerScriptService = game:GetService("ServerScriptService")
-local RunService = game:GetService("RunService")
+-- local RunService = game:GetService("RunService")
 
 local ScalingEngine = require(ServerScriptService.Services.World.ScalingEngineService)
 local GameConfig = require(game:GetService("ReplicatedStorage").GameLoop.GameConfig)
@@ -172,8 +172,12 @@ local function spawnBot()
 	if rayResult then
 
 		local hipHeight = humanoid.HipHeight
+		-- Use ExtentsSize for safer height calculation if HipHeight is unreliable
+		local size = bot:GetExtentsSize()
+		local safeY = math.max(hipHeight + 2, size.Y / 2 + 1)
+		
 		-- Spawn slightly above the hit position
-		local spawnPos = rayResult.Position + Vector3.new(0, hipHeight + 2, 0)
+		local spawnPos = rayResult.Position + Vector3.new(0, safeY, 0)
 		bot:PivotTo(CFrame.new(spawnPos))
 	else
 		-- Fallback: Use Baseplate height if available, otherwise default

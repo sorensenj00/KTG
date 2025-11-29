@@ -15,7 +15,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local Debris = game:GetService("Debris")
+-- local Debris = game:GetService("Debris")
 
 local OrbVisualsController = {}
 
@@ -93,7 +93,8 @@ local function spawnOrbVisual(orbData)
 	hitbox.Name = "Hitbox"
 	hitbox.Size = orbData.Tier.Size * 3
 	hitbox.Transparency = 1
-	hitbox.CanCollide = false
+	hitbox.CanCollide = false -- Don't block movement
+	hitbox.CanTouch = true -- But DO detect touches
 	hitbox.Anchored = true
 	hitbox.CastShadow = false
 	hitbox.Parent = orb
@@ -153,12 +154,14 @@ local function spawnOrbVisual(orbData)
 	
 	-- Drop animation (if death drop)
 	if orbData.IsDrop then
-		local targetPos = orbData.Position + Vector3.new(math.random(-15, 15), -orbData.Position.Y + 1, math.random(-15, 15))
+		-- Target is the actual spawn position (on ground)
+		local targetPos = orbData.Position
 		
 		task.spawn(function()
 			local t = 0
-			local duration = 0.5
-			local startPos = orbData.Position + Vector3.new(0, 5, 0)
+			-- local duration = 0.5
+			-- Start from above
+			local startPos = orbData.Position + Vector3.new(0, 10, 0)
 			orb.Position = startPos
 			
 			while t < 1 and orb.Parent and activeOrbs[orbData.Id] do
@@ -209,7 +212,7 @@ local function updateOrbVisuals(dt)
 		-- Rotation
 		orb.Orientation = Vector3.new(0, elapsed * 60, 0)
 		
-		-- Update hitbox
+		-- Update hitbox (FIX: This was missing!)
 		if hitbox and hitbox.Parent then
 			hitbox.CFrame = orb.CFrame
 		end

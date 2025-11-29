@@ -1138,6 +1138,14 @@ hud.MutationsButton.MouseButton1Click:Connect(function()
     MutationShopController.Open()
 end)
 
+-- Keyboard shortcut: N to toggle shop
+ContextActionService:BindAction("ToggleShop", function(_, inputState)
+	if inputState == Enum.UserInputState.Begin then
+		toggleShop()
+	end
+end, false, Enum.KeyCode.N)
+
+
 
 local function updateHealth()
 	local character = player.Character

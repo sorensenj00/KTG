@@ -30,14 +30,21 @@ local function initializeController(name: string, initFunc: () -> ())
 	end
 end
 
+-- Recursively discover all ModuleScripts in a folder
+local function discoverModules(folder: Instance, discovered: {ModuleScript})
+	for _, child in ipairs(folder:GetChildren()) do
+		if child:IsA("ModuleScript") then
+			table.insert(discovered, child)
+		elseif child:IsA("Folder") then
+			discoverModules(child, discovered)
+		end
+	end
+end
+
 -- Discover all ModuleScripts in Controllers folder
 print(">> Discovering Controllers...")
 local controllerModules = {}
-for _, child in ipairs(Controllers:GetChildren()) do
-	if child:IsA("ModuleScript") then
-		table.insert(controllerModules, child)
-	end
-end
+discoverModules(Controllers, controllerModules)
 
 print(string.format(">> Found %d controllers", #controllerModules))
 

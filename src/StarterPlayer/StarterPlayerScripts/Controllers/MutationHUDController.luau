@@ -250,9 +250,9 @@ function MutationHUDController.Start()
                 -- Or just toggle the whole GUI if it's meant to be a toggle.
                 -- Given "HUD", it's usually always on. But the user said "opens the tab".
                 -- Let's toggle the `MutationList` visibility for now, or the whole container.
-                local container = screenGui:FindFirstChild("MutationContainer")
-                if container then
-                    container.Visible = not container.Visible
+                -- Toggle only the list, keeping the title visible
+                if mutationListFrame then
+                    mutationListFrame.Visible = not mutationListFrame.Visible
                 end
             end
         end

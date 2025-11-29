@@ -25,101 +25,58 @@ function BlasterSetup.Initialize()
 	
 	-- Setup ReplicatedStorage Remotes
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
-	local rsBlaster = ReplicatedStorage:WaitForChild("Blaster", 10)
-	if rsBlaster then
-		local remotes = rsBlaster:FindFirstChild("Remotes")
-		if not remotes then
-			remotes = Instance.new("Folder")
-			remotes.Name = "Remotes"
-			remotes.Parent = rsBlaster
-			print("✅ Blaster Setup: Created Remotes folder")
-		end
-		
-		-- PlayerDamagedEntity Remote
-		local damageRemote = remotes:FindFirstChild("PlayerDamagedEntity")
-		if not damageRemote then
-			damageRemote = Instance.new("RemoteEvent")
-			damageRemote.Name = "PlayerDamagedEntity"
-			damageRemote.Parent = remotes
-			print("✅ Blaster Setup: Created PlayerDamagedEntity remote")
-		end
-		
-		-- ShowDeathSummary Remote (fires to client on death)
-		local showDeathRemote = remotes:FindFirstChild("ShowDeathSummary")
-		if not showDeathRemote then
-			showDeathRemote = Instance.new("RemoteEvent")
-			showDeathRemote.Name = "ShowDeathSummary"
-			showDeathRemote.Parent = remotes
-			print("✅ Blaster Setup: Created ShowDeathSummary remote")
-		end
-		
-		-- RequestRespawn Remote (client fires to request respawn)
-		local respawnRemote = remotes:FindFirstChild("RequestRespawn")
-		if not respawnRemote then
-			respawnRemote = Instance.new("RemoteEvent")
-			respawnRemote.Name = "RequestRespawn"
-			respawnRemote.Parent = remotes
-			print("✅ Blaster Setup: Created RequestRespawn remote")
-		end
-		
-		-- UpdateMetaStats Remote (server fires to update client HUD)
-		local metaStatsRemote = remotes:FindFirstChild("UpdateMetaStats")
-		if not metaStatsRemote then
-			metaStatsRemote = Instance.new("RemoteEvent")
-			metaStatsRemote.Name = "UpdateMetaStats"
-			metaStatsRemote.Parent = remotes
-			print("✅ Blaster Setup: Created UpdateMetaStats remote")
-		end
-		
-		-- RequestMetaData Function (client requests current meta stats)
-		local requestMetaFunc = remotes:FindFirstChild("RequestMetaData")
-		if not requestMetaFunc then
-			requestMetaFunc = Instance.new("RemoteFunction")
-			requestMetaFunc.Name = "RequestMetaData"
-			requestMetaFunc.Parent = remotes
-			print("✅ Blaster Setup: Created RequestMetaData function")
-		end
+	
+	-- Create Blaster Folder if missing
+	local rsBlaster = ReplicatedStorage:FindFirstChild("Blaster")
+	if not rsBlaster then
+		rsBlaster = Instance.new("Folder")
+		rsBlaster.Name = "Blaster"
+		rsBlaster.Parent = ReplicatedStorage
+		print("✅ Blaster Setup: Created ReplicatedStorage.Blaster folder")
+	end
 
-        -- PurchaseUpgrade Function (client requests purchase)
-        local purchaseUpgradeFunc = remotes:FindFirstChild("PurchaseUpgrade")
-        if not purchaseUpgradeFunc then
-            purchaseUpgradeFunc = Instance.new("RemoteFunction")
-            purchaseUpgradeFunc.Name = "PurchaseUpgrade"
-            purchaseUpgradeFunc.Parent = remotes
-            print("✅ Blaster Setup: Created PurchaseUpgrade function")
-        end
-		
-		-- OrbEvents Remote (server → client orb spawn/despawn)
-		local orbEvents = remotes:FindFirstChild("OrbEvents")
-		if not orbEvents then
-			orbEvents = Instance.new("RemoteEvent")
-			orbEvents.Name = "OrbEvents"
-			orbEvents.Parent = remotes
-			print("✅ Blaster Setup: Created OrbEvents remote")
+	local remotes = rsBlaster:FindFirstChild("Remotes")
+	if not remotes then
+		remotes = Instance.new("Folder")
+		remotes.Name = "Remotes"
+		remotes.Parent = rsBlaster
+		print("✅ Blaster Setup: Created Remotes folder")
+	end
+	
+	local function getOrCreateRemote(name, className)
+		local remote = remotes:FindFirstChild(name)
+		if not remote then
+			remote = Instance.new(className)
+			remote.Name = name
+			remote.Parent = remotes
+			print("✅ Blaster Setup: Created " .. name .. " " .. className)
 		end
-		
-		-- CollectOrb Remote (client → server orb collection)
-		local collectOrb = remotes:FindFirstChild("CollectOrb")
-		if not collectOrb then
-			collectOrb = Instance.new("RemoteEvent")
-			collectOrb.Name = "CollectOrb"
-			collectOrb.Parent = remotes
-			print("✅ Blaster Setup: Created CollectOrb remote")
-		end
-		
-		-- Setup RequestRespawn handler
-		local Players = game:GetService("Players")
-		local respawnRemote = remotes:FindFirstChild("RequestRespawn")
-		if respawnRemote then
-			respawnRemote.OnServerEvent:Connect(function(player, skipDeath)
-				print("🔄 RequestRespawn: Loading character for", player.Name, "skipDeath:", skipDeath or false)
-				player:LoadCharacter()
-			end)
-			print("✅ Blaster Setup: RequestRespawn handler connected")
-		end
-		
-	-- else
-	-- 	warn("❌ Blaster Setup: Handler.lua not found!")
+		return remote
+	end
+
+	-- Create ALL required remotes
+	getOrCreateRemote("PlayerDamagedEntity", "RemoteEvent")
+	getOrCreateRemote("ShowDeathSummary", "RemoteEvent")
+	getOrCreateRemote("RequestRespawn", "RemoteEvent")
+	getOrCreateRemote("UpdateMetaStats", "RemoteEvent")
+	getOrCreateRemote("RequestMetaData", "RemoteFunction")
+	getOrCreateRemote("PurchaseUpgrade", "RemoteFunction")
+	getOrCreateRemote("OrbEvents", "RemoteEvent")
+	getOrCreateRemote("CollectOrb", "RemoteEvent")
+	getOrCreateRemote("Shoot", "RemoteEvent")
+	getOrCreateRemote("Reload", "RemoteEvent")
+	getOrCreateRemote("ReplicateShot", "RemoteEvent")
+	getOrCreateRemote("DamageNumber", "RemoteEvent")
+	
+	-- Setup RequestRespawn handler
+	local Players = game:GetService("Players")
+	local respawnRemote = remotes:FindFirstChild("RequestRespawn")
+	if respawnRemote then
+		respawnRemote.OnServerEvent:Connect(function(player, skipDeath)
+			print("🔄 RequestRespawn: Loading character for", player.Name, "skipDeath:", skipDeath or false)
+			player:LoadCharacter()
+		end)
+		print("✅ Blaster Setup: RequestRespawn handler connected")
 	end
 end
 

@@ -193,6 +193,17 @@ function ProgressionManager.AddBiomass(target: Instance, amount: number)
 	target:SetAttribute("Level", currentLevel)
 	target:SetAttribute("Biomass", totalBiomass)
 
+	-- Force Scaling Update
+	if target:IsA("Player") and target.Character then
+		task.spawn(function()
+			ScalingEngine.UpdateCharacter(target.Character, totalBiomass)
+		end)
+	elseif target:IsA("Model") then
+		task.spawn(function()
+			ScalingEngine.UpdateCharacter(target, totalBiomass)
+		end)
+	end
+
 	if levelsGained > 0 then
 		-- print(string.format("⬆️ %s leveled up to %d", target.Name, currentLevel))
 		if currentLevel >= ScalingConfig.MAX_LEVEL then

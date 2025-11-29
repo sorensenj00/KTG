@@ -120,6 +120,9 @@ local function spawnOrb()
 	end
 
 	local spawnPos = getRandomSpawnPosition()
+	-- Fix: Offset Y by half size so it sits ON the ground
+	spawnPos = spawnPos + Vector3.new(0, selectedTier.Size.Y / 2, 0)
+
 	local orbId = nextOrbId
 	nextOrbId = nextOrbId + 1
 
@@ -247,8 +250,24 @@ function XPOrbService.SpawnDrop(position: Vector3, totalXP: number)
 		end
 
 		-- Scatter position
-		local offset = Vector3.new(math.random(-15, 15), 5, math.random(-15, 15))
-		local spawnPos = position + offset
+		local offset = Vector3.new(math.random(-15, 15), 0, math.random(-15, 15))
+		local targetX = position.X + offset.X
+		local targetZ = position.Z + offset.Z
+		
+		-- Raycast to find floor
+		local rayOrigin = Vector3.new(targetX, position.Y + 20, targetZ)
+		local rayDirection = Vector3.new(0, -100, 0)
+		local raycastParams = RaycastParams.new()
+		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+		raycastParams.FilterDescendantsInstances = {Players}
+		
+		local rayResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+		local yPos = position.Y
+		if rayResult then
+			yPos = rayResult.Position.Y
+		end
+		
+		local spawnPos = Vector3.new(targetX, yPos + (tier.Size.Y / 2), targetZ)
 
 		local orbId = nextOrbId
 		nextOrbId = nextOrbId + 1
@@ -288,9 +307,29 @@ function XPOrbService.Start()
     end)
 
 	-- Get remotes
-	local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes")
-	orbEvents = remotes:WaitForChild("OrbEvents")
-	collectOrbRemote = remotes:WaitForChild("CollectOrb")
+	-- Get remotes
+	print("XPOrbService: Waiting for Blaster folder...")
+	local blaster = ReplicatedStorage:WaitForChild("Blaster", 10)
+	if not blaster then
+		warn("❌ XPOrbService: Could not find ReplicatedStorage.Blaster!")
+		return
+	end
+	
+	print("XPOrbService: Waiting for Remotes folder...")
+	local remotes = blaster:WaitForChild("Remotes", 10)
+	if not remotes then
+		warn("❌ XPOrbService: Could not find Blaster.Remotes!")
+		return
+	end
+	
+	print("XPOrbService: Waiting for OrbEvents...")
+	orbEvents = remotes:WaitForChild("OrbEvents", 10)
+	if not orbEvents then
+		warn("❌ XPOrbService: Could not find OrbEvents remote!")
+		return
+	end
+	
+	collectOrbRemote = remotes:WaitForChild("CollectOrb", 10)
 
 
 	-- Listen for collections

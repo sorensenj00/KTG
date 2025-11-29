@@ -174,8 +174,8 @@ local function createLobby()
 		-- Position at origin
 		if model.PrimaryPart then
 			-- Center vertically based on HipHeight
-			local hipHeight = model:FindFirstChild("Humanoid") and model.Humanoid.HipHeight or 2
-			model:PivotTo(CFrame.new(0, -hipHeight - 0.5, 0) * CFrame.Angles(0, math.rad(10), 0))
+			-- Center vertically fixed at -1
+			model:PivotTo(CFrame.new(0, 1, 0) * CFrame.Angles(0, math.rad(180), 0))
 		end
 
 		-- Force T-Pose (Rotate limbs)
