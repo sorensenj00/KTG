@@ -98,7 +98,11 @@ local function updateSafeZones()
 					local size = zonePart.Size
 
 					if math.abs(relPos.X) <= size.X/2 and math.abs(relPos.Y) <= size.Y/2 and math.abs(relPos.Z) <= size.Z/2 then
-						safePlayers[player] = true
+						-- Level Cap Enforcement
+						local level = player:GetAttribute("Level") or 1
+						if level <= ScalingConfig.SAFE_ZONE_MAX_LEVEL then
+							safePlayers[player] = true
+						end
 						break -- Found one, no need to check others
 					end
 				end

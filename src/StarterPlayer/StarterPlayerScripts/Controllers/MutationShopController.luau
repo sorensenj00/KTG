@@ -17,10 +17,12 @@ local player = Players.LocalPlayer
 local gui = nil
 local mainFrame = nil
 local cardsContainer = nil
+local timerLabel = nil
 
 local mutationConfig = require(ReplicatedStorage.GameLoop.MutationConfig)
 
 local closeCallback = nil
+local nextRotationTime = 0
 
 function MutationShopController.SetCloseCallback(callback)
     closeCallback = callback
@@ -135,7 +137,14 @@ local function createCard(name, data, index)
         if success then
             gui.Enabled = false
             pcall(function() RunService:UnbindFromRenderStep("UnlockMouseForMutationShop") end)
-            UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+
+            -- If we have a parent menu callback, use it to return smoothly
+            if closeCallback then
+                 closeCallback()
+            else
+                 -- Fallback: Just lock mouse and resume game
+                 UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+            end
         end
     end)
 
@@ -147,7 +156,11 @@ function MutationShopController.Open()
 
     -- Request Draft
     local func = ReplicatedStorage:WaitForChild("RequestDraft")
-    local draft = func:InvokeServer()
+    local draft, rotationTime = func:InvokeServer()
+
+    if rotationTime then
+        nextRotationTime = rotationTime
+    end
 
     if not draft then
         -- Notify "Not enough DNA" or error
@@ -220,9 +233,9 @@ function MutationShopController.Start()
     title.Parent = mainFrame
     
     -- Timer Label
-    local timerLabel = Instance.new("TextLabel")
+    timerLabel = Instance.new("TextLabel")
     timerLabel.Name = "TimerLabel"
-    timerLabel.Text = "New mutations in: 05:00"
+    timerLabel.Text = "New mutations in: --:--"
     timerLabel.Size = UDim2.new(1, 0, 0, 20)
     timerLabel.Position = UDim2.new(0, 0, 0.1, 0)
     timerLabel.BackgroundTransparency = 1
@@ -231,19 +244,17 @@ function MutationShopController.Start()
     timerLabel.TextSize = 14
     timerLabel.Parent = mainFrame
     
-    -- Timer Logic
+    -- Timer Logic (Server Synced)
     task.spawn(function()
         while gui.Parent do
-            local now = os.time()
-            local cycle = 300 -- 5 minutes
-            local remaining = cycle - (now % cycle)
-            local m = math.floor(remaining / 60)
-            local s = remaining % 60
-            timerLabel.Text = string.format("New mutations in: %02d:%02d", m, s)
-            
-            if remaining == cycle - 1 and gui.Enabled then
-                 -- Auto-refresh if open when timer hits 0 (actually starts new cycle)
-                 -- Ideally we'd trigger a refresh here, but let's just let the user re-roll or close/open
+            if nextRotationTime > 0 then
+                local now = os.time()
+                local remaining = math.max(0, nextRotationTime - now)
+                local m = math.floor(remaining / 60)
+                local s = remaining % 60
+                timerLabel.Text = string.format("New mutations in: %02d:%02d", m, s)
+            else
+                timerLabel.Text = "Synchronizing..."
             end
             task.wait(1)
         end

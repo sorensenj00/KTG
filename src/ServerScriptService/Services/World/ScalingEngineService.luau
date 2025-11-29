@@ -58,7 +58,7 @@ function ScalingEngine.UpdateCharacter(character: Model, biomass: number)
 	-- Then get scale multiplier for visual scaling
 	local scale = ScalingConfig.GetSizeMultiplier(level)
 	
-	print(string.format("[ScalingDebug] Char: %s, Biomass: %d, Level: %.2f, Scale: %.2f", character.Name, biomass, level, scale))
+	-- print(string.format("[ScalingDebug] Char: %s, Biomass: %d, Level: %.2f, Scale: %.2f", character.Name, biomass, level, scale))
 	
 	local baseMaxHealth = ScalingConfig.GetMaxHealth(math.floor(level)) -- Use INTEGER LEVEL for health (step scaling)
 	local baseWalkSpeed = ScalingConfig.GetWalkSpeed(level) -- Keep speed smooth or step? User said HP. Keeping speed smooth for now.
