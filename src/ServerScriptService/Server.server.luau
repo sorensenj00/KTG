@@ -49,9 +49,6 @@ initializeSystem("BlasterSetup", function()
 end)
 
 -- Note: LightingSetup needs direct script permissions, so it must remain in GameLoop/
--- and will run automatically as LightingSetup.luau (a .server script)
-print("⚠️  LightingSetup runs separately with script permissions")
-
 -- Discover all services
 print(">> Discovering Services...")
 local Services = ServerScriptService:WaitForChild("Services")
