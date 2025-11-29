@@ -47,9 +47,9 @@ ScalingConfig.STAR_MODE_MATERIAL = Enum.Material.Neon
 ScalingConfig.SAFE_ZONE_MAX_LEVEL = 5
 
 -- Size Limits (Used by Camera Controllers)
-ScalingConfig.MIN_SIZE = 0.4
-ScalingConfig.MAX_SIZE = 30.0
-ScalingConfig.MAX_SIZE_CAP = 30.0 -- Threshold for "Star Mode" / Titan visuals
+ScalingConfig.MIN_SIZE = 8.0
+ScalingConfig.MAX_SIZE = 600.0
+ScalingConfig.MAX_SIZE_CAP = 600.0 -- Threshold for "Star Mode" / Titan visuals
 
 
 
@@ -69,18 +69,18 @@ end
 
 function ScalingConfig.GetSizeMultiplier(level: number): number
 	-- Continuous Scaling: Linear Aggression
-	-- Level 1: 0.4x
-	-- Level 10: 4.0x
-	-- Level 30: 20.0x
+	-- Level 1: 8.0x
+	-- Level 10: 80.0x
+	-- Level 30: 400.0x
 	
 	if level <= 10 then
-		-- 0.4 to 4.0 over 9 levels (approx 0.4 per level)
-		-- Formula: 0.4 + (level - 1) * 0.4
-		return 0.4 + (level - 1) * 0.4
+		-- 8.0 to 80.0 over 9 levels (approx 8.0 per level)
+		-- Formula: 8.0 + (level - 1) * 8.0
+		return 8.0 + (level - 1) * 8.0
 	else
-		-- 4.0 to 20.0 over 20 levels (approx 0.8 per level)
-		-- Formula: 4.0 + (level - 10) * 0.8
-		return 4.0 + (level - 10) * 0.8
+		-- 80.0 to 400.0 over 20 levels (approx 16.0 per level)
+		-- Formula: 80.0 + (level - 10) * 16.0
+		return 80.0 + (level - 10) * 16.0
 	end
 end
 
@@ -116,7 +116,7 @@ function ScalingConfig.GetScale(biomass: number): number
 	-- Therefore: level = (biomass / BIOMASS_BASE_REQ) ^ (1 / BIOMASS_EXPONENT)
 	
 	if biomass <= 0 then
-		return 1
+		return ScalingConfig.GetSizeMultiplier(1)
 	end
 	
 	local level = math.pow(biomass / ScalingConfig.BIOMASS_BASE_REQ, 1 / ScalingConfig.BIOMASS_EXPONENT)

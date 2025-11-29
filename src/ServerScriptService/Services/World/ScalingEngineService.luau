@@ -49,6 +49,7 @@ function ScalingEngine.UpdateCharacter(character: Model, biomass: number)
 
 	-- 1. Calculate Core Stats from Biomass
 	local scale = ScalingConfig.GetScale(biomass)
+	print(string.format("[ScalingDebug] Char: %s, Biomass: %d, Scale: %.2f", character.Name, biomass, scale))
 	local baseMaxHealth = ScalingConfig.GetMaxHealth(scale)
 	local baseWalkSpeed = ScalingConfig.GetWalkSpeed(scale)
 

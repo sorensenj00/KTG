@@ -63,7 +63,7 @@ local function updateLabel(dataSource: Instance, label: TextLabel)
 	local requiredXP = ScalingConfig.GetXPRequired(level)
 	
 	if level >= ScalingConfig.MAX_LEVEL then
-		label.Text = "MAX LEVEL (20)"
+		label.Text = string.format("MAX LEVEL (%d)", ScalingConfig.MAX_LEVEL)
 		label.TextColor3 = ScalingConfig.STAR_MODE_COLOR
 	else
 		label.Text = string.format("Level %d | XP: %d/%d", level, xp, requiredXP)

@@ -64,6 +64,10 @@ function LightingSetup.Start()
     -- Lighting.Technology = Enum.Technology.Future -- Cannot be set by script, must be set in Studio
     Lighting.EnvironmentDiffuseScale = 1
     Lighting.EnvironmentSpecularScale = 1
+    
+    -- Ambient Lighting (Fix for dark shadows)
+    Lighting.Ambient = Color3.fromRGB(70, 70, 70) -- Brighter indoor shadows
+    Lighting.OutdoorAmbient = Color3.fromRGB(100, 100, 100) -- Brighter outdoor shadows
 
     -- Bloom Effect
     local bloom = Lighting:FindFirstChildOfClass("BloomEffect")

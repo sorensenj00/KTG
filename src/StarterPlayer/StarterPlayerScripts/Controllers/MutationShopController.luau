@@ -107,13 +107,13 @@ local function createCard(name, data, index)
     local rarityLabel = Instance.new("TextLabel")
     rarityLabel.Name = "RarityLabel"
     rarityLabel.Text = string.upper(data.Rarity)
-    rarityLabel.Size = UDim2.new(1, 0, 0, 20)
-    rarityLabel.Position = UDim2.new(0, 0, 0.92, 0)
+    rarityLabel.Size = UDim2.new(1, 0, 0, 30)
+    rarityLabel.Position = UDim2.new(0, 0, 0.15, 0) -- Moved up
     rarityLabel.BackgroundTransparency = 1
     rarityLabel.TextColor3 = mutationConfig.RarityColors[data.Rarity] or Color3.new(1,1,1)
-    rarityLabel.Font = Enum.Font.Gotham
-    rarityLabel.TextSize = 14 -- Increased from 12
-    rarityLabel.TextTransparency = 0.5
+    rarityLabel.Font = Enum.Font.GothamBlack
+    rarityLabel.TextSize = 24 -- Big and Bold
+    rarityLabel.TextTransparency = 0.2
     rarityLabel.Parent = card
 
     -- Hover Animation
@@ -218,6 +218,36 @@ function MutationShopController.Start()
     title.Font = Enum.Font.GothamBlack
     title.TextSize = 32
     title.Parent = mainFrame
+    
+    -- Timer Label
+    local timerLabel = Instance.new("TextLabel")
+    timerLabel.Name = "TimerLabel"
+    timerLabel.Text = "New mutations in: 05:00"
+    timerLabel.Size = UDim2.new(1, 0, 0, 20)
+    timerLabel.Position = UDim2.new(0, 0, 0.1, 0)
+    timerLabel.BackgroundTransparency = 1
+    timerLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    timerLabel.Font = Enum.Font.GothamBold
+    timerLabel.TextSize = 14
+    timerLabel.Parent = mainFrame
+    
+    -- Timer Logic
+    task.spawn(function()
+        while gui.Parent do
+            local now = os.time()
+            local cycle = 300 -- 5 minutes
+            local remaining = cycle - (now % cycle)
+            local m = math.floor(remaining / 60)
+            local s = remaining % 60
+            timerLabel.Text = string.format("New mutations in: %02d:%02d", m, s)
+            
+            if remaining == cycle - 1 and gui.Enabled then
+                 -- Auto-refresh if open when timer hits 0 (actually starts new cycle)
+                 -- Ideally we'd trigger a refresh here, but let's just let the user re-roll or close/open
+            end
+            task.wait(1)
+        end
+    end)
     
     -- Close/Back Button
     local closeButton = Instance.new("TextButton")

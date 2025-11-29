@@ -1138,22 +1138,6 @@ hud.MutationsButton.MouseButton1Click:Connect(function()
     MutationShopController.Open()
 end)
 
--- Keybinds
-UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
-	if input.KeyCode == Enum.KeyCode.N then
-		toggleShop()
-	elseif input.KeyCode == Enum.KeyCode.M then
-		-- Toggle Mouse Lock
-		if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-			UserInputService.MouseIconEnabled = true
-		else
-			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-			UserInputService.MouseIconEnabled = false
-		end
-	elseif input.KeyCode == Enum.KeyCode.H then
-		-- Trigger Harvest if button is visible (meaning safe zone)
 		if hud.HarvestButton.Visible then
 			-- Simulate click
 			-- Simulate click
@@ -1167,9 +1151,9 @@ UserInputService.InputBegan:Connect(function(input, processed)
 					playSound(SOUNDS.Error)
 				end
 			end
-		end
 	end
-end)
+end
+
 
 local function updateHealth()
 	local character = player.Character

@@ -59,7 +59,7 @@ local function createMutationHUD()
     title.Name = "Title"
     title.Size = UDim2.new(1, 0, 0, 40)
     title.BackgroundTransparency = 1
-    title.Text = "MUTATIONS"
+    title.Text = "MUTATIONS (M)"
     title.TextColor3 = Color3.fromRGB(255, 150, 0)
     title.TextSize = 18
     title.Font = Enum.Font.GothamBold
@@ -235,6 +235,27 @@ function MutationHUDController.Start()
     local updateMetaEvent = ReplicatedStorage:WaitForChild("UpdateMetaEvent")
     updateMetaEvent.OnClientEvent:Connect(function(metaData)
         updateMutationDisplay(metaData)
+    end)
+    
+    -- Keybind (M) to toggle HUD
+    local UserInputService = game:GetService("UserInputService")
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        if input.KeyCode == Enum.KeyCode.M then
+            if screenGui and screenGui.Enabled then
+                -- Toggle container visibility or just the whole GUI?
+                -- Let's toggle the container's visibility or size.
+                -- The request says "opens the tab to see your mutations".
+                -- Assuming the HUD is always there but maybe we want to collapse/expand it?
+                -- Or just toggle the whole GUI if it's meant to be a toggle.
+                -- Given "HUD", it's usually always on. But the user said "opens the tab".
+                -- Let's toggle the `MutationList` visibility for now, or the whole container.
+                local container = screenGui:FindFirstChild("MutationContainer")
+                if container then
+                    container.Visible = not container.Visible
+                end
+            end
+        end
     end)
 
     print("MutationHUDController started")
