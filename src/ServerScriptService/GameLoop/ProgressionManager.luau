@@ -410,13 +410,21 @@ function ProgressionManager.Start()
 			if remotes then
 				local respawnRemote = remotes:WaitForChild("RequestRespawn", 10)
 				if respawnRemote then
-					respawnRemote.OnServerEvent:Connect(function(player)
-						if player.Character then
+					respawnRemote.OnServerEvent:Connect(function(player, skipDeath)
+						if not skipDeath and player.Character then
 							player.Character:BreakJoints() -- Kills the player
 						end
-						task.wait(0.1)
-						player:LoadCharacter() -- Respawns them
-						print(string.format("�� %s respawned", player.Name))
+						
+						if skipDeath then
+							-- Just load character directly
+							task.wait(0.1)
+							player:LoadCharacter()
+						else
+							-- Wait for death logic to process
+							task.wait(0.1)
+							player:LoadCharacter() 
+						end
+						print(string.format("🔄 %s respawned (SkipDeath: %s)", player.Name, tostring(skipDeath)))
 					end)
 					print("✅ ProgressionManager: Respawn handler connected")
 				end

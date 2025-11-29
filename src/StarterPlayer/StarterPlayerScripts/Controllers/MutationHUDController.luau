@@ -28,14 +28,15 @@ local THEME = {
     STROKE_DARK = Color3.fromRGB(50, 50, 60),
 }
 
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
+-- local TweenService = game:GetService("TweenService")
+-- local UserInputService = game:GetService("UserInputService")
 
 -- Create the main HUD UI
 local function createMutationHUD()
     screenGui = Instance.new("ScreenGui")
     screenGui.Name = "MutationHUD"
     screenGui.ResetOnSpawn = false
+    screenGui.DisplayOrder = 200 -- Ensure it renders on top of Lobby UI (DisplayOrder 100)
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     screenGui.Parent = playerGui
 
@@ -43,29 +44,22 @@ local function createMutationHUD()
     local container = Instance.new("Frame")
     container.Name = "MutationContainer"
     -- Collapsed state: Small header only
-    container.Size = UDim2.new(0, 250, 0, 40)
+    container.Size = UDim2.new(0, 250, 0, 400) -- Always expanded
     container.Position = UDim2.new(1, -260, 0, 80) -- Right side, below top bar
-    container.BackgroundColor3 = THEME.BG_DARK
-    container.BackgroundTransparency = 0.3
+    container.BackgroundTransparency = 1 -- Transparent background
     container.BorderSizePixel = 0
-    container.ClipsDescendants = true -- Hide content when collapsed
+    container.ClipsDescendants = true
     container.Parent = screenGui
 
-    local containerCorner = Instance.new("UICorner")
-    containerCorner.CornerRadius = UDim.new(0, 8)
-    containerCorner.Parent = container
-
-    local containerStroke = Instance.new("UIStroke")
-    containerStroke.Color = THEME.STROKE_DARK
-    containerStroke.Thickness = 2
-    containerStroke.Parent = container
+    -- Removed Border/Stroke for cleaner look
+    -- local containerStroke = Instance.new("UIStroke") ...
 
     -- Title
     local title = Instance.new("TextLabel")
     title.Name = "Title"
     title.Size = UDim2.new(1, 0, 0, 40)
     title.BackgroundTransparency = 1
-    title.Text = "MUTATIONS (Hover)"
+    title.Text = "MUTATIONS"
     title.TextColor3 = Color3.fromRGB(255, 150, 0)
     title.TextSize = 18
     title.Font = Enum.Font.GothamBold
@@ -92,25 +86,25 @@ local function createMutationHUD()
         mutationListFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
     end)
 
-    -- Dynamic Resizing Logic
-    local expandedSize = UDim2.new(0, 250, 0, 400)
-    local collapsedSize = UDim2.new(0, 250, 0, 40)
+    -- Dynamic Resizing Logic Removed (Static Display)
+    -- local expandedSize = UDim2.new(0, 250, 0, 400)
+    -- local collapsedSize = UDim2.new(0, 250, 0, 40)
 
-    container.MouseEnter:Connect(function()
-        TweenService:Create(container, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Size = expandedSize,
-            BackgroundTransparency = 0.1
-        }):Play()
-        title.Text = "MUTATIONS"
-    end)
+    -- container.MouseEnter:Connect(function()
+    --     TweenService:Create(container, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    --         Size = expandedSize,
+    --         BackgroundTransparency = 0.1
+    --     }):Play()
+    --     title.Text = "MUTATIONS"
+    -- end)
 
-    container.MouseLeave:Connect(function()
-        TweenService:Create(container, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Size = collapsedSize,
-            BackgroundTransparency = 0.3
-        }):Play()
-        title.Text = "MUTATIONS (Hover)"
-    end)
+    -- container.MouseLeave:Connect(function()
+    --     TweenService:Create(container, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    --         Size = collapsedSize,
+    --         BackgroundTransparency = 0.3
+    --     }):Play()
+    --     title.Text = "MUTATIONS (Hover)"
+    -- end)
 end
 
 -- Create a mutation card
@@ -120,25 +114,27 @@ local function createMutationCard(mutationName, level)
 
     local card = Instance.new("Frame")
     card.Name = mutationName
-    card.Size = UDim2.new(1, -10, 0, 60)
+    card.Size = UDim2.new(1, -10, 0, 45) -- Compact height (was 60)
     card.BackgroundColor3 = THEME.BG_CARD
+    card.BackgroundTransparency = 0.6 -- Glass look
     card.BorderSizePixel = 0
 
     local cardCorner = Instance.new("UICorner")
     cardCorner.CornerRadius = UDim.new(0, 6)
     cardCorner.Parent = card
 
-    -- Rarity border
+    -- Rarity border (Thinner)
     local cardStroke = Instance.new("UIStroke")
     cardStroke.Color = MutationConfig.RarityColors[mutationData.Rarity] or Color3.new(1, 1, 1)
-    cardStroke.Thickness = 2
+    cardStroke.Thickness = 1 -- Thinner stroke
+    cardStroke.Transparency = 0.5 -- Subtle stroke
     cardStroke.Parent = card
 
-    -- Icon
+    -- Icon (Smaller)
     local icon = Instance.new("ImageLabel")
     icon.Name = "Icon"
-    icon.Size = UDim2.new(0, 40, 0, 40)
-    icon.Position = UDim2.new(0, 10, 0.5, 0)
+    icon.Size = UDim2.new(0, 30, 0, 30) -- Smaller icon
+    icon.Position = UDim2.new(0, 8, 0.5, 0)
     icon.AnchorPoint = Vector2.new(0, 0.5)
     icon.BackgroundTransparency = 1
     icon.Image = mutationData.ImageId or "rbxasset://textures/ui/GuiImagePlaceholder.png"
@@ -147,12 +143,12 @@ local function createMutationCard(mutationName, level)
     -- Mutation name
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Name = "NameLabel"
-    nameLabel.Size = UDim2.new(1, -120, 0, 20)
-    nameLabel.Position = UDim2.new(0, 55, 0, 8)
+    nameLabel.Size = UDim2.new(1, -100, 0, 16)
+    nameLabel.Position = UDim2.new(0, 45, 0, 6)
     nameLabel.BackgroundTransparency = 1
     nameLabel.Text = mutationName
     nameLabel.TextColor3 = THEME.TEXT_WHITE
-    nameLabel.TextSize = 14
+    nameLabel.TextSize = 12 -- Smaller font
     nameLabel.Font = Enum.Font.GothamBold
     nameLabel.TextXAlignment = Enum.TextXAlignment.Left
     nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -161,12 +157,12 @@ local function createMutationCard(mutationName, level)
     -- Level display
     local levelLabel = Instance.new("TextLabel")
     levelLabel.Name = "LevelLabel"
-    levelLabel.Size = UDim2.new(1, -120, 0, 18)
-    levelLabel.Position = UDim2.new(0, 55, 0, 32)
+    levelLabel.Size = UDim2.new(1, -100, 0, 14)
+    levelLabel.Position = UDim2.new(0, 45, 0, 24)
     levelLabel.BackgroundTransparency = 1
     levelLabel.Text = string.format("Level %d / %d", level, mutationData.MaxLevel)
     levelLabel.TextColor3 = THEME.TEXT_GRAY
-    levelLabel.TextSize = 12
+    levelLabel.TextSize = 10 -- Smaller font
     levelLabel.Font = Enum.Font.Gotham
     levelLabel.TextXAlignment = Enum.TextXAlignment.Left
     levelLabel.Parent = card
@@ -174,13 +170,14 @@ local function createMutationCard(mutationName, level)
     -- Level badge (right side)
     local levelBadge = Instance.new("TextLabel")
     levelBadge.Name = "LevelBadge"
-    levelBadge.Size = UDim2.new(0, 35, 0, 35)
-    levelBadge.Position = UDim2.new(1, -45, 0.5, 0)
+    levelBadge.Size = UDim2.new(0, 24, 0, 24) -- Smaller badge
+    levelBadge.Position = UDim2.new(1, -30, 0.5, 0)
     levelBadge.AnchorPoint = Vector2.new(0, 0.5)
     levelBadge.BackgroundColor3 = MutationConfig.RarityColors[mutationData.Rarity] or Color3.new(1, 1, 1)
+    levelBadge.BackgroundTransparency = 0.2
     levelBadge.Text = tostring(level)
     levelBadge.TextColor3 = Color3.fromRGB(20, 20, 20)
-    levelBadge.TextSize = 18
+    levelBadge.TextSize = 14 -- Smaller text
     levelBadge.Font = Enum.Font.GothamBlack
     levelBadge.Parent = card
 

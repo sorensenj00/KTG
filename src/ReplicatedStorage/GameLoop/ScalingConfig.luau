@@ -21,8 +21,8 @@ ScalingConfig.HEALTH_BASE = 45
 ScalingConfig.HEALTH_GROWTH_FACTOR = 1.125 
 
 -- Speed Constants
-ScalingConfig.SPEED_AT_LEVEL_1 = 100 -- Very Fast (Mouse) - Updated to 100 per request
-ScalingConfig.SPEED_AT_LEVEL_30 = 10 -- Very Slow (Titan)
+ScalingConfig.SPEED_AT_LEVEL_1 = 120 -- Very Fast (Mouse) - Updated to 100 per request
+ScalingConfig.SPEED_AT_LEVEL_30 = 40 -- Very Slow (Titan)
 ScalingConfig.BASE_WALKSPEED = 16 -- Base Roblox humanoid walk speed
 -- Health
 ScalingConfig.HEALTH_BASE = 100
@@ -30,7 +30,7 @@ ScalingConfig.HEALTH_EXPONENT = 2.5
 
 -- Size (0.75 to 12.0)
 ScalingConfig.MIN_SIZE = 0.75
-ScalingConfig.MAX_SIZE = 12.0
+ScalingConfig.MAX_SIZE = 30.0
 ScalingConfig.GROWTH_EXPONENT = 3.0
 
 -- Speed Constants
@@ -48,8 +48,8 @@ ScalingConfig.SAFE_ZONE_MAX_LEVEL = 5
 
 -- Size Limits (Used by Camera Controllers)
 ScalingConfig.MIN_SIZE = 0.4
-ScalingConfig.MAX_SIZE = 20.0
-ScalingConfig.MAX_SIZE_CAP = 18.0 -- Threshold for "Star Mode" / Titan visuals
+ScalingConfig.MAX_SIZE = 30.0
+ScalingConfig.MAX_SIZE_CAP = 30.0 -- Threshold for "Star Mode" / Titan visuals
 
 
 

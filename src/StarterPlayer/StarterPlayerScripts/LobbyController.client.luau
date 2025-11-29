@@ -12,8 +12,9 @@ local THEME = {
 	ACCENT_BLUE = Color3.fromRGB(0, 150, 200), -- Hextech Blue
 	TEXT_WHITE = Color3.fromRGB(240, 240, 240),
 	TEXT_GOLD = Color3.fromRGB(240, 210, 150),
-	BUTTON_PLAY = Color3.fromRGB(30, 30, 35), -- Dark button base
-	BUTTON_PLAY_STROKE = Color3.fromRGB(0, 200, 255), -- Bright Blue Stroke
+	BUTTON_PLAY = Color3.fromRGB(0, 200, 100), -- Green button base
+	BUTTON_PLAY_STROKE = Color3.fromRGB(0, 150, 80), -- Darker Green Stroke
+	BUTTON_PLAY_SHADOW = Color3.fromRGB(0, 100, 50), -- Shadow color
 }
 
 local function createLobby()
@@ -78,6 +79,41 @@ local function createLobby()
 				-- Fallback if no primary part
 				clone:PivotTo(CFrame.new(0,0,0))
 			end
+
+			-- Force T-Pose (Remove Animate script and stop tracks)
+			local animateScript = clone:FindFirstChild("Animate")
+			if animateScript then
+				animateScript:Destroy()
+			end
+			
+			local humanoid = clone:FindFirstChild("Humanoid")
+			if humanoid then
+				local animator = humanoid:FindFirstChild("Animator")
+				if animator then
+					for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+						track:Stop()
+					end
+				end
+			end
+			
+			-- Explicitly force T-Pose by manipulating Motor6Ds
+			-- R15 Standard: LeftShoulder, RightShoulder in UpperTorso
+			-- We want to rotate them up 90 degrees (pi/2)
+			local upperTorso = clone:WaitForChild("UpperTorso", 5)
+			if upperTorso then
+				local leftShoulder = upperTorso:WaitForChild("LeftShoulder", 5)
+				local rightShoulder = upperTorso:WaitForChild("RightShoulder", 5)
+				
+				if leftShoulder then
+					-- Rotate Left Arm Up (Z axis usually)
+					leftShoulder.C0 = CFrame.new(-1, 0.5, 0) * CFrame.Angles(0, 0, math.rad(90))
+				end
+				
+				if rightShoulder then
+					-- Rotate Right Arm Up
+					rightShoulder.C0 = CFrame.new(1, 0.5, 0) * CFrame.Angles(0, 0, math.rad(-90))
+				end
+			end
 		end
 	end
 	
@@ -86,7 +122,7 @@ local function createLobby()
 		
 		if viewmodelConnection then viewmodelConnection:Disconnect() end
 		viewmodelConnection = runService.RenderStepped:Connect(function(dt)
-			rotation = rotation + (dt * 0.5) -- Speed of rotation
+			rotation = rotation + (dt * 0.25) -- Slower rotation (was 0.5)
 			local radius = 9
 			local camX = math.sin(rotation) * radius
 			local camZ = math.cos(rotation) * radius
@@ -152,75 +188,9 @@ local function createLobby()
 	navPadding.PaddingLeft = UDim.new(0, 20)
 	navPadding.Parent = navBar
 
-	local TABS = {"HOME", "LOREFINDER", "MATCH HISTORY", "NEWS", "STORE", "TREASURE REALMS"}
-	local currentTab = "HOME"
-	
-	local function updateTabStyles()
-		for _, child in ipairs(navBar:GetChildren()) do
-			if child:IsA("TextButton") then
-				if child.Name == currentTab then
-					child.TextColor3 = THEME.TEXT_WHITE
-					child.BackgroundTransparency = 0.7
-					child.BackgroundColor3 = THEME.ACCENT_BLUE
-				else
-					child.TextColor3 = Color3.fromRGB(150, 150, 160)
-					child.BackgroundTransparency = 1
-				end
-			end
-		end
-	end
-	
-	for _, tabName in ipairs(TABS) do
-		local btn = Instance.new("TextButton")
-		btn.Name = tabName
-		btn.Text = tabName
-		btn.Size = UDim2.new(0, 140, 0, 35)
-		btn.BackgroundColor3 = THEME.ACCENT_BLUE
-		btn.BackgroundTransparency = 1
-		btn.TextColor3 = (tabName == "HOME") and THEME.TEXT_WHITE or Color3.fromRGB(150, 150, 160)
-		btn.Font = Enum.Font.GothamBold
-		btn.TextSize = 13
-		btn.Parent = navBar
-		
-		local btnCorner = Instance.new("UICorner")
-		btnCorner.CornerRadius = UDim.new(0, 4)
-		btnCorner.Parent = btn
-		
-		-- Mouse unlock for all buttons
-		btn.MouseEnter:Connect(function()
-			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-			UserInputService.MouseIconEnabled = true
-			if btn.Name ~= currentTab then
-				btn.TextColor3 = THEME.TEXT_GOLD
-			end
-		end)
-		
-		btn.MouseLeave:Connect(function()
-			if btn.Name ~= currentTab then
-				btn.TextColor3 = Color3.fromRGB(150, 150, 160)
-			end
-		end)
-		
-		btn.MouseButton1Click:Connect(function()
-			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-			UserInputService.MouseIconEnabled = true
-			
-			currentTab = tabName
-			updateTabStyles()
-			
-			-- Handle tab-specific logic
-			if tabName == "STORE" then
-				local shop = screenGui:FindFirstChild("ShopFrame")
-				if shop then shop.Visible = not shop.Visible end
-			elseif tabName == "HOME" then
-				-- Hide shop if open
-				local shop = screenGui:FindFirstChild("ShopFrame")
-				if shop then shop.Visible = false end
-			else
-				print("Tab clicked: " .. tabName .. " (not yet implemented)")
-			end
-		end)
-	end
+	-- Navigation Buttons Removed as per request
+	-- Keeping the bar for visual structure if needed, or it can be empty.
+
 
 	-- ============================================
 	-- 2b. Player Stats Display (Top Left)
@@ -286,72 +256,10 @@ local function createLobby()
 	-- Static Art Removed for Real-time 3D View
 
 	-- ============================================
-	-- 4. Right Side Panels (News/Promo)
+	-- 4. Right Side Panels (News/Promo) - REMOVED
 	-- ============================================
-	local rightPanel = Instance.new("Frame")
-	rightPanel.Name = "RightPanel"
-	rightPanel.Size = UDim2.new(0, 300, 0.6, 0)
-	rightPanel.Position = UDim2.new(1, -20, 0.2, 0)
-	rightPanel.AnchorPoint = Vector2.new(1, 0)
-	rightPanel.BackgroundTransparency = 1
-	rightPanel.Parent = screenGui
+	-- Removed as per request
 
-	local rightList = Instance.new("UIListLayout")
-	rightList.Padding = UDim.new(0, 15)
-	rightList.Parent = rightPanel
-	
-	local promoTitles = {"FEATURED EVENT", "NEWS UPDATE"}
-
-	for i = 1, 2 do
-		local promo = Instance.new("TextButton")
-		promo.Name = "Promo"..i
-		promo.Size = UDim2.new(1, 0, 0.45, 0)
-		promo.BackgroundColor3 = Color3.new(0,0,0)
-		promo.BackgroundTransparency = 0.5
-		promo.BorderSizePixel = 0
-		promo.AutoButtonColor = false
-		promo.Text = ""
-		promo.Parent = rightPanel
-		
-		local promoStroke = Instance.new("UIStroke")
-		promoStroke.Color = THEME.ACCENT_GOLD
-		promoStroke.Transparency = 0.7
-		promoStroke.Thickness = 1
-		promoStroke.Parent = promo
-		
-		local promoCorner = Instance.new("UICorner")
-		promoCorner.CornerRadius = UDim.new(0, 8)
-		promoCorner.Parent = promo
-		
-		-- Title label
-		local promoLabel = Instance.new("TextLabel")
-		promoLabel.Size = UDim2.new(1, -20, 0, 30)
-		promoLabel.Position = UDim2.new(0, 10, 0, 10)
-		promoLabel.BackgroundTransparency = 1
-		promoLabel.Text = promoTitles[i] or "PROMO"
-		promoLabel.TextColor3 = THEME.ACCENT_GOLD
-		promoLabel.Font = Enum.Font.GothamBold
-		promoLabel.TextSize = 14
-		promoLabel.TextXAlignment = Enum.TextXAlignment.Left
-		promoLabel.Parent = promo
-		
-		-- Mouse handlers
-		promo.MouseEnter:Connect(function()
-			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-			UserInputService.MouseIconEnabled = true
-			promo.BackgroundTransparency = 0.3
-		end)
-		
-		promo.MouseLeave:Connect(function()
-			promo.BackgroundTransparency = 0.5
-		end)
-		
-		promo.MouseButton1Click:Connect(function()
-			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-			UserInputService.MouseIconEnabled = true
-			print("Promo Panel " .. i .. " clicked (not yet implemented)")
-		end)
-	end
 
 	-- ============================================
 	-- 5. Bottom Bar (Play Button & Social)
@@ -403,8 +311,21 @@ local function createLobby()
 	playStroke.Parent = playBtn
 	
 	local playCorner = Instance.new("UICorner")
-	playCorner.CornerRadius = UDim.new(0, 25) -- Rounded pills
+	playCorner.CornerRadius = UDim.new(0, 8) -- Less rounded, more button-like
 	playCorner.Parent = playBtn
+	
+	-- Depth Effect (Shadow)
+	local playShadow = Instance.new("Frame")
+	playShadow.Name = "Shadow"
+	playShadow.Size = UDim2.new(1, 0, 1, 0)
+	playShadow.Position = UDim2.new(0, 0, 0, 4) -- Offset downwards
+	playShadow.BackgroundColor3 = THEME.BUTTON_PLAY_SHADOW
+	playShadow.ZIndex = -1
+	playShadow.Parent = playBtn
+	
+	local shadowCorner = Instance.new("UICorner")
+	shadowCorner.CornerRadius = UDim.new(0, 8)
+	shadowCorner.Parent = playShadow
 	
 	-- Role Icon (Left of Play Button)
 	local roleIcon = Instance.new("ImageButton")
@@ -468,7 +389,7 @@ local function createLobby()
 		local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Blaster"):WaitForChild("Remotes")
 		local respawnRemote = remotes:WaitForChild("RequestRespawn", 5)
 		if respawnRemote then
-			respawnRemote:FireServer()
+			respawnRemote:FireServer(true) -- true = skip death (safe spawn)
 			print("Quick Play: Spawning player...")
 		else
 			-- Fallback: Just spawn the character directly
@@ -478,128 +399,10 @@ local function createLobby()
 	end)
 
 	-- ============================================
-	-- 6. Friend List (Collapsible Drawer)
+	-- 6. Friend List (Collapsible Drawer) - REMOVED
 	-- ============================================
-	local friendPanel = Instance.new("Frame")
-	friendPanel.Name = "FriendPanel"
-	friendPanel.Size = UDim2.new(0, 250, 0.6, 0)
-	friendPanel.Position = UDim2.new(1, -20, 0.2, 0) -- Same as right panel? No, usually separate.
-	-- Let's put it on the far right, maybe toggleable.
-	-- The image shows it integrated or as a sidebar.
-	-- I'll make it a dedicated sidebar on the right, pushing the promo panels?
-	-- Actually, let's make it a floating panel on the right edge.
-	friendPanel.Position = UDim2.new(1, -10, 0.5, 0)
-	friendPanel.AnchorPoint = Vector2.new(1, 0.5)
-	friendPanel.BackgroundColor3 = Color3.fromRGB(20, 24, 30)
-	friendPanel.BorderSizePixel = 0
-	friendPanel.Visible = true -- Always visible in lobby?
-	friendPanel.Parent = screenGui
-	
-	local friendStroke = Instance.new("UIStroke")
-	friendStroke.Color = THEME.ACCENT_GOLD
-	friendStroke.Transparency = 0.8
-	friendStroke.Parent = friendPanel
+	-- Removed as per request
 
-	local friendTitle = Instance.new("TextLabel")
-	friendTitle.Text = "SOCIAL"
-	friendTitle.Size = UDim2.new(1, 0, 0, 30)
-	friendTitle.BackgroundTransparency = 1
-	friendTitle.TextColor3 = THEME.TEXT_GOLD
-	friendTitle.Font = Enum.Font.GothamBold
-	friendTitle.Parent = friendPanel
-
-	local friendScroll = Instance.new("ScrollingFrame")
-	friendScroll.Size = UDim2.new(1, 0, 1, -40)
-	friendScroll.Position = UDim2.new(0, 0, 0, 40)
-	friendScroll.BackgroundTransparency = 1
-	friendScroll.BorderSizePixel = 0
-	friendScroll.Parent = friendPanel
-	
-	local friendListLayout = Instance.new("UIListLayout")
-	friendListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	friendListLayout.Padding = UDim.new(0, 5)
-	friendListLayout.Parent = friendScroll
-
-	-- Populate Friends (Online Only)
-	task.spawn(function()
-		while true do
-			local success, friends = pcall(function()
-				return Players.LocalPlayer:GetFriendsOnline(200)
-			end)
-			
-			if success and friends then
-				-- Clear existing
-				for _, child in ipairs(friendScroll:GetChildren()) do
-					if child:IsA("Frame") then child:Destroy() end
-				end
-
-				for _, friendInfo in ipairs(friends) do
-					local fFrame = Instance.new("Frame")
-					fFrame.Size = UDim2.new(1, -10, 0, 50)
-					fFrame.BackgroundTransparency = 1
-					fFrame.Parent = friendScroll
-					
-					local fName = Instance.new("TextLabel")
-					fName.Text = friendInfo.UserName
-					fName.Size = UDim2.new(0.6, 0, 0.5, 0)
-					fName.Position = UDim2.new(0, 50, 0, 5)
-					fName.BackgroundTransparency = 1
-					fName.TextColor3 = THEME.TEXT_WHITE
-					fName.TextXAlignment = Enum.TextXAlignment.Left
-					fName.Font = Enum.Font.GothamBold
-					fName.TextSize = 14
-					fName.Parent = fFrame
-					
-					local fStatus = Instance.new("TextLabel")
-					fStatus.Text = (friendInfo.LastLocation and friendInfo.LastLocation ~= "") and friendInfo.LastLocation or "Online"
-					fStatus.Size = UDim2.new(0.6, 0, 0.5, 0)
-					fStatus.Position = UDim2.new(0, 50, 0.5, -5)
-					fStatus.BackgroundTransparency = 1
-					fStatus.TextColor3 = Color3.fromRGB(150, 150, 150)
-					fStatus.TextXAlignment = Enum.TextXAlignment.Left
-					fStatus.Font = Enum.Font.Gotham
-					fStatus.TextSize = 12
-					fStatus.Parent = fFrame
-					
-					-- Avatar
-					local fAvatar = Instance.new("ImageLabel")
-					fAvatar.Size = UDim2.new(0, 40, 0, 40)
-					fAvatar.Position = UDim2.new(0, 5, 0, 5)
-					fAvatar.Image = "rbxassetid://0" 
-					task.spawn(function()
-						local content, isReady = Players:GetUserThumbnailAsync(friendInfo.VisitorId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-						if isReady then fAvatar.Image = content end
-					end)
-					fAvatar.Parent = fFrame
-					fAvatar.BackgroundColor3 = Color3.new(0,0,0)
-					local fAvCorner = Instance.new("UICorner")
-					fAvCorner.CornerRadius = UDim.new(1, 0)
-					fAvCorner.Parent = fAvatar
-					
-					-- Join Button (Only if in a game)
-					if friendInfo.PlaceId and friendInfo.GameId then
-						local joinBtn = Instance.new("ImageButton")
-						joinBtn.Size = UDim2.new(0, 24, 0, 24)
-						joinBtn.Position = UDim2.new(1, -30, 0.5, 0)
-						joinBtn.AnchorPoint = Vector2.new(0, 0.5)
-						joinBtn.BackgroundColor3 = THEME.ACCENT_BLUE
-						joinBtn.Image = "rbxassetid://1234752" -- Arrow/Play icon
-						joinBtn.Parent = fFrame
-						
-						local joinCorner = Instance.new("UICorner")
-						joinCorner.CornerRadius = UDim.new(0, 4)
-						joinCorner.Parent = joinBtn
-						
-						joinBtn.MouseButton1Click:Connect(function()
-							print("Joining friend: " .. friendInfo.UserName)
-							game:GetService("TeleportService"):TeleportToPlaceInstance(friendInfo.PlaceId, friendInfo.GameId, player)
-						end)
-					end
-				end
-			end
-			task.wait(60) -- Refresh every minute
-		end
-	end)
 
 	-- ============================================
 	-- 7. Shop Template
