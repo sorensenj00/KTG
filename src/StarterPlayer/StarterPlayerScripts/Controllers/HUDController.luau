@@ -1138,22 +1138,6 @@ hud.MutationsButton.MouseButton1Click:Connect(function()
     MutationShopController.Open()
 end)
 
-		if hud.HarvestButton.Visible then
-			-- Simulate click
-			-- Simulate click
-			local harvestRemote = ReplicatedStorage:WaitForChild("Harvest", 2)
-
-			if harvestRemote then
-				local success, _msg = harvestRemote:InvokeServer()
-				if success then
-					playSound(SOUNDS.Purchase)
-				else
-					playSound(SOUNDS.Error)
-				end
-			end
-	end
-end
-
 
 local function updateHealth()
 	local character = player.Character
