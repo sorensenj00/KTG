@@ -32,10 +32,10 @@ local MAX_MAGNET_SPEED = 80
 
 -- Orb Tiers
 local ORB_TIERS = {
-	{ Name = "Common", XP = 100, Size = Vector3.new(2, 2, 2), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
-	{ Name = "Uncommon", XP = 250, Size = Vector3.new(5, 5, 5), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
-	{ Name = "Rare", XP = 500, Size = Vector3.new(12, 12, 12), Color = Color3.fromRGB(163, 35, 35), Chance = 8 },
-	{ Name = "Legendary", XP = 2000, Size = Vector3.new(25, 25, 25), Color = Color3.fromRGB(197, 209, 28), Chance = 2 },
+	{ Name = "Common", XP = 100, Size = Vector3.new(1, 1, 1), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
+	{ Name = "Uncommon", XP = 250, Size = Vector3.new(2.5, 2.5, 2.5), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
+	{ Name = "Rare", XP = 500, Size = Vector3.new(6, 6, 6), Color = Color3.fromRGB(163, 35, 35), Chance = 8 },
+	{ Name = "Legendary", XP = 2000, Size = Vector3.new(15, 15, 15), Color = Color3.fromRGB(197, 209, 28), Chance = 2 },
 }
 
 -- Data Storage (Server only - no Part instances)
@@ -231,6 +231,26 @@ local function onCollectOrb(player, orbId)
 	-- Remove orb
 	activeOrbs[orbId] = nil
 	orbEvents:FireAllClients({Action = "Despawn", Id = orbId})
+end
+
+-- PUBLIC API: Get nearest orb to a position
+function XPOrbService.GetNearestOrb(position: Vector3, maxRange: number)
+	local bestOrb = nil
+	local bestDist = maxRange
+
+	for _, orb in pairs(activeOrbs) do
+		local dist = (orb.position - position).Magnitude
+		if dist < bestDist then
+			bestDist = dist
+			bestOrb = {
+				Position = orb.position,
+				Name = "XPOrb", -- Compatibility for BotService
+				XP = orb.xpValue
+			}
+		end
+	end
+
+	return bestOrb
 end
 
 -- PUBLIC API: Spawn drop at specific position
