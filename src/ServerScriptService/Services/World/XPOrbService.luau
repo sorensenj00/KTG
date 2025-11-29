@@ -209,8 +209,16 @@ local function onCollectOrb(player, orbId)
 	-- Validate proximity (anti-cheat)
 	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
 		local dist = (player.Character.HumanoidRootPart.Position - orb.position).Magnitude
-		if dist > 50 then -- Max collection range
-			warn("⚠️ Player", player.Name, "tried to collect orb from too far away:", dist)
+		
+		-- More lenient check: If orb is magnetizing towards this player, allow collection within magnet radius
+		-- Otherwise use a smaller range to prevent long-distance collection
+		local maxDist = 50 -- Default
+		if orb.magnetTarget == player.UserId then
+			maxDist = MAGNET_RADIUS + 20 -- Extra tolerance for network latency
+		end
+		
+		if dist > maxDist then
+			warn("⚠️ Player", player.Name, "tried to collect orb from too far away:", dist, "magnetTarget:", orb.magnetTarget)
 			return
 		end
 	else

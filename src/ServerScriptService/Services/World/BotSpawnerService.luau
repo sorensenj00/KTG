@@ -19,6 +19,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local ScalingEngine = require(ServerScriptService.Services.World.ScalingEngineService)
 local GameConfig = require(game:GetService("ReplicatedStorage").GameLoop.GameConfig)
+local ScalingConfig = require(game:GetService("ReplicatedStorage").GameLoop.ScalingConfig)
 
 local BotSpawner = {}
 
@@ -72,6 +73,8 @@ local function spawnBot()
 
 	local level = math.random(1, 5) -- Start at lower levels to prevent giant bots immediately
 	bot:SetAttribute("Level", level)
+	local biomass = ScalingConfig.GetXPRequired(level)
+	bot:SetAttribute("Biomass", biomass)
 	bot:SetAttribute("XP", 0)
 	bot:SetAttribute("SpawnTime", Workspace:GetServerTimeNow())
 
@@ -301,6 +304,8 @@ function BotSpawner.SpawnDisplayBots()
 		bot.Name = "DisplayBot_Lv" .. level
 		
 		bot:SetAttribute("Level", level)
+		local biomass = ScalingConfig.GetXPRequired(level)
+		bot:SetAttribute("Biomass", biomass)
 		bot:SetAttribute("XP", 0)
 		bot:SetAttribute("SpawnTime", Workspace:GetServerTimeNow())
 		

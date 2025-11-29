@@ -30,6 +30,9 @@ local PlayerMeta = {}
 -- Draft State: { [Player] = { MutationName1, MutationName2, MutationName3 } }
 local PlayerDrafts = {}
 
+-- Pending Saves: { [Player] = true }
+local pendingSaves = {}
+
 -- Signals
 local UpdateMetaEvent = Instance.new("RemoteEvent")
 UpdateMetaEvent.Name = "UpdateMetaEvent"
@@ -53,7 +56,7 @@ end
 
 -- === Internal Logic ===
 
-local function savePlayer(player)
+local function performSave(player)
     local data = PlayerMeta[player]
     if not data then return end
 
@@ -64,6 +67,10 @@ local function savePlayer(player)
     if not success then
         warn("Failed to save data for " .. player.Name .. ": " .. tostring(err))
     end
+end
+
+local function scheduleSave(player)
+    pendingSaves[player] = true
 end
 
 -- Weighted Random Selection
@@ -98,7 +105,10 @@ local function getRandomMutationOfRarity(rarity, excludeList)
             local excluded = false
             if excludeList then
                 for _, ex in ipairs(excludeList) do
-                    if ex == name then excluded = true break end
+                    if ex == name then
+                        excluded = true
+                        break
+                    end
                 end
             end
             if not excluded then
@@ -216,7 +226,7 @@ function MetaProgressionManager.SelectMutation(player, index)
     PlayerDrafts[player] = nil
 
     -- Save & Notify
-    savePlayer(player) -- Save immediately on purchase
+    scheduleSave(player) -- Schedule save on purchase
     UpdateMetaEvent:FireClient(player, data)
     
     -- Also fire UpdateMetaStats for HUDController
@@ -262,7 +272,7 @@ function MetaProgressionManager.PurchaseUpgrade(player, statName)
     data.Upgrades[statName] = currentLevel + 1
 
     -- Save & Notify
-    savePlayer(player)
+    scheduleSave(player)
     UpdateMetaEvent:FireClient(player, data)
     
     -- Also fire UpdateMetaStats for HUDController
@@ -327,7 +337,7 @@ function MetaProgressionManager.Harvest(player)
     player:SetAttribute("Level", 1)
     player:SetAttribute("XP", 0) -- Reset partial XP too
 
-    savePlayer(player)
+    scheduleSave(player)
     
     return true, "Harvested " .. dnaGain .. " DNA"
 end
@@ -335,9 +345,10 @@ end
 function MetaProgressionManager.Start()
     -- Cleanup
     Players.PlayerRemoving:Connect(function(player)
-        savePlayer(player)
+        performSave(player) -- Immediate save on exit
         PlayerMeta[player] = nil
         PlayerDrafts[player] = nil
+        pendingSaves[player] = nil
     end)
 
     -- Player Added
@@ -350,12 +361,13 @@ function MetaProgressionManager.Start()
         MetaProgressionManager.Initialize(player)
     end
 
-    -- AutoSave
+    -- AutoSave Loop (Process Pending Saves)
     task.spawn(function()
         while true do
-            task.wait(60)
-            for player, _ in pairs(PlayerMeta) do
-                savePlayer(player)
+            task.wait(10) -- Check every 10 seconds
+            for player, _ in pairs(pendingSaves) do
+                performSave(player)
+                pendingSaves[player] = nil
             end
         end
     end)

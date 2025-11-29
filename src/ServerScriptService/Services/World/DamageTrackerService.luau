@@ -8,7 +8,7 @@ task.spawn(function()
 	while true do
 		task.wait(10)
 		damageData = {}
-		print("🔄 DamageTracker: Reset all damage tracking")
+		-- print("🔄 DamageTracker: Reset all damage tracking")
 	end
 end)
 

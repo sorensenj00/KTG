@@ -26,6 +26,10 @@ local POOL_SIZE = 50
 local FLOAT_AMPLITUDE =1.5
 local FLOAT_SPEED = 2
 
+local MAGNET_RADIUS = 50
+local MIN_MAGNET_SPEED = 10
+local MAX_MAGNET_SPEED = 80
+
 -- Part Pool
 local orbPool = {}
 local activeOrbs = {} -- [orbId] = {part, hitbox, data, startTime}
@@ -204,6 +208,25 @@ local function updateOrbVisuals(dt)
 		end
 		
 		local elapsed = currentTime - orbData.startTime
+
+		-- Magnetism (Client Prediction)
+		local character = player.Character
+		if character and character:FindFirstChild("HumanoidRootPart") then
+			local root = character.HumanoidRootPart
+			local dist = (root.Position - orb.Position).Magnitude
+			
+			if dist < MAGNET_RADIUS then
+				local direction = (root.Position - orb.Position).Unit
+				local speedAlpha = 1 - math.clamp(dist / MAGNET_RADIUS, 0, 1)
+				local currentSpeed = MIN_MAGNET_SPEED + (MAX_MAGNET_SPEED - MIN_MAGNET_SPEED) * speedAlpha
+				
+				local moveVec = direction * currentSpeed * dt
+				
+				-- Update base position (X/Z are in part, Y is in baseY)
+				orb.Position = orb.Position + moveVec
+				orbData.baseY = orbData.baseY + moveVec.Y
+			end
+		end
 		
 		-- Floating animation
 		local floatOffset = math.sin(elapsed * FLOAT_SPEED) * FLOAT_AMPLITUDE

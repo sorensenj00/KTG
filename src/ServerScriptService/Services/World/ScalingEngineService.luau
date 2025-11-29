@@ -48,10 +48,20 @@ function ScalingEngine.UpdateCharacter(character: Model, biomass: number)
 	end
 
 	-- 1. Calculate Core Stats from Biomass
-	local scale = ScalingConfig.GetScale(biomass)
-	print(string.format("[ScalingDebug] Char: %s, Biomass: %d, Scale: %.2f", character.Name, biomass, scale))
-	local baseMaxHealth = ScalingConfig.GetMaxHealth(scale)
-	local baseWalkSpeed = ScalingConfig.GetWalkSpeed(scale)
+	-- First get level for stat calculations
+	local level = 1
+	if biomass > 0 then
+		level = math.pow(biomass / ScalingConfig.BIOMASS_BASE_REQ, 1 / ScalingConfig.BIOMASS_EXPONENT)
+		level = math.max(1, math.min(level, ScalingConfig.MAX_LEVEL))
+	end
+	
+	-- Then get scale multiplier for visual scaling
+	local scale = ScalingConfig.GetSizeMultiplier(level)
+	
+	print(string.format("[ScalingDebug] Char: %s, Biomass: %d, Level: %.2f, Scale: %.2f", character.Name, biomass, level, scale))
+	
+	local baseMaxHealth = ScalingConfig.GetMaxHealth(math.floor(level)) -- Use INTEGER LEVEL for health (step scaling)
+	local baseWalkSpeed = ScalingConfig.GetWalkSpeed(level) -- Keep speed smooth or step? User said HP. Keeping speed smooth for now.
 
 	-- 2. Apply Mutation Modifiers
 	local healthMult = 1
@@ -86,7 +96,7 @@ function ScalingEngine.UpdateCharacter(character: Model, biomass: number)
 	-- Calculate Speed with Penalty Reduction
 	-- Formula: Base / (Scale ^ 0.7)
 	-- The penalty is (Base - ScaledBase). We reduce that difference.
-	local rawScaledSpeed = ScalingConfig.GetWalkSpeed(scale) -- This includes the floor
+	local rawScaledSpeed = ScalingConfig.GetWalkSpeed(level) -- This includes the floor
 	local speedPenalty = ScalingConfig.BASE_WALKSPEED - rawScaledSpeed
 
 	if speedPenaltyReduction > 0 then

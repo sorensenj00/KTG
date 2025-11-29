@@ -199,6 +199,39 @@ local function isValidTarget(bot, target)
 	return true
 end
 
+-- === Helper: Find Nearest Enemy ===
+local function findNearestEnemy(bot, range)
+	local root = bot.PrimaryPart
+	if not root then return nil end
+	
+	local bestTarget = nil
+	local bestDist = range
+	
+	-- 1. Check Players
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character and isValidTarget(bot, player.Character) then
+			local dist = (player.Character.PrimaryPart.Position - root.Position).Magnitude
+			if dist < bestDist then
+				bestDist = dist
+				bestTarget = player.Character
+			end
+		end
+	end
+	
+	-- 2. Check other Bots
+	for _, otherBot in ipairs(CollectionService:GetTagged("BotAI")) do
+		if otherBot ~= bot and isValidTarget(bot, otherBot) then
+			local dist = (otherBot.PrimaryPart.Position - root.Position).Magnitude
+			if dist < bestDist then
+				bestDist = dist
+				bestTarget = otherBot
+			end
+		end
+	end
+	
+	return bestTarget
+end
+
 -- === Pathfinding ===
 local function moveToPath(bot, state, targetPos)
 	local root = bot.PrimaryPart
@@ -538,8 +571,15 @@ function BotController.Start()
 					state.State = "COMBAT"
 					state.TargetAcquiredTime = now
 				else
-					-- Look for Orbs
-					if now > state.NextOrbSearch then
+					-- NEW: Active Enemy Search
+					local enemy = findNearestEnemy(bot, 80) -- 80 stud view range
+					if enemy then
+						state.Target = enemy
+						state.State = "COMBAT"
+						state.TargetAcquiredTime = now
+					else
+						-- Look for Orbs
+						if now > state.NextOrbSearch then
 						local level = bot:GetAttribute("Level") or 1
 						local searchRange = 100 * ScalingConfig.GetSizeMultiplier(level)
 						local orb = findNearestOrb(bot, searchRange)
@@ -567,6 +607,7 @@ function BotController.Start()
 						end
 					end
 				end
+			end
 			end
 
 		end
