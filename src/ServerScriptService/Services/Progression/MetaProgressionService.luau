@@ -11,9 +11,8 @@
     Last Updated: 2025-01-20
 ]]
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
+local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
 
 local MetaConfig = require(ReplicatedStorage.GameLoop.MetaConfig)

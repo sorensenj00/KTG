@@ -4,7 +4,7 @@
     
     Dependencies:
     - ReplicatedStorage.GameLoop.ScalingConfig
-    - ServerScriptService.GameLoop.MetaProgressionManager
+    - ServerScriptService.Services.Progression.MetaProgressionService
     
     Author: System
     Last Updated: 2025-01-20
@@ -18,18 +18,17 @@ local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 
 local ScalingEngine = {}
 
--- Lazy load MetaProgressionManager
+-- Lazy load MetaProgressionManager to avoid circular dependency
 local MetaManager = nil
 local function getMeta()
 	if not MetaManager then
 		pcall(function()
-			MetaManager = require(ServerScriptService.GameLoop.MetaProgressionManager)
+			MetaManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
 		end)
 	end
 	return MetaManager
 end
 
--- Main Resize Function
 function ScalingEngine.UpdateCharacter(character: Model, biomass: number)
 	local humanoid = character:FindFirstChild("Humanoid")
 	local rootPart = character:FindFirstChild("HumanoidRootPart")

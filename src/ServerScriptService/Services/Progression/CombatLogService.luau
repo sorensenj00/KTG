@@ -22,7 +22,7 @@ local MetaProgressionManager = nil
 local function getMeta()
 	if not MetaProgressionManager then
 		pcall(function()
-			MetaProgressionManager = require(ServerScriptService.GameLoop.MetaProgressionManager)
+			MetaProgressionManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
 		end)
 	end
 	return MetaProgressionManager
@@ -85,7 +85,7 @@ local XPOrbManager = nil
 local function getXPOrbManager()
 	if not XPOrbManager then
 		pcall(function()
-			XPOrbManager = require(ServerScriptService.GameLoop.XPOrbManager)
+			XPOrbManager = require(ServerScriptService.Services.World.XPOrbService)
 		end)
 	end
 	return XPOrbManager

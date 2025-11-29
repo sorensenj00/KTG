@@ -4,7 +4,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
-local ProgressionManager = require(script.Parent.ProgressionManager)
+local ProgressionManager = require(ServerScriptService.Services.Progression.ProgressionService)
 
 local WinnerManager = {}
 

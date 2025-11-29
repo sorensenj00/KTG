@@ -1,3 +1,13 @@
+--[[
+	Controller: MovementController
+	Description: Handles player movement mechanics including sprint, crouch, and slide
+	
+	Public API:
+	- Start(): Initialize the controller
+	- IsSprinting(): boolean - Returns if player is currently sprinting
+	- IsCrouching(): boolean - Returns if player is currently crouching
+]]
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -17,6 +27,8 @@ local humanoid = nil
 local rootPart = nil
 local isSprinting = false
 local isCrouching = false
+
+local MovementController = {}
 
 -- Helper to get baseplate center position
 local function getBaseplateCenter()
@@ -99,55 +111,69 @@ local function setupCharacter(newCharacter)
 	isCrouching = false
 end
 
--- Track input states
-UserInputService.InputBegan:Connect(function(inputObject, gameProcessed)
-	if gameProcessed then
-		return
-	end
-	
-	-- Track sprint (Shift)
-	if inputObject.KeyCode == Enum.KeyCode.LeftShift or inputObject.KeyCode == Enum.KeyCode.RightShift then
-		isSprinting = true
-		-- Try to slide if also crouching
-		if isCrouching then
-			performSlide()
-		end
-	end
-	
-	-- Track crouch (Ctrl or C)
-	if inputObject.KeyCode == Enum.KeyCode.LeftControl 
-		or inputObject.KeyCode == Enum.KeyCode.RightControl
-		or inputObject.KeyCode == Enum.KeyCode.C then
-		isCrouching = true
-		-- Try to slide if also sprinting
-		if isSprinting then
-			performSlide()
-		end
-	end
-end)
-
-UserInputService.InputEnded:Connect(function(inputObject, gameProcessed)
-	if gameProcessed then
-		return
-	end
-	
-	-- Track sprint release
-	if inputObject.KeyCode == Enum.KeyCode.LeftShift or inputObject.KeyCode == Enum.KeyCode.RightShift then
-		isSprinting = false
-	end
-	
-	-- Track crouch release
-	if inputObject.KeyCode == Enum.KeyCode.LeftControl 
-		or inputObject.KeyCode == Enum.KeyCode.RightControl
-		or inputObject.KeyCode == Enum.KeyCode.C then
-		isCrouching = false
-	end
-end)
-
--- Initialize
-if player.Character then
-	setupCharacter(player.Character)
+-- Public API
+function MovementController.IsSprinting()
+	return isSprinting
 end
 
-player.CharacterAdded:Connect(setupCharacter)
+function MovementController.IsCrouching()
+	return isCrouching
+end
 
+function MovementController.Start()
+	-- Track input states
+	UserInputService.InputBegan:Connect(function(inputObject, gameProcessed)
+		if gameProcessed then
+			return
+		end
+		
+		-- Track sprint (Shift)
+		if inputObject.KeyCode == Enum.KeyCode.LeftShift or inputObject.KeyCode == Enum.KeyCode.RightShift then
+			isSprinting = true
+			-- Try to slide if also crouching
+			if isCrouching then
+				performSlide()
+			end
+		end
+		
+		-- Track crouch (Ctrl or C)
+		if inputObject.KeyCode == Enum.KeyCode.LeftControl 
+			or inputObject.KeyCode == Enum.KeyCode.RightControl
+			or inputObject.KeyCode == Enum.KeyCode.C then
+			isCrouching = true
+			-- Try to slide if also sprinting
+			if isSprinting then
+				performSlide()
+			end
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(inputObject, gameProcessed)
+		if gameProcessed then
+			return
+		end
+		
+		-- Track sprint release
+		if inputObject.KeyCode == Enum.KeyCode.LeftShift or inputObject.KeyCode == Enum.KeyCode.RightShift then
+			isSprinting = false
+		end
+		
+		-- Track crouch release
+		if inputObject.KeyCode == Enum.KeyCode.LeftControl 
+			or inputObject.KeyCode == Enum.KeyCode.RightControl
+			or inputObject.KeyCode == Enum.KeyCode.C then
+			isCrouching = false
+		end
+	end)
+
+	-- Initialize
+	if player.Character then
+		setupCharacter(player.Character)
+	end
+
+	player.CharacterAdded:Connect(setupCharacter)
+	
+	print("✅ MovementController: Started")
+end
+
+return MovementController

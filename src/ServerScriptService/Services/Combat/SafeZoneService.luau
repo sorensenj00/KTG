@@ -3,18 +3,21 @@
     Description: Manages safe zones where players can't take damage and can harvest.
 
     Dependencies:
-    - ServerScriptService.GameLoop.MetaProgressionManager
+    - ServerScriptService.Services.Progression.MetaProgressionService
     - ReplicatedStorage.GameLoop.ScalingConfig
 
     Author: System
     Last Updated: 2025-01-20
 ]]
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
-local ServerScriptService = game:GetService("ServerScriptService")
-local CollectionService = game:GetService("CollectionService")
+
+local MetaProgressionManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
+local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 
 local SafeZoneManager = {}
 

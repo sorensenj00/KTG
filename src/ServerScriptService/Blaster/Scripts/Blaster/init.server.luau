@@ -9,7 +9,7 @@ local Constants = require(ReplicatedStorage.Blaster.Constants)
 local getRayDirections = require(ReplicatedStorage.Blaster.Utility.getRayDirections)
 local castRays = require(ServerScriptService.Utility.castRays)
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
-local DamageTracker = require(ServerScriptService.GameLoop.DamageTracker)
+local DamageTracker = require(ServerScriptService.Services.World.DamageTrackerService)
 local AntiExploit = require(ServerScriptService.Utility.AntiExploit)
 local ShotReplicator = require(script.ShotReplicator)
 
@@ -21,7 +21,7 @@ local MetaProgressionManager = nil
 local function getMeta()
 	if not MetaProgressionManager then
 		pcall(function()
-			MetaProgressionManager = require(ServerScriptService.GameLoop.MetaProgressionManager)
+			MetaProgressionManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
 		end)
 	end
 	return MetaProgressionManager
@@ -181,7 +181,7 @@ local function onShoot(player, now, tool, originCF, tagged)
 
 				-- Lazy load MutationManager
 				task.spawn(function()
-					local MM = require(ServerScriptService.GameLoop.MutationManager)
+					local MM = require(ServerScriptService.Services.World.MutationService)
 					MM.OnDamage(targetChar, finalDamage, player)
 				end)
 
@@ -190,7 +190,7 @@ local function onShoot(player, now, tool, originCF, tagged)
 
 				-- Record aggro if target is a bot
 				if CollectionService:HasTag(targetChar, "BotAI") then
-					local BotController = require(ServerScriptService.GameLoop.BotController)
+					local BotController = require(ServerScriptService.Services.Combat.BotService)
 					BotController.RecordAggro(targetChar, player)
 				end
 				

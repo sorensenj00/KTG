@@ -80,13 +80,39 @@ function PlayerSpawner.Start()
 			
 			local spawnPos = getRandomSpawnPosition(playerLevel)
 			character:PivotTo(CFrame.new(spawnPos))
+			
+			-- Add death tracking to fire ShowDeathSummary
+			if player then
+				local humanoid = character:WaitForChild("Humanoid", 10)
+				if humanoid then
+					humanoid.Died:Once(function()
+						-- Fire ShowDeathSummary to client to show respawn UI
+						task.spawn(function()
+							local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 5)
+							if remotes then
+								local showDeathRemote = remotes:FindFirstChild("ShowDeathSummary")
+								if showDeathRemote then
+									-- Get session stats for death summary
+									local sessionKills = player:GetAttribute("Kills") or 0
+									local biomassLost = player:GetAttribute("Biomass") or 0
+									local earnedDNA = 0 -- DNA calculation can be added later
+									
+									-- Fire to client
+									showDeathRemote:FireClient(player, sessionKills, biomassLost, earnedDNA)
+									print("💀 ShowDeathSummary fired for", player.Name)
+								end
+							end
+						end)
+					end)
+				end
+			end
 		end
 	end
 
 	local function onPlayerAdded(player)
 		player.CharacterAdded:Connect(onCharacterAdded)
-		-- Initial spawn since AutoLoads is off
-		player:LoadCharacter()
+		-- Initial spawn is handled by LobbyController (Quick Play)
+		-- player:LoadCharacter() -- Removed to prevent bypassing Lobby
 	end
 
 	Players.PlayerAdded:Connect(onPlayerAdded)

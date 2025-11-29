@@ -325,7 +325,11 @@ function YeetCannonController:start()
 	player.CharacterAdded:Connect(onCharacterAdded)
 end
 
-local controller = YeetCannonController.new()
-controller:start()
+
+function YeetCannonController.Start()
+	local controller = YeetCannonController.new()
+	controller:start()
+	print("✅ YeetCannonController: Started")
+end
 
 return YeetCannonController

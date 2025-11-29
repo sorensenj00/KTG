@@ -15,8 +15,9 @@ local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 local ServerScriptService = game:GetService("ServerScriptService")
+local RunService = game:GetService("RunService")
 
-local ScalingEngine = require(ServerScriptService.GameLoop.ScalingEngine)
+local ScalingEngine = require(ServerScriptService.Services.World.ScalingEngineService)
 local GameConfig = require(game:GetService("ReplicatedStorage").GameLoop.GameConfig)
 
 local BotSpawner = {}

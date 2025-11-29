@@ -88,16 +88,39 @@ function BlasterSetup.Initialize()
             purchaseUpgradeFunc.Parent = remotes
             print("✅ Blaster Setup: Created PurchaseUpgrade function")
         end
-	end
-	
-	-- Load the Blaster Handler (Phase 4 refactor)
-	-- local handler = blasterFolder:FindFirstChild("Handler")
-	-- if handler then
-	-- 	require(handler)
-	-- 	print("✅ Blaster Setup: Handler loaded")
+		
+		-- OrbEvents Remote (server → client orb spawn/despawn)
+		local orbEvents = remotes:FindFirstChild("OrbEvents")
+		if not orbEvents then
+			orbEvents = Instance.new("RemoteEvent")
+			orbEvents.Name = "OrbEvents"
+			orbEvents.Parent = remotes
+			print("✅ Blaster Setup: Created OrbEvents remote")
+		end
+		
+		-- CollectOrb Remote (client → server orb collection)
+		local collectOrb = remotes:FindFirstChild("CollectOrb")
+		if not collectOrb then
+			collectOrb = Instance.new("RemoteEvent")
+			collectOrb.Name = "CollectOrb"
+			collectOrb.Parent = remotes
+			print("✅ Blaster Setup: Created CollectOrb remote")
+		end
+		
+		-- Setup RequestRespawn handler
+		local Players = game:GetService("Players")
+		local respawnRemote = remotes:FindFirstChild("RequestRespawn")
+		if respawnRemote then
+			respawnRemote.OnServerEvent:Connect(function(player, skipDeath)
+				print("🔄 RequestRespawn: Loading character for", player.Name, "skipDeath:", skipDeath or false)
+				player:LoadCharacter()
+			end)
+			print("✅ Blaster Setup: RequestRespawn handler connected")
+		end
+		
 	-- else
 	-- 	warn("❌ Blaster Setup: Handler.lua not found!")
-	-- end
+	end
 end
 
 return BlasterSetup

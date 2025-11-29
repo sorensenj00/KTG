@@ -56,6 +56,12 @@
     },
     "ServerScriptService": {
       "$className": "ServerScriptService",
+      "Server": {
+        "$path": "src/ServerScriptService/Server.server.luau"
+      },
+      "Services": {
+        "$path": "src/ServerScriptService/Services"
+      },
       "GameLoop": {
         "$path": "src/ServerScriptService/GameLoop"
       },

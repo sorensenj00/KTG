@@ -11,7 +11,7 @@ local MetaProgressionManager = nil
 local function getMeta()
 	if not MetaProgressionManager then
 		pcall(function()
-			MetaProgressionManager = require(game:GetService("ServerScriptService").GameLoop.MetaProgressionManager)
+			MetaProgressionManager = require(game:GetService("ServerScriptService").Services.Progression.MetaProgressionService)
 		end)
 	end
 	return MetaProgressionManager

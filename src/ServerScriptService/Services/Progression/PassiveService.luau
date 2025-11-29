@@ -17,8 +17,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 
-local MetaProgressionManager = require(ServerScriptService.GameLoop.MetaProgressionManager)
-local ProgressionManager = require(ServerScriptService.GameLoop.ProgressionManager)
+local MetaProgressionManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
+local ProgressionManager = require(ServerScriptService.Services.Progression.ProgressionService)
 local MetaConfig = require(ReplicatedStorage.GameLoop.MetaConfig)
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 

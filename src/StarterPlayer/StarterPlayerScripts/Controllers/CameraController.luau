@@ -102,19 +102,11 @@ end
 
 -- Render step for camera growth (Camera.Value + 3)
 local function onGrowthRenderStepped(deltaTime: number)
-	-- Smoothly interpolate pitch offset
-	currentPitchOffset = lerp(currentPitchOffset, targetPitchOffset, math.min(deltaTime * LERP_SPEED, 1))
-
 	-- Smoothly interpolate camera offset Y
 	currentCameraOffsetY = lerp(currentCameraOffsetY, targetCameraOffsetY, math.min(deltaTime * LERP_SPEED, 1))
 
-	-- Apply pitch offset to camera (downward angle)
-	-- Apply only the delta to avoid accumulation
-	local pitchDelta = currentPitchOffset - lastAppliedPitchOffset
-	if math.abs(pitchDelta) > 0.0001 then
-		camera.CFrame = camera.CFrame * CFrame.Angles(pitchDelta, 0, 0)
-		lastAppliedPitchOffset = currentPitchOffset
-	end
+	-- Pitch offset removed to prevent camera drift
+	-- We only adjust height now
 
 	-- Apply camera height offset (Y-axis only) via Humanoid
 	if humanoid then

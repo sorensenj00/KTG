@@ -47,15 +47,21 @@ function LightingSetup.Start()
     if not sky then
         sky = Instance.new("Sky")
         sky.Name = "Sky"
+        sky.SkyboxBk = "http://www.roblox.com/asset/?id=159454299"
+        sky.SkyboxDn = "http://www.roblox.com/asset/?id=159454296"
+        sky.SkyboxFt = "http://www.roblox.com/asset/?id=159454293"
+        sky.SkyboxLf = "http://www.roblox.com/asset/?id=159454286"
+        sky.SkyboxRt = "http://www.roblox.com/asset/?id=159454300"
+        sky.SkyboxUp = "http://www.roblox.com/asset/?id=159454288"
         sky.Parent = Lighting
-        -- Default sky properties are usually fine for testing
+        print("✅ LightingSetup: Added Skybox")
     end
 
     -- Optional: Ensure basic lighting properties are set for visibility
     Lighting.GlobalShadows = true
     Lighting.Brightness = 3
     Lighting.ClockTime = 14 -- Afternoon sun
-    Lighting.Technology = Enum.Technology.Future -- Enable Future lighting for realistic shadows
+    -- Lighting.Technology = Enum.Technology.Future -- Cannot be set by script, must be set in Studio
     Lighting.EnvironmentDiffuseScale = 1
     Lighting.EnvironmentSpecularScale = 1
 
@@ -89,8 +95,20 @@ function LightingSetup.Start()
     end
     dof.FocusDistance = 100
     dof.InFocusRadius = 30
-    dof.NearIntensity = 0.2
+    dof.NearIntensity = 0
+    dof.FarIntensity = 0
     
+    -- Improve Environment (Baseplate & Sky)
+    local Workspace = game:GetService("Workspace")
+    local baseplate = Workspace:FindFirstChild("Baseplate") or Workspace:FindFirstChild("Map")
+    if baseplate and baseplate:IsA("BasePart") then
+        baseplate.Color = Color3.fromRGB(30, 60, 30) -- Dark Premium Grass
+        baseplate.Material = Enum.Material.Grass
+        print("✅ LightingSetup: Updated Baseplate visuals")
+    end
+
+
+
     print("✅ LightingSetup: Lighting initialized with Future tech and effects")
 end
 

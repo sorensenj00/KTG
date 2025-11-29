@@ -1,3 +1,11 @@
+--[[
+	Controller: HUDController
+	Description: Manages all HUD elements including health, XP, ammo, DNA shop, and death summary
+]]
+
+local HUDController = {}
+
+function HUDController.Start()
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -10,6 +18,9 @@ local Constants = require(ReplicatedStorage.Blaster.Constants)
 -- local InputCategorizer = require(ReplicatedStorage.Blaster.Scripts.InputCategorizer) -- Unused
 local MetaConfig = require(ReplicatedStorage.GameLoop.MetaConfig)
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
+local MutationShopController = require(script.Parent.MutationShopController)
+
+
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -117,6 +128,7 @@ local function createHUD()
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "HUD"
 	screenGui.ResetOnSpawn = false
+	screenGui.Enabled = false -- Hidden by default, enabled by LobbyController
 	screenGui.Parent = playerGui
 
 	-- ============================================
@@ -589,6 +601,27 @@ local function createHUD()
 	respawnStroke.Color = ARCADE_THEME.STROKE_DARK
 	respawnStroke.Thickness = 2
 	respawnStroke.Parent = respawnButton
+
+    -- Mutations Button
+    local mutationsButton = Instance.new("TextButton")
+    mutationsButton.Name = "MutationsButton"
+    mutationsButton.Size = UDim2.new(0, 120, 0, 30)
+    mutationsButton.Position = UDim2.new(0, 10, 0, 10)
+    mutationsButton.BackgroundColor3 = ARCADE_THEME.ACCENT_GREEN
+    mutationsButton.Text = "MUTATIONS"
+    mutationsButton.TextColor3 = ARCADE_THEME.TEXT_WHITE
+    mutationsButton.Font = Enum.Font.GothamBold
+    mutationsButton.TextSize = 14
+    mutationsButton.Parent = shopMainFrame
+
+    local mutationsCorner = Instance.new("UICorner")
+    mutationsCorner.CornerRadius = UDim.new(0, 6)
+    mutationsCorner.Parent = mutationsButton
+
+    local mutationsStroke = Instance.new("UIStroke")
+    mutationsStroke.Color = ARCADE_THEME.STROKE_DARK
+    mutationsStroke.Thickness = 2
+    mutationsStroke.Parent = mutationsButton
 	
 	local shopLayout = Instance.new("UIListLayout")
 	shopLayout.Padding = UDim.new(0, 20)
@@ -622,6 +655,7 @@ local function createHUD()
 		ShopMainFrame = shopMainFrame,
 		ShopScrollFrame = shopScrollFrame,
 		ShopCloseButton = shopCloseButton,
+        MutationsButton = mutationsButton,
 		RespawnButton = respawnButton,
 		DeathSummaryFrame = deathSummaryFrame,
 		DeathTitle = deathTitle,
@@ -1092,8 +1126,17 @@ local function toggleShop()
 	setShopState(isOpening, false)
 end
 
+-- Set callback for Mutation Shop to return here
+MutationShopController.SetCloseCallback(function()
+    setShopState(true, false) -- Re-open main shop
+end)
+
 -- Button Connections
 hud.ShopCloseButton.MouseButton1Click:Connect(toggleShop)
+hud.MutationsButton.MouseButton1Click:Connect(function()
+    toggleShop() -- Close Skill Tree
+    MutationShopController.Open()
+end)
 
 -- Keybinds
 UserInputService.InputBegan:Connect(function(input, processed)
@@ -1117,7 +1160,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 			local harvestRemote = ReplicatedStorage:WaitForChild("Harvest", 2)
 
 			if harvestRemote then
-				local success, msg = harvestRemote:InvokeServer()
+				local success, _msg = harvestRemote:InvokeServer()
 				if success then
 					playSound(SOUNDS.Purchase)
 				else
@@ -1238,7 +1281,7 @@ hud.HarvestButton.MouseButton1Click:Connect(function()
 	local harvestRemote = remotes and remotes:FindFirstChild("Harvest")
 
 	if harvestRemote then
-		local success, msg = harvestRemote:InvokeServer()
+		local success, _msg = harvestRemote:InvokeServer()
 		if success then
 			playSound(SOUNDS.Purchase)
 			-- UI will update via attribute signals
@@ -1399,3 +1442,8 @@ task.spawn(function()
 		updateMetaStats(dna, upgrades, biomass)
 	end
 end)
+
+print("✅ HUDController: Started")
+end
+
+return HUDController

@@ -22,9 +22,11 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
+local ScalingEngine = require(ServerScriptService.Services.World.ScalingEngineService)
+local DamageTracker = require(ServerScriptService.Services.World.DamageTrackerService)
+local MetaProgressionManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
 local castRays = require(ServerScriptService.Utility.castRays)
-local ProgressionManager = require(script.Parent.ProgressionManager)
-local DamageTracker = require(script.Parent.DamageTracker)
+local ProgressionManager = require(ServerScriptService.Services.Progression.ProgressionService)
 
 -- === Constants ===
 local UPDATE_INTERVAL = 15 -- Run AI logic every 15 frames (approx 4 times/sec)

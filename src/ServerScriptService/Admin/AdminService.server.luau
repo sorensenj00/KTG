@@ -2,10 +2,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Players = game:GetService("Players")
 
-local GameLoop = ServerScriptService.GameLoop
-local ProgressionManager = require(GameLoop.ProgressionManager)
-local ScalingEngine = require(GameLoop.ScalingEngine)
-local MetaProgressionManager = require(GameLoop.MetaProgressionManager)
+local Services = ServerScriptService.Services
+local ProgressionManager = require(Services.Progression.ProgressionService)
+local ScalingEngine = require(Services.World.ScalingEngineService)
+local MetaProgressionManager = require(Services.Progression.MetaProgressionService)
 
 -- 1. Setup Remotes
 local adminRemotes = ReplicatedStorage:FindFirstChild("AdminRemotes") or Instance.new("Folder")

@@ -1,3 +1,11 @@
+--[[
+	Controller: LobbyController
+	Description: Manages the lobby UI with 3D character viewport and play button
+]]
+
+local LobbyController = {}
+
+function LobbyController.Start()
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 
@@ -31,24 +39,54 @@ local function createLobby()
 	local bg = Instance.new("Frame")
 	bg.Name = "Background"
 	bg.Size = UDim2.fromScale(1, 1)
-	bg.BackgroundColor3 = Color3.new(0, 0, 0)
-	bg.BackgroundTransparency = 0.2 -- Darken the world behind
+	bg.BackgroundColor3 = THEME.BG_DARK -- Use theme color instead of transparent
+	bg.BackgroundTransparency = 0 -- Opaque background
 	bg.BorderSizePixel = 0
 	bg.Parent = screenGui
+    
+    -- Add a gradient for better visuals
+    local bgGradient = Instance.new("UIGradient")
+    bgGradient.Rotation = 90
+    bgGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, THEME.BG_DARK),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 8, 12))
+    })
+    bgGradient.Parent = bg
 
 	local viewport = Instance.new("ViewportFrame")
 	viewport.Name = "CharacterViewport"
 	viewport.Size = UDim2.fromScale(1, 1)
 	viewport.BackgroundTransparency = 1
+    viewport.Ambient = Color3.fromRGB(150, 150, 150) -- Add some ambient light
+    viewport.LightColor = Color3.fromRGB(255, 255, 255)
+    viewport.LightDirection = Vector3.new(-1, -1, -1)
 	viewport.Parent = bg
 	
 	local worldModel = Instance.new("WorldModel")
 	worldModel.Parent = viewport
 	
 	local viewportCamera = Instance.new("Camera")
-	viewportCamera.FieldOfView = 60
+	viewportCamera.FieldOfView = 45 -- Lower FOV for better portrait look
 	viewport.CurrentCamera = viewportCamera
 	viewportCamera.Parent = viewport
+    
+    -- Add a platform INSIDE the ViewportFrame
+    local platform = Instance.new("Part")
+    platform.Size = Vector3.new(10, 1, 10)
+    platform.Position = Vector3.new(0, -3, 0)
+    platform.Anchored = true
+    platform.Material = Enum.Material.Neon
+    platform.Color = THEME.ACCENT_BLUE
+    platform.Transparency = 0.5
+    platform.Parent = worldModel
+    
+    local platformTexture = Instance.new("Texture")
+    platformTexture.Texture = "rbxassetid://607929314"
+    platformTexture.Face = Enum.NormalId.Top
+    platformTexture.StudsPerTileU = 5
+    platformTexture.StudsPerTileV = 5
+    platformTexture.Transparency = 0.8
+    platformTexture.Parent = platform
 
 	-- Character Cloning & Animation
 	local runService = game:GetService("RunService")
@@ -57,64 +95,104 @@ local function createLobby()
 	
 	local function updateViewmodel()
 		worldModel:ClearAllChildren()
-		local char = player.Character
-		if char then
-			char.Archivable = true
-			local clone = char:Clone()
-			clone.Name = "ViewmodelCharacter"
-			clone.Parent = worldModel
-			
-			-- Anchor everything in the clone so it doesn't fall
-			for _, part in ipairs(clone:GetDescendants()) do
-				if part:IsA("BasePart") then
-					part.Anchored = true
-					part.CanCollide = false
-				end
-			end
-			
-			-- Position at origin
-			if clone.PrimaryPart then
-				clone:SetPrimaryPartCFrame(CFrame.new(0, 0, 0))
-			else
-				-- Fallback if no primary part
-				clone:PivotTo(CFrame.new(0,0,0))
-			end
-
-			-- Force T-Pose (Remove Animate script and stop tracks)
-			local animateScript = clone:FindFirstChild("Animate")
-			if animateScript then
-				animateScript:Destroy()
-			end
-			
-			local humanoid = clone:FindFirstChild("Humanoid")
-			if humanoid then
-				local animator = humanoid:FindFirstChild("Animator")
-				if animator then
-					for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-						track:Stop()
-					end
-				end
-			end
-			
-			-- Explicitly force T-Pose by manipulating Motor6Ds
-			-- R15 Standard: LeftShoulder, RightShoulder in UpperTorso
-			-- We want to rotate them up 90 degrees (pi/2)
-			local upperTorso = clone:WaitForChild("UpperTorso", 5)
-			if upperTorso then
-				local leftShoulder = upperTorso:WaitForChild("LeftShoulder", 5)
-				local rightShoulder = upperTorso:WaitForChild("RightShoulder", 5)
+		
+		local model = nil
+		
+		-- 1. Try to clone existing character if valid (and has head)
+		if player.Character and player.Character:FindFirstChild("Head") then
+			player.Character.Archivable = true
+			model = player.Character:Clone()
+			player.Character.Archivable = false
+		end
+		
+		-- 2. If no valid character, try to load from UserID with retries
+		if not model then
+			local attempts = 0
+			while attempts < 3 and not model do
+				attempts += 1
+				local success, result = pcall(function()
+					return Players:CreateHumanoidModelFromUserId(player.UserId)
+				end)
 				
-				if leftShoulder then
-					-- Rotate Left Arm Up (Z axis usually)
-					leftShoulder.C0 = CFrame.new(-1, 0.5, 0) * CFrame.Angles(0, 0, math.rad(90))
+				if success and result and result:FindFirstChild("Head") then
+					model = result
+				elseif result then
+					result:Destroy() -- Destroy bad result
 				end
 				
-				if rightShoulder then
-					-- Rotate Right Arm Up
-					rightShoulder.C0 = CFrame.new(1, 0.5, 0) * CFrame.Angles(0, 0, math.rad(-90))
-				end
+				if not model then task.wait(0.2) end
 			end
 		end
+		
+		-- 3. Fallback: Create Dummy and apply Description
+		if not model then
+			-- Create R15 Dummy Structure
+			model = Instance.new("Model")
+			local hum = Instance.new("Humanoid")
+			hum.Parent = model
+			local root = Instance.new("Part")
+			root.Name = "HumanoidRootPart"
+			root.Size = Vector3.new(2, 2, 1)
+			root.Transparency = 1
+			root.Parent = model
+			model.PrimaryPart = root
+			
+			local head = Instance.new("Part")
+			head.Name = "Head"
+			head.Size = Vector3.new(1, 1, 1)
+			head.Parent = model
+			
+			-- Apply Description
+			pcall(function()
+				local desc = Players:GetHumanoidDescriptionFromUserId(player.UserId)
+				if desc then
+					hum:ApplyDescription(desc)
+				end
+			end)
+		end
+		
+		model.Name = "ViewmodelCharacter"
+		model.Parent = worldModel
+		
+		-- Ensure PrimaryPart
+		if not model.PrimaryPart then
+			model.PrimaryPart = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso")
+		end
+		
+		-- Anchor ONLY PrimaryPart (Root), Unanchor others for Motor6D to work
+		for _, part in ipairs(model:GetDescendants()) do
+			if part:IsA("BasePart") then
+				if part == model.PrimaryPart then
+					part.Anchored = true
+				else
+					part.Anchored = false
+				end
+				part.CanCollide = false
+			end
+		end
+		
+		-- Position at origin
+		if model.PrimaryPart then
+			-- Center vertically based on HipHeight
+			local hipHeight = model:FindFirstChild("Humanoid") and model.Humanoid.HipHeight or 2
+			model:PivotTo(CFrame.new(0, -hipHeight - 0.5, 0) * CFrame.Angles(0, math.rad(10), 0))
+		end
+
+		-- Force T-Pose (Rotate limbs)
+        for _, desc in ipairs(model:GetDescendants()) do
+            if desc:IsA("Motor6D") then
+                local name = desc.Name
+                if name == "Left Shoulder" or name == "LeftShoulder" then
+                    desc.C0 = CFrame.new(-1, 0.5, 0) * CFrame.Angles(0, 0, math.rad(-90))
+                elseif name == "Right Shoulder" or name == "RightShoulder" then
+                    desc.C0 = CFrame.new(1, 0.5, 0) * CFrame.Angles(0, 0, math.rad(90))
+                elseif name == "Left Hip" or name == "LeftHip" then
+                     desc.C0 = CFrame.new(-1, -1, 0) -- Neutral
+                elseif name == "Right Hip" or name == "RightHip" then
+                     desc.C0 = CFrame.new(1, -1, 0) -- Neutral
+                end
+            end
+        end
 	end
 	
 	local function enableViewmodel()
@@ -137,6 +215,10 @@ local function createLobby()
 		-- Hide Main HUD if it exists
 		local mainHud = playerGui:FindFirstChild("HUD")
 		if mainHud then mainHud.Enabled = false end
+
+        -- Hide Mutation HUD if it exists
+        local mutationHud = playerGui:FindFirstChild("MutationHUD")
+        if mutationHud then mutationHud.Enabled = false end
 		
 		-- Unlock Mouse for UI interaction
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -151,6 +233,10 @@ local function createLobby()
 		-- Show Main HUD
 		local mainHud = playerGui:FindFirstChild("HUD")
 		if mainHud then mainHud.Enabled = true end
+
+        -- Show Mutation HUD
+        local mutationHud = playerGui:FindFirstChild("MutationHUD")
+        if mutationHud then mutationHud.Enabled = true end
 	end
 
 	-- Initial Setup
@@ -381,22 +467,61 @@ local function createLobby()
 		screenGui.Enabled = false
 		disableViewmodel()
 		
+		-- Enable Game HUD
+		local hud = playerGui:FindFirstChild("HUD")
+		if hud then
+			hud.Enabled = true
+		end
+
+        -- Enable Mutation HUD
+        local mutationHud = playerGui:FindFirstChild("MutationHUD")
+        if mutationHud then
+            mutationHud.Enabled = true
+        end
+		
+		-- Restore Camera
+		local camera = workspace.CurrentCamera
+		camera.CameraType = Enum.CameraType.Custom
+		
 		-- Unlock mouse for gameplay
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
 		
 		-- Request spawn/respawn from server
 		local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Blaster"):WaitForChild("Remotes")
-		local respawnRemote = remotes:WaitForChild("RequestRespawn", 5)
+		local respawnRemote = remotes:WaitForChild("RequestRespawn", 30)
 		if respawnRemote then
 			respawnRemote:FireServer(true) -- true = skip death (safe spawn)
 			print("Quick Play: Spawning player...")
 		else
-			-- Fallback: Just spawn the character directly
-			player:LoadCharacter()
-			print("Quick Play: Loading character (fallback)...")
+			warn("❌ Quick Play Error: RequestRespawn remote not found!")
+			-- player:LoadCharacter() -- REMOVED: Cannot be called from client
 		end
 	end)
+	
+	-- Initial Lobby Setup
+	local function setupLobbyState()
+		-- Override Camera to look at nothing (since we use ViewportFrame)
+		local camera = workspace.CurrentCamera
+		camera.CameraType = Enum.CameraType.Scriptable
+        camera.CFrame = CFrame.new(0, 10000, 0) -- Far away
+		
+		-- Hide HUD (Non-blocking)
+		task.spawn(function()
+			local hud = playerGui:WaitForChild("HUD", 10)
+			if hud then
+				hud.Enabled = false
+			end
+            
+            local mutationHud = playerGui:WaitForChild("MutationHUD", 10)
+            if mutationHud then
+                mutationHud.Enabled = false
+            end
+		end)
+	end
+	
+	-- Call setup immediately
+	setupLobbyState()
 
 	-- ============================================
 	-- 6. Friend List (Collapsible Drawer) - REMOVED
@@ -455,3 +580,8 @@ local function createLobby()
 end
 
 createLobby()
+
+print("✅ LobbyController: Started")
+end
+
+return LobbyController

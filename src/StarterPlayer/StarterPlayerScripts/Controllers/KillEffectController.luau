@@ -26,18 +26,9 @@ local SMOKE_COLORS = {
 	Color3.fromRGB(100, 100, 100), -- Dark gray
 }
 
--- Remotes
-local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes")
-local playKillEffectRemote = remotes:WaitForChild("PlayKillEffect", 5)
-
-if not playKillEffectRemote then
-	-- Create placeholder if it doesn't exist yet (will be created by server in real run)
-	-- In practice, we wait for server to create it.
-	-- But since we are editing client code, we can't create remote here.
-	-- We assume the server refactor step will ensure it exists.
-	warn("⚠️ KillEffectController: PlayKillEffect remote not found immediately.")
-end
-
+-- Remotes (Initialized in Start)
+local remotes
+local playKillEffectRemote
 
 -- Helper: Create Particle Emitter
 local function createEmitter(parent, texture, colors, size, lifetime, speed, spread)
@@ -161,7 +152,7 @@ end
 
 function KillEffectController.Start()
 	remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes")
-	playKillEffectRemote = remotes:WaitForChild("PlayKillEffect", 10)
+	playKillEffectRemote = remotes:WaitForChild("PlayKillEffect", 30)
 
 	if playKillEffectRemote then
 		playKillEffectRemote.OnClientEvent:Connect(onPlayKillEffect)

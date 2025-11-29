@@ -2,8 +2,8 @@ local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 local CollectionService = game:GetService("CollectionService")
 
-local MetaProgressionManager = require(ServerScriptService.GameLoop.MetaProgressionManager)
-local ProgressionManager = require(ServerScriptService.GameLoop.ProgressionManager)
+local MetaProgressionManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
+local ProgressionManager = require(ServerScriptService.Services.Progression.ProgressionService)
 
 local MutationManager = {}
 
@@ -19,7 +19,7 @@ local function getNearbyEnemies(position, radius, ignoreChar)
         end
     end
     -- Also check bots
-    for _, bot in ipairs(CollectionService:GetTagged("Bot")) do
+    for _, bot in ipairs(CollectionService:GetTagged("BotAI")) do
         if bot ~= ignoreChar and bot.PrimaryPart then
              local dist = (bot.PrimaryPart.Position - position).Magnitude
             if dist <= radius then

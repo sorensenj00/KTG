@@ -1,14 +1,16 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local ContextActionService = game:GetService("ContextActionService")
+-- local ContextActionService = game:GetService("ContextActionService") -- Unused
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
 local MutationShopController = {}
 
 -- Constants
-local REMOTE_DRAFT = "RequestDraft"
-local REMOTE_SELECT = "SelectMutation"
+-- Constants
+-- local REMOTE_DRAFT = "RequestDraft" -- Unused
+-- local REMOTE_SELECT = "SelectMutation" -- Unused
 
 -- References
 local player = Players.LocalPlayer
@@ -17,6 +19,12 @@ local mainFrame = nil
 local cardsContainer = nil
 
 local mutationConfig = require(ReplicatedStorage.GameLoop.MutationConfig)
+
+local closeCallback = nil
+
+function MutationShopController.SetCloseCallback(callback)
+    closeCallback = callback
+end
 
 -- Logic
 
@@ -53,7 +61,7 @@ local function createCard(name, data, index)
     title.BackgroundTransparency = 1
     title.TextColor3 = mutationConfig.RarityColors[data.Rarity] or Color3.new(1,1,1)
     title.Font = Enum.Font.GothamBlack
-    title.TextSize = 20
+    title.TextSize = 24 -- Increased from 20
     title.TextWrapped = true
     title.Parent = card
 
@@ -69,15 +77,44 @@ local function createCard(name, data, index)
     local desc = Instance.new("TextLabel")
     desc.Name = "Desc"
     desc.Text = data.Description
-    desc.Size = UDim2.new(1, -20, 0.4, 0)
-    desc.Position = UDim2.new(0, 10, 0.6, 0)
+    desc.Size = UDim2.new(1, -20, 0.3, 0)
+    desc.Position = UDim2.new(0, 10, 0.55, 0)
     desc.BackgroundTransparency = 1
     desc.TextColor3 = Color3.new(0.9, 0.9, 0.9)
     desc.TextWrapped = true
     desc.Font = Enum.Font.GothamMedium
-    desc.TextSize = 14
+    desc.BackgroundTransparency = 1
+    desc.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    desc.TextWrapped = true
+    desc.Font = Enum.Font.GothamMedium
+    desc.TextSize = 16 -- Increased from 14
     desc.TextYAlignment = Enum.TextYAlignment.Top
     desc.Parent = card
+    
+    -- Cost Label
+    local costLabel = Instance.new("TextLabel")
+    costLabel.Name = "CostLabel"
+    costLabel.Text = "COST: 100 DNA" -- Placeholder or fetch from config
+    costLabel.Size = UDim2.new(1, 0, 0, 25)
+    costLabel.Position = UDim2.new(0, 0, 0.82, 0)
+    costLabel.BackgroundTransparency = 1
+    costLabel.TextColor3 = Color3.fromRGB(255, 215, 0) -- Gold
+    costLabel.Font = Enum.Font.GothamBold
+    costLabel.TextSize = 20 -- Increased from 16
+    costLabel.Parent = card
+    
+    -- Timer/Rarity Label
+    local rarityLabel = Instance.new("TextLabel")
+    rarityLabel.Name = "RarityLabel"
+    rarityLabel.Text = string.upper(data.Rarity)
+    rarityLabel.Size = UDim2.new(1, 0, 0, 20)
+    rarityLabel.Position = UDim2.new(0, 0, 0.92, 0)
+    rarityLabel.BackgroundTransparency = 1
+    rarityLabel.TextColor3 = mutationConfig.RarityColors[data.Rarity] or Color3.new(1,1,1)
+    rarityLabel.Font = Enum.Font.Gotham
+    rarityLabel.TextSize = 14 -- Increased from 12
+    rarityLabel.TextTransparency = 0.5
+    rarityLabel.Parent = card
 
     -- Hover Animation
     card.MouseEnter:Connect(function()
@@ -97,6 +134,7 @@ local function createCard(name, data, index)
 
         if success then
             gui.Enabled = false
+            pcall(function() RunService:UnbindFromRenderStep("UnlockMouseForMutationShop") end)
             UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
         end
     end)
@@ -104,7 +142,7 @@ local function createCard(name, data, index)
     return card
 end
 
-local function openShop()
+function MutationShopController.Open()
     if gui.Enabled then return end
 
     -- Request Draft
@@ -131,6 +169,12 @@ local function openShop()
 
     gui.Enabled = true
     UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    
+    -- Enforce mouse unlock
+    RunService:BindToRenderStep("UnlockMouseForMutationShop", Enum.RenderPriority.Last.Value, function()
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        UserInputService.MouseIconEnabled = true
+    end)
 end
 
 function MutationShopController.Start()
@@ -174,6 +218,32 @@ function MutationShopController.Start()
     title.Font = Enum.Font.GothamBlack
     title.TextSize = 32
     title.Parent = mainFrame
+    
+    -- Close/Back Button
+    local closeButton = Instance.new("TextButton")
+    closeButton.Name = "CloseButton"
+    closeButton.Text = "BACK"
+    closeButton.Size = UDim2.new(0, 80, 0, 30)
+    closeButton.Position = UDim2.new(1, -10, 0, 10)
+    closeButton.AnchorPoint = Vector2.new(1, 0)
+    closeButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    closeButton.TextColor3 = Color3.new(1, 1, 1)
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.TextSize = 14
+    closeButton.Parent = mainFrame
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 6)
+    closeCorner.Parent = closeButton
+    
+    closeButton.MouseButton1Click:Connect(function()
+        gui.Enabled = false
+        pcall(function() RunService:UnbindFromRenderStep("UnlockMouseForMutationShop") end)
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default -- Keep unlocked for main shop
+        if closeCallback then
+            closeCallback()
+        end
+    end)
 
     cardsContainer = Instance.new("Frame")
     cardsContainer.Size = UDim2.new(1, 0, 0.9, 0)
