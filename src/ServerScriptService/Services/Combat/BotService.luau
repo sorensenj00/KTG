@@ -27,6 +27,7 @@ local DamageTracker = require(ServerScriptService.Services.World.DamageTrackerSe
 local MetaProgressionManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
 local castRays = require(ServerScriptService.Utility.castRays)
 local ProgressionManager = require(ServerScriptService.Services.Progression.ProgressionService)
+local XPOrbService = require(ServerScriptService.Services.World.XPOrbService)
 
 -- === Constants ===
 local UPDATE_INTERVAL = 15 -- Run AI logic every 15 frames (approx 4 times/sec)
@@ -154,41 +155,12 @@ local function updateNetworkOwnership(bot, target)
 end
 
 -- === Helper: Spatial Orb Search ===
-local orbOverlapParams = OverlapParams.new()
-orbOverlapParams.FilterType = Enum.RaycastFilterType.Include
--- Note: FilterDescendantsInstances is set dynamically to the Orbs folder
-
 local function findNearestOrb(bot, range)
 	local root = bot.PrimaryPart
 	if not root then return nil end
 
-	local orbsFolder = Workspace:FindFirstChild("Orbs")
-	if not orbsFolder then return nil end
-
-	-- Update params (inexpensive if done once per check)
-	orbOverlapParams.FilterDescendantsInstances = { orbsFolder }
-
-	-- Use spatial query instead of iterating all orbs
-	-- Optimization: Scan a box around the bot
-	local regionSize = Vector3.new(range * 2, 100, range * 2)
-	local cframe = root.CFrame
-
-	local parts = Workspace:GetPartBoundsInBox(cframe, regionSize, orbOverlapParams)
-
-	local bestOrb = nil
-	local bestDist = range
-
-	for _, part in ipairs(parts) do
-		if part.Name == "XPOrb" then
-			local dist = (part.Position - root.Position).Magnitude
-			if dist < bestDist then
-				bestDist = dist
-				bestOrb = part
-			end
-		end
-	end
-
-	return bestOrb
+	-- Use Optimized XPOrbService (Data-only query, no physics)
+	return XPOrbService.GetNearestOrb(root.Position, range)
 end
 
 -- === Helper: Target Validation & Scoring ===
