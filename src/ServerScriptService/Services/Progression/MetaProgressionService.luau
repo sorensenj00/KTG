@@ -33,6 +33,14 @@ local PlayerDrafts = {}
 -- Pending Saves: { [Player] = true }
 local pendingSaves = {}
 
+-- Shop Rotation State
+local ShopRotation = {
+    Items = {}, -- { "MutationName1", "MutationName2", ... }
+    NextRotationTime = 0,
+    Seed = 0
+}
+local ROTATION_INTERVAL = 600 -- 10 Minutes
+
 -- Signals
 local UpdateMetaEvent = Instance.new("RemoteEvent")
 UpdateMetaEvent.Name = "UpdateMetaEvent"
@@ -74,7 +82,7 @@ local function scheduleSave(player)
 end
 
 -- Weighted Random Selection
-local function getRandomRarity(minRarity)
+local function getRandomRarity(minRarity, randomGen)
     minRarity = minRarity or 1
     local totalWeight = 0
     local relevantWeights = {}
@@ -86,7 +94,7 @@ local function getRandomRarity(minRarity)
         end
     end
 
-    local r = math.random() * totalWeight
+    local r = randomGen:NextNumber() * totalWeight
     local current = 0
     for _, entry in ipairs(relevantWeights) do
         current = current + entry.Weight
@@ -97,7 +105,7 @@ local function getRandomRarity(minRarity)
     return minRarity -- Default
 end
 
-local function getRandomMutationOfRarity(rarity, excludeList)
+local function getRandomMutationOfRarity(rarity, excludeList, randomGen)
     local candidates = {}
     for name, data in pairs(MetaConfig.Mutations) do
         if data.Rarity == rarity then
@@ -118,7 +126,34 @@ local function getRandomMutationOfRarity(rarity, excludeList)
     end
 
     if #candidates == 0 then return nil end
-    return candidates[math.random(1, #candidates)]
+    return candidates[randomGen:NextInteger(1, #candidates)]
+end
+
+-- Shop Rotation Logic
+local function updateShopRotation()
+    local now = os.time()
+    if now < ShopRotation.NextRotationTime and #ShopRotation.Items > 0 then return end
+
+    -- New Rotation
+    ShopRotation.NextRotationTime = now + ROTATION_INTERVAL
+    ShopRotation.Seed = now
+
+    local rng = Random.new(ShopRotation.Seed)
+    ShopRotation.Items = {}
+
+    -- Generate 3 Flash Deals (Uncommon+)
+    for i = 1, 3 do
+        local rarity = getRandomRarity(2, rng)
+        local mutation = getRandomMutationOfRarity(rarity, ShopRotation.Items, rng)
+        if mutation then
+            table.insert(ShopRotation.Items, mutation)
+        end
+    end
+
+    print("🔄 Shop Rotated: ", table.concat(ShopRotation.Items, ", "))
+
+    -- Notify all clients? (Or just let them pull on next open)
+    -- MutationShopEvent:FireAllClients("UpdateTimer", ShopRotation.NextRotationTime)
 end
 
 -- === Public API ===
@@ -178,32 +213,59 @@ function MetaProgressionManager.RequestDraft(player)
         return nil, "Not enough DNA"
     end
 
-    -- Generate 3 Cards
-    local draft = {}
-    local attempts = 0
-    while #draft < 3 and attempts < 100 do
-        attempts = attempts + 1
-        -- Gacha only drops Rare+ (Rarity >= 2)
-        local rarity = getRandomRarity(2)
-        local mutationName = getRandomMutationOfRarity(rarity, draft)
+    updateShopRotation() -- Ensure valid rotation
 
-        if mutationName then
-            -- Verify Max Level
-            local currentLvl = data.Upgrades[mutationName] or 0
-            local maxLvl = MetaConfig.Mutations[mutationName].MaxLevel
+    -- Generate 3 Cards from Rotation + Essentials
+    -- Strategy:
+    -- Slot 1 & 2: From Current Rotation (Flash Deals)
+    -- Slot 3: Random Essential (Common/Uncommon) OR Rotation leftover
+
+    local draft = {}
+    local rng = Random.new(os.time() + player.UserId) -- Unique shuffle per player request
+
+    -- 1. Try to fill from Shop Rotation (Flash Deals)
+    for _, item in ipairs(ShopRotation.Items) do
+        -- Verify Max Level
+        local currentLvl = data.Upgrades[item] or 0
+        local maxLvl = MetaConfig.Mutations[item].MaxLevel
+
+        -- Check duplicate in draft
+        local alreadyInDraft = false
+        for _, d in ipairs(draft) do if d == item then alreadyInDraft = true break end end
+
+        if currentLvl < maxLvl and not alreadyInDraft then
+             table.insert(draft, item)
+        end
+        if #draft >= 3 then break end
+    end
+
+    -- 2. If slots remaining, fill with Random Essentials (Common/Uncommon)
+    local attempts = 0
+    while #draft < 3 and attempts < 50 do
+        attempts = attempts + 1
+        local rarity = getRandomRarity(1, rng) -- Allow Commons
+        local mutation = getRandomMutationOfRarity(rarity, draft, rng)
+
+        if mutation then
+            local currentLvl = data.Upgrades[mutation] or 0
+            local maxLvl = MetaConfig.Mutations[mutation].MaxLevel
             if currentLvl < maxLvl then
-                table.insert(draft, mutationName)
+                table.insert(draft, mutation)
             end
         end
     end
 
-    if #draft < 3 then
-         -- Fill with randoms if we ran out of unique valid options (unlikely unless maxed out)
-         -- For now, just return what we have
-    end
+    -- 3. Fallback: If STILL empty (Maxed Out Everything), add a placeholder?
+    -- Client handles empty drafts poorly.
+    -- For now, if empty, we might return "DNA Cache" if we had one.
+    -- Or we allow duplicates but convert them to DNA on purchase? (Requires Select logic change)
+
+    -- Current fix: Just return what we have. Client loops through it.
 
     PlayerDrafts[player] = draft
-    return draft
+
+    -- Return draft AND the next rotation time for the timer
+    return draft, ShopRotation.NextRotationTime
 end
 
 -- Gacha: Select
@@ -369,9 +431,13 @@ function MetaProgressionManager.Start()
                 performSave(player)
                 pendingSaves[player] = nil
             end
+
+            -- Check rotation
+            updateShopRotation()
         end
     end)
     
+    updateShopRotation() -- Initial
     print("MetaProgressionManager started")
 end
 
@@ -411,9 +477,10 @@ task.spawn(function()
                 requestMetaFunc.OnServerInvoke = function(player)
                     local data = PlayerMeta[player]
                     if data then
-                        return data.DNA, data.Upgrades, 0 -- Returns (dna, upgrades, biomass)
+                        -- Returns (dna, upgrades, biomass, nextRotationTime)
+                        return data.DNA, data.Upgrades, 0, ShopRotation.NextRotationTime
                     end
-                    return 0, {}, 0
+                    return 0, {}, 0, 0
                 end
                 print("✅ MetaProgressionManager: RequestMetaData handler connected")
             end
