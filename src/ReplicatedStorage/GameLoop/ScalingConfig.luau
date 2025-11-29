@@ -29,16 +29,6 @@ ScalingConfig.HEALTH_BASE = 100
 ScalingConfig.HEALTH_EXPONENT = 2.5
 
 -- Size (0.75 to 12.0)
-ScalingConfig.MIN_SIZE = 0.75
-ScalingConfig.MAX_SIZE = 30.0
-ScalingConfig.GROWTH_EXPONENT = 3.0
-
--- Speed Constants
--- Level 1: Very Fast (120) - Agile, hard to hit
--- Level 30: Heavy (50) - Slower relative to size, but still covers distance
-ScalingConfig.SPEED_AT_LEVEL_1 = 120
-ScalingConfig.SPEED_AT_LEVEL_30 = 50
-
 -- Visuals
 ScalingConfig.STAR_MODE_COLOR = Color3.fromRGB(255, 50, 50) -- Red for Titan Boss
 ScalingConfig.STAR_MODE_MATERIAL = Enum.Material.Neon
@@ -47,9 +37,9 @@ ScalingConfig.STAR_MODE_MATERIAL = Enum.Material.Neon
 ScalingConfig.SAFE_ZONE_MAX_LEVEL = 5
 
 -- Size Limits (Used by Camera Controllers)
-ScalingConfig.MIN_SIZE = 8.0
-ScalingConfig.MAX_SIZE = 600.0
-ScalingConfig.MAX_SIZE_CAP = 600.0 -- Threshold for "Star Mode" / Titan visuals
+ScalingConfig.MIN_SIZE = 0.75
+ScalingConfig.MAX_SIZE = 50.0
+ScalingConfig.MAX_SIZE_CAP = 50.0 -- Threshold for "Star Mode" / Titan visuals
 
 
 
@@ -68,20 +58,12 @@ function ScalingConfig.GetXPReward(victimLevel: number): number
 end
 
 function ScalingConfig.GetSizeMultiplier(level: number): number
-	-- Continuous Scaling: Linear Aggression
-	-- Level 1: 8.0x
-	-- Level 10: 80.0x
-	-- Level 30: 400.0x
+	-- Continuous Scaling: Linear from 0.75 (Lvl 1) to 50.0 (Lvl 30)
+	-- Range: 49.25 spread over 29 levels
+	-- Increment: ~1.7 per level
 	
-	if level <= 10 then
-		-- 8.0 to 80.0 over 9 levels (approx 8.0 per level)
-		-- Formula: 8.0 + (level - 1) * 8.0
-		return 8.0 + (level - 1) * 8.0
-	else
-		-- 80.0 to 400.0 over 20 levels (approx 16.0 per level)
-		-- Formula: 80.0 + (level - 10) * 16.0
-		return 80.0 + (level - 10) * 16.0
-	end
+	local t = math.clamp((level - 1) / (ScalingConfig.MAX_LEVEL - 1), 0, 1)
+	return ScalingConfig.MIN_SIZE + t * (ScalingConfig.MAX_SIZE - ScalingConfig.MIN_SIZE)
 end
 
 function ScalingConfig.GetWalkSpeed(level: number): number
