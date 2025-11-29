@@ -11,12 +11,12 @@ function LightingService.Init()
 
 	Lighting.GlobalShadows = true
 	Lighting.ShadowSoftness = 0.5 -- Softer shadows
-	Lighting.Ambient = Color3.fromRGB(70, 70, 70) -- Brighter indoor shadows (not pitch black)
-	Lighting.OutdoorAmbient = Color3.fromRGB(130, 130, 130) -- Brighter outdoor shadows
-	Lighting.Brightness = 3 -- Balanced sunlight
+	Lighting.Ambient = Color3.fromRGB(30, 30, 30) -- Darker ambient (Skybox light provides fill)
+	Lighting.OutdoorAmbient = Color3.fromRGB(50, 50, 50) -- Darker outdoor (Skybox light provides fill)
+	Lighting.Brightness = 2 -- Balanced sunlight with PBR
 	Lighting.ColorShift_Top = Color3.fromRGB(255, 248, 230) -- Subtle warm sunlight
-	Lighting.EnvironmentDiffuseScale = 0 -- Keep 0 to fix "shadow radius" artifact
-	Lighting.EnvironmentSpecularScale = 0
+	Lighting.EnvironmentDiffuseScale = 1 -- Enable PBR Environment Lighting
+	Lighting.EnvironmentSpecularScale = 1 -- Enable PBR Reflections
 	Lighting.ClockTime = 17 -- Slightly earlier for better angle? Or keep 17.5. Let's try 17.2
 	Lighting.GeographicLatitude = 45
 

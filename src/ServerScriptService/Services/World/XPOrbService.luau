@@ -233,6 +233,26 @@ local function onCollectOrb(player, orbId)
 	orbEvents:FireAllClients({Action = "Despawn", Id = orbId})
 end
 
+-- PUBLIC API: Get nearest orb to a position
+function XPOrbService.GetNearestOrb(position: Vector3, maxRange: number)
+	local bestOrb = nil
+	local bestDist = maxRange
+
+	for _, orb in pairs(activeOrbs) do
+		local dist = (orb.position - position).Magnitude
+		if dist < bestDist then
+			bestDist = dist
+			bestOrb = {
+				Position = orb.position,
+				Name = "XPOrb", -- Compatibility for BotService
+				XP = orb.xpValue
+			}
+		end
+	end
+
+	return bestOrb
+end
+
 -- PUBLIC API: Spawn drop at specific position
 function XPOrbService.SpawnDrop(position: Vector3, totalXP: number)
 	-- ... (existing logic)
