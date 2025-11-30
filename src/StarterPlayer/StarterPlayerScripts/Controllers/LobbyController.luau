@@ -98,58 +98,38 @@ local function createLobby()
 		
 		local model = nil
 		
-		-- 1. Try to clone existing character if valid (and has head)
-		if player.Character and player.Character:FindFirstChild("Head") then
-			player.Character.Archivable = true
-			model = player.Character:Clone()
-			player.Character.Archivable = false
+		-- 1. Try to clone existing character
+        local character = player.Character
+        if character and character:FindFirstChild("Head") then
+			character.Archivable = true
+			model = character:Clone()
+			character.Archivable = false
 		end
 		
-		-- 2. If no valid character, try to load from UserID with retries
+		-- 2. Fallback: Load from UserId if clone failed
 		if not model then
-			local attempts = 0
-			while attempts < 3 and not model do
-				attempts += 1
-				local success, result = pcall(function()
-					return Players:CreateHumanoidModelFromUserId(player.UserId)
-				end)
-				
-				if success and result and result:FindFirstChild("Head") then
-					model = result
-				elseif result then
-					result:Destroy() -- Destroy bad result
-				end
-				
-				if not model then task.wait(0.2) end
+			local success, result = pcall(function()
+				return Players:CreateHumanoidModelFromUserId(player.UserId)
+			end)
+			if success and result then
+				model = result
 			end
 		end
-		
-		-- 3. Fallback: Create Dummy and apply Description
-		if not model then
-			-- Create R15 Dummy Structure
-			model = Instance.new("Model")
-			local hum = Instance.new("Humanoid")
-			hum.Parent = model
-			local root = Instance.new("Part")
-			root.Name = "HumanoidRootPart"
-			root.Size = Vector3.new(2, 2, 1)
-			root.Transparency = 1
-			root.Parent = model
-			model.PrimaryPart = root
-			
-			local head = Instance.new("Part")
-			head.Name = "Head"
-			head.Size = Vector3.new(1, 1, 1)
-			head.Parent = model
-			
-			-- Apply Description
-			pcall(function()
-				local desc = Players:GetHumanoidDescriptionFromUserId(player.UserId)
-				if desc then
-					hum:ApplyDescription(desc)
-				end
+
+        -- 3. Ultimate Fallback: Load Roblox (UserId 1) if player load failed
+        if not model then
+            local success, result = pcall(function()
+				return Players:CreateHumanoidModelFromUserId(1) -- Roblox
 			end)
-		end
+			if success and result then
+				model = result
+			end
+        end
+		
+		if not model then
+            warn("Could not load any character for lobby")
+            return 
+        end
 		
 		model.Name = "ViewmodelCharacter"
 		model.Parent = worldModel
@@ -173,23 +153,23 @@ local function createLobby()
 		
 		-- Position at origin
 		if model.PrimaryPart then
-			-- Center vertically based on HipHeight
-			-- Center vertically fixed at -1
-			model:PivotTo(CFrame.new(0, 1, 0) * CFrame.Angles(0, math.rad(180), 0))
+			-- Center vertically
+			model:PivotTo(CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(180), 0))
 		end
 
 		-- Force T-Pose (Rotate limbs)
         for _, desc in ipairs(model:GetDescendants()) do
             if desc:IsA("Motor6D") then
                 local name = desc.Name
+                -- R15 T-Pose
                 if name == "Left Shoulder" or name == "LeftShoulder" then
                     desc.C0 = CFrame.new(-1, 0.5, 0) * CFrame.Angles(0, 0, math.rad(-90))
                 elseif name == "Right Shoulder" or name == "RightShoulder" then
                     desc.C0 = CFrame.new(1, 0.5, 0) * CFrame.Angles(0, 0, math.rad(90))
                 elseif name == "Left Hip" or name == "LeftHip" then
-                     desc.C0 = CFrame.new(-1, -1, 0) -- Neutral
+                     desc.C0 = CFrame.new(-1, -1, 0) * CFrame.Angles(0, 0, math.rad(-20)) -- Slight leg spread
                 elseif name == "Right Hip" or name == "RightHip" then
-                     desc.C0 = CFrame.new(1, -1, 0) -- Neutral
+                     desc.C0 = CFrame.new(1, -1, 0) * CFrame.Angles(0, 0, math.rad(20)) -- Slight leg spread
                 end
             end
         end

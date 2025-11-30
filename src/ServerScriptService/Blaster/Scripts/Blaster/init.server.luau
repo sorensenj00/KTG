@@ -106,7 +106,7 @@ local function onShoot(player, now, tool, originCF, tagged)
 
 	-- Scaling Damage Logic
 	local level = player:GetAttribute("Level") or 1
-	-- damage = damage * ScalingConfig.GetDamageMultiplier(level) -- Currently 1
+	damage = damage * ScalingConfig.GetDamageMultiplier(level)
 
 	for _, result in ipairs(rayResults) do
 		local hitPart = result.instance

@@ -48,27 +48,34 @@ function ScalingEngine.UpdateCharacter(character: Model, biomass: number)
 	end
 
 	-- 1. Calculate Core Stats from Biomass
-	-- First get level for stat calculations
-	local level = 1
-	if biomass > 0 then
-		level = math.pow(biomass / ScalingConfig.BIOMASS_BASE_REQ, 1 / ScalingConfig.BIOMASS_EXPONENT)
-		level = math.max(1, math.min(level, ScalingConfig.MAX_LEVEL))
+	-- Fetch Level from Character or Player
+	local player = Players:GetPlayerFromCharacter(character)
+	local entity = player or character
+	local currentLevel = entity:GetAttribute("Level") or 1
+	
+	-- Calculate progress to next level for smooth scaling
+	local xpReq = ScalingConfig.GetXPRequired(currentLevel)
+	local progress = 0
+	if xpReq > 0 then
+		progress = math.clamp(biomass / xpReq, 0, 0.99)
 	end
 	
+	local smoothLevel = currentLevel + progress
+	
 	-- Then get scale multiplier for visual scaling
-	local scale = ScalingConfig.GetSizeMultiplier(level)
+	local scale = ScalingConfig.GetSizeMultiplier(smoothLevel)
 	
-	-- print(string.format("[ScalingDebug] Char: %s, Biomass: %d, Level: %.2f, Scale: %.2f", character.Name, biomass, level, scale))
+	-- print(string.format("[ScalingDebug] Char: %s, Biomass: %d, Level: %.2f, Scale: %.2f", character.Name, biomass, smoothLevel, scale))
 	
-	local baseMaxHealth = ScalingConfig.GetMaxHealth(math.floor(level)) -- Use INTEGER LEVEL for health (step scaling)
-	local baseWalkSpeed = ScalingConfig.GetWalkSpeed(level) -- Keep speed smooth or step? User said HP. Keeping speed smooth for now.
+	local baseMaxHealth = ScalingConfig.GetMaxHealth(math.floor(currentLevel)) -- Use INTEGER LEVEL for health (step scaling)
+	local baseWalkSpeed = ScalingConfig.GetWalkSpeed(smoothLevel) -- Keep speed smooth or step? User said HP. Keeping speed smooth for now.
 
 	-- 2. Apply Mutation Modifiers
 	local healthMult = 1
 	local speedFlatBonus = 0
 	local speedPenaltyReduction = 0
 
-	local player = Players:GetPlayerFromCharacter(character)
+	-- player is already defined above
 	if player and getMeta() then
 		-- Dense Muscle: +5% Health per 100 Biomass
 		local denseMuscleLevel = getMeta().GetStatValue(player, "Dense Muscle") -- Returns % per 100 biomass e.g. 0.05
@@ -96,8 +103,7 @@ function ScalingEngine.UpdateCharacter(character: Model, biomass: number)
 	-- Calculate Speed with Penalty Reduction
 	-- Formula: Base / (Scale ^ 0.7)
 	-- The penalty is (Base - ScaledBase). We reduce that difference.
-	local rawScaledSpeed = ScalingConfig.GetWalkSpeed(level) -- This includes the floor
-	local speedPenalty = ScalingConfig.BASE_WALKSPEED - rawScaledSpeed
+	local speedPenalty = ScalingConfig.BASE_WALKSPEED - baseWalkSpeed
 
 	if speedPenaltyReduction > 0 then
 		speedPenalty = speedPenalty * (1 - speedPenaltyReduction)

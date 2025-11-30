@@ -152,19 +152,19 @@ local function createCard(name, data, index)
 end
 
 function MutationShopController.Open()
-    if gui.Enabled then return end
+    if gui.Enabled then return true end
 
     -- Request Draft
     local func = ReplicatedStorage:WaitForChild("RequestDraft")
     local draft, rotationTime = func:InvokeServer()
 
     if rotationTime then
-        nextRotationTime = rotationTime
+        nextRotationTime = tonumber(rotationTime) or 0
     end
 
     if not draft then
         -- Notify "Not enough DNA" or error
-        return
+        return false
     end
 
     -- Build UI
@@ -188,6 +188,8 @@ function MutationShopController.Open()
         UserInputService.MouseBehavior = Enum.MouseBehavior.Default
         UserInputService.MouseIconEnabled = true
     end)
+
+    return true
 end
 
 function MutationShopController.Start()
@@ -231,6 +233,17 @@ function MutationShopController.Start()
     title.Font = Enum.Font.GothamBlack
     title.TextSize = 32
     title.Parent = mainFrame
+    
+    local desc = Instance.new("TextLabel")
+    desc.Name = "Description"
+    desc.Text = "Roll for powerful, unique traits."
+    desc.Size = UDim2.new(1, 0, 0, 20)
+    desc.Position = UDim2.new(0, 0, 0.08, 0)
+    desc.BackgroundTransparency = 1
+    desc.TextColor3 = Color3.fromRGB(180, 180, 180)
+    desc.Font = Enum.Font.Gotham
+    desc.TextSize = 14
+    desc.Parent = mainFrame
     
     -- Timer Label
     timerLabel = Instance.new("TextLabel")

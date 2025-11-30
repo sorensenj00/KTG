@@ -162,6 +162,7 @@ local function spawnDamageNumber(amount: number, position: Vector3, isKill: bool
 	-- Configure Text
 	local bb = part:FindFirstChild("Display")
 	local label = bb and bb:FindFirstChild("Label")
+	local baseSize = UDim2.fromScale(8, 4) -- Default
 
 	if label then
 		local text = tostring(math.floor(absAmount))
@@ -169,19 +170,21 @@ local function spawnDamageNumber(amount: number, position: Vector3, isKill: bool
 		if isHealing then
 			text = "+" .. text
 			label.TextColor3 = COLORS.HEALING
-			bb.Size = UDim2.fromScale(6, 3)
+			baseSize = UDim2.fromScale(6, 3)
 		elseif isKill then
 			text = "☠ " .. text .. "!" -- Kill flare
 			label.TextColor3 = COLORS.KILL
-			bb.Size = UDim2.fromScale(12, 6) -- Big for kills
+			baseSize = UDim2.fromScale(12, 6) -- Big for kills
 		elseif isCrit or absAmount >= 50 then
 			text = text .. "!"
 			label.TextColor3 = COLORS.CRITICAL
-			bb.Size = UDim2.fromScale(10, 5)
+			baseSize = UDim2.fromScale(10, 5)
 		else
 			label.TextColor3 = COLORS.NORMAL
-			bb.Size = UDim2.fromScale(8, 4)
+			baseSize = UDim2.fromScale(8, 4)
 		end
+		
+		bb.Size = baseSize
 
 		if xpAmount then
 			text = text .. "\n+" .. xpAmount .. " XP"
@@ -221,12 +224,14 @@ local function spawnDamageNumber(amount: number, position: Vector3, isKill: bool
 	-- Add to active list for cleanup
 	table.insert(activeDamageNumbers, {
 		part = part,
-		spawnTime = tick()
+		spawnTime = tick(),
+		baseSize = baseSize
 	})
 end
 
 local function update(dt)
 	local now = tick()
+	local camPos = camera.CFrame.Position
 
 	-- Iterate backwards to safely remove
 	for i = #activeDamageNumbers, 1, -1 do
@@ -237,15 +242,27 @@ local function update(dt)
 			-- Done
 			returnPartToPool(data.part)
 			table.remove(activeDamageNumbers, i)
-		elseif age > (PART_LIFETIME - FADE_DURATION) then
-			-- Fading
-			local fadeAlpha = (age - (PART_LIFETIME - FADE_DURATION)) / FADE_DURATION
+		else
+			-- Distance Scaling
+			local dist = (data.part.Position - camPos).Magnitude
+			-- Gentler scaling: Starts at 30 studs, adds +100% size every 100 studs. Max 3x.
+			local scaleMultiplier = math.clamp(1 + (dist - 30) / 100, 1, 3)
+			
 			local bb = data.part:FindFirstChild("Display")
 			if bb then
-				local label = bb:FindFirstChild("Label")
-				if label then
-					label.TextTransparency = fadeAlpha
-					label.TextStrokeTransparency = fadeAlpha
+				bb.Size = UDim2.fromScale(
+					data.baseSize.X.Scale * scaleMultiplier, 
+					data.baseSize.Y.Scale * scaleMultiplier
+				)
+				
+				-- Fading
+				if age > (PART_LIFETIME - FADE_DURATION) then
+					local fadeAlpha = (age - (PART_LIFETIME - FADE_DURATION)) / FADE_DURATION
+					local label = bb:FindFirstChild("Label")
+					if label then
+						label.TextTransparency = fadeAlpha
+						label.TextStrokeTransparency = fadeAlpha
+					end
 				end
 			end
 		end

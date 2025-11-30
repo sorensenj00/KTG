@@ -4,7 +4,7 @@ local ScalingConfig = {}
 ScalingConfig.UPDATE_INTERVAL = 2 -- Update more frequently to catch stage transitions
 
 -- Level Constants
-ScalingConfig.MAX_LEVEL = 30
+ScalingConfig.MAX_LEVEL = 50
 ScalingConfig.XP_BASE_REQ = 100
 ScalingConfig.XP_EXPONENT = 2.1 -- Slightly easier leveling to reach mid-game
 -- Renaming XP to Biomass for clarity in usage, though math is same
@@ -13,7 +13,7 @@ ScalingConfig.BIOMASS_EXPONENT = 2.2
 
 -- Kill Rewards
 ScalingConfig.KILL_BASE_REWARD = 50
-ScalingConfig.KILL_REWARD_MULTIPLIER = 100
+ScalingConfig.KILL_REWARD_MULTIPLIER = 50
 
 -- Health Constants (Geometric Progression)
 -- Goal: Lvl 1 = 50, Lvl 15 = ~250, Lvl 30 = 1500

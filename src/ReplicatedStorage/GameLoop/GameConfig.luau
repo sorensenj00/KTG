@@ -68,7 +68,7 @@ GameConfig.Progression = {
 
 	StartingLevel = 1,
 
-	MaxLevel = 30,
+	MaxLevel = 50,
 
 	XPBaseRequirement = 150,
 
@@ -94,9 +94,9 @@ GameConfig.Meta = {
 
 GameConfig.Zones = {
 
-	SafeZoneRadius = 100,
+	SafeZoneRadius = 200,
 
-	SafeZoneMaxLevel = 5,
+	SafeZoneMaxLevel = 50,
 
 	SafeZoneSpeed = 5,
 }

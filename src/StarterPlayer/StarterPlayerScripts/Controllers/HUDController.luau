@@ -563,6 +563,17 @@ local function createHUD()
 	shopTitle.TextSize = 24
 	shopTitle.Font = Enum.Font.GothamBold
 	shopTitle.Parent = shopMainFrame
+
+    local shopDesc = Instance.new("TextLabel")
+    shopDesc.Name = "Description"
+    shopDesc.Size = UDim2.new(1, 0, 0, 20)
+    shopDesc.Position = UDim2.new(0, 0, 0, 35)
+    shopDesc.BackgroundTransparency = 1
+    shopDesc.Text = "Evolve your base stats permanently."
+    shopDesc.TextColor3 = ARCADE_THEME.TEXT_GRAY
+    shopDesc.TextSize = 14
+    shopDesc.Font = Enum.Font.Gotham
+    shopDesc.Parent = shopMainFrame
 	
 	local shopCloseButton = Instance.new("TextButton")
 	shopCloseButton.Name = "ShopCloseButton"
@@ -1134,8 +1145,26 @@ end)
 -- Button Connections
 hud.ShopCloseButton.MouseButton1Click:Connect(toggleShop)
 hud.MutationsButton.MouseButton1Click:Connect(function()
-    toggleShop() -- Close Skill Tree
-    MutationShopController.Open()
+    local success = MutationShopController.Open()
+    if success then
+        toggleShop() -- Close Skill Tree
+    else
+        playSound(SOUNDS.Error)
+        
+        -- Visual Feedback
+        local originalText = hud.MutationsButton.Text
+        local originalColor = hud.MutationsButton.BackgroundColor3
+        
+        hud.MutationsButton.Text = "NEED 250 DNA"
+        hud.MutationsButton.BackgroundColor3 = COLORS.BUTTON_RED
+        
+        task.delay(1.5, function()
+            if hud.MutationsButton then
+                hud.MutationsButton.Text = originalText
+                hud.MutationsButton.BackgroundColor3 = originalColor
+            end
+        end)
+    end
 end)
 
 -- Keyboard shortcut: N to toggle shop
@@ -1247,28 +1276,57 @@ local function updateHarvestButton()
 	end
 end
 
--- Harvest Click
+-- Harvest Logic
 local harvestDebounce = false
-hud.HarvestButton.MouseButton1Click:Connect(function()
-	if harvestDebounce then return end
+local function tryHarvest()
+	print("DEBUG: tryHarvest called")
+	if harvestDebounce then 
+		print("DEBUG: Harvest debounced")
+		return 
+	end
+	
+	-- Client-side check: Must be in Safe Zone
+	local isSafe = player:GetAttribute("SafeZone")
+	print("DEBUG: SafeZone attribute:", isSafe)
+	
+	if isSafe ~= true then 
+		print("DEBUG: Not in Safe Zone (Attribute is " .. tostring(isSafe) .. ")")
+		return 
+	end
+	
 	harvestDebounce = true
+	print("DEBUG: Invoking Harvest remote...")
 
 	local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
 	local harvestRemote = remotes and remotes:FindFirstChild("Harvest")
 
 	if harvestRemote then
-		local success, _msg = harvestRemote:InvokeServer()
+		local success, msg = harvestRemote:InvokeServer()
+		print("DEBUG: Harvest result:", success, msg)
 		if success then
 			playSound(SOUNDS.Purchase)
 			-- UI will update via attribute signals
 		else
+			warn("Harvest Failed:", msg)
 			playSound(SOUNDS.Error)
 		end
+	else
+		warn("DEBUG: Harvest remote not found!")
 	end
 
 	task.wait(1)
 	harvestDebounce = false
-end)
+end
+
+hud.HarvestButton.MouseButton1Click:Connect(tryHarvest)
+
+-- Bind H key for harvesting
+ContextActionService:BindAction("HarvestAction", function(_, inputState)
+	if inputState == Enum.UserInputState.Begin then
+		print("DEBUG: H key pressed")
+		tryHarvest()
+	end
+end, false, Enum.KeyCode.H)
 
 
 -- Meta Stats Update (from Server)

@@ -73,8 +73,8 @@ local botStates: { [Model]: BotState } = {}
 -- }
 
 type BotState = {
-	Target: Instance?,
-	State: "IDLE" | "COMBAT" | "ORB",
+	Target: Instance | {ID: number?, Position: Vector3, Name: string, XP: number} | nil,
+	State: "IDLE" | "COMBAT" | "ORB" | "ROAM",
 	NextOrbSearch: number,
 	AggroTable: { [Instance]: number },
 	LastPos: Vector3,
@@ -122,12 +122,15 @@ local function updateNetworkOwnership(bot, target)
 	local shortestDist = NETWORK_OWNERSHIP_RADIUS
 
 	-- Priority 1: The Target (if it's a player)
-	if target and target:IsA("Model") then
+	if target and typeof(target) == "Instance" and target:IsA("Model") then
 		local player = Players:GetPlayerFromCharacter(target)
 		if player then
-			local dist = (target.HumanoidRootPart.Position - root.Position).Magnitude
-			if dist < NETWORK_OWNERSHIP_RADIUS then
-				newOwner = player
+			local targetRoot = target:FindFirstChild("HumanoidRootPart")
+			if targetRoot then
+				local dist = (targetRoot.Position - root.Position).Magnitude
+				if dist < NETWORK_OWNERSHIP_RADIUS then
+					newOwner = player
+				end
 			end
 		end
 	end
@@ -165,10 +168,22 @@ end
 
 -- === Helper: Target Validation & Scoring ===
 local function isValidTarget(bot, target)
-	if not target or not target.Parent then return false end
-	local hum = target:FindFirstChild("Humanoid")
-	if not hum or hum.Health <= 0 then return false end
-	return true
+	if not target then return false end
+	
+	-- Handle Orb Data (Table)
+	if typeof(target) == "table" and target.Name == "XPOrb" then
+		return true
+	end
+	
+	-- Handle Instances (Players/Bots)
+	if typeof(target) == "Instance" then
+		if not target.Parent then return false end
+		local hum = target:FindFirstChild("Humanoid")
+		if not hum or hum.Health <= 0 then return false end
+		return true
+	end
+	
+	return false
 end
 
 -- === Helper: Find Nearest Enemy ===
@@ -179,18 +194,7 @@ local function findNearestEnemy(bot, range)
 	local bestTarget = nil
 	local bestDist = range
 	
-	-- 1. Check Players
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player.Character and isValidTarget(bot, player.Character) then
-			local dist = (player.Character.PrimaryPart.Position - root.Position).Magnitude
-			if dist < bestDist then
-				bestDist = dist
-				bestTarget = player.Character
-			end
-		end
-	end
-	
-	-- 2. Check other Bots
+	-- 1. Check other Bots (Only target bots actively)
 	for _, otherBot in ipairs(CollectionService:GetTagged("BotAI")) do
 		if otherBot ~= bot and isValidTarget(bot, otherBot) then
 			local dist = (otherBot.PrimaryPart.Position - root.Position).Magnitude
@@ -420,23 +424,37 @@ end
 -- === Public API: Aggro ===
 function BotController.RecordAggro(bot, attacker)
 	if not bot or not attacker then return end
-	if not attacker:IsA("Player") and not CollectionService:HasTag(attacker, "BotAI") then return end
+	
+	-- Normalize attacker to character model
+	local attackerChar = nil
+	if typeof(attacker) == "Instance" then
+		if attacker:IsA("Player") then
+			attackerChar = attacker.Character
+		elseif CollectionService:HasTag(attacker, "BotAI") then
+			attackerChar = attacker
+		end
+	end
+	
+	-- Validate we have a valid character
+	if not attackerChar or not isValidTarget(bot, attackerChar) then
+		return
+	end
 	
 	local state = getBotState(bot)
 	local now = os.clock()
 	
-	-- Record timestamp
-	state.AggroTable[attacker] = now
+	-- Record timestamp (store character, not player object)
+	state.AggroTable[attackerChar] = now
 	
 	-- Instant Reaction: Switch target immediately if not already locked on a player
-	local currentTargetIsPlayer = state.Target and Players:GetPlayerFromCharacter(state.Target)
+	local currentTargetIsPlayer = state.Target and typeof(state.Target) == "Instance" and Players:GetPlayerFromCharacter(state.Target)
 
 	if not currentTargetIsPlayer then
-		state.Target = attacker.Character or attacker -- Handle Player object vs Character model
+		state.Target = attackerChar
 		state.State = "COMBAT"
 		state.Path = nil -- Clear old path
 		state.TargetAcquiredTime = now
-		-- print("Bot " .. bot.Name .. " instantly reacted to " .. attacker.Name)
+		-- print("Bot " .. bot.Name .. " instantly reacted to " .. attackerChar.Name)
 	end
 end
 
@@ -527,13 +545,14 @@ function BotController.Start()
 				end
 			end
 
-			if (state.State :: any) == "IDLE" or (state.State :: any) == "ORB" then
+			if (state.State :: any) == "IDLE" or (state.State :: any) == "ORB" or (state.State :: any) == "ROAM" then
 				-- Look for Aggro Targets first
 				local bestAggro = nil
 				local bestTime = 0
 				for attacker, time in pairs(state.AggroTable) do
-					if time > bestTime and isValidTarget(bot, attacker.Character or attacker) then
-						bestAggro = attacker.Character or attacker
+					-- Note: attacker is always a character model now (from RecordAggro fix)
+					if time > bestTime and isValidTarget(bot, attacker) then
+						bestAggro = attacker
 						bestTime = time
 					end
 				end
@@ -553,7 +572,7 @@ function BotController.Start()
 						-- Look for Orbs
 						if now > state.NextOrbSearch then
 						local level = bot:GetAttribute("Level") or 1
-						local searchRange = 100 * ScalingConfig.GetSizeMultiplier(level)
+						local searchRange = 400 * ScalingConfig.GetSizeMultiplier(level)
 						local orb = findNearestOrb(bot, searchRange)
 
 						if orb then
@@ -562,20 +581,40 @@ function BotController.Start()
 							-- Move to orb
 							moveToPath(bot, state, orb.Position)
 						else
-							state.State = "IDLE"
-							-- Roam logic
-							if hum.MoveDirection.Magnitude < 0.1 then
+							-- No orb found, start Roaming
+							if (state.State :: any) ~= "ROAM" then
+								state.State = "ROAM"
 								local roamPos = root.Position + Vector3.new(math.random(-50,50), 0, math.random(-50,50))
+								-- Create a dummy target for consistency
+								state.Target = {Position = roamPos, Name = "Roam", XP = 0}
 								moveToPath(bot, state, roamPos)
 							end
 						end
 						state.NextOrbSearch = now + ORB_SEARCH_INTERVAL
 					elseif (state.State :: any) == "ORB" and state.Target then
 						-- Continue moving to orb
-						if (state.Target.Position - root.Position).Magnitude < 5 then
-							-- close enough, wait for pickup
+						local targetPos = state.Target.Position -- Orb is a table {Position, ...}
+						if (targetPos - root.Position).Magnitude < 30 then
+							-- Attempt collection
+							if state.Target.ID then
+								local collected = XPOrbService.CollectOrb(bot, state.Target.ID)
+								if collected then
+									state.State = "IDLE"
+									state.Target = nil
+								end
+							end
 						else
-							moveToPath(bot, state, state.Target.Position)
+							moveToPath(bot, state, targetPos)
+						end
+					elseif (state.State :: any) == "ROAM" and state.Target then
+						-- Continue roaming
+						local targetPos = state.Target.Position
+						if (targetPos - root.Position).Magnitude < 5 then
+							-- Reached roam destination, go back to IDLE to trigger new search
+							state.State = "IDLE"
+							state.Target = nil
+						else
+							moveToPath(bot, state, targetPos)
 						end
 					end
 				end

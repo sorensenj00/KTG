@@ -28,13 +28,13 @@ local ORB_LIFETIME = 60
 local ORB_GROWTH_INTERVAL = 10
 local MAX_GROWTH_STAGES = 5
 local MAX_ORBS = 100
-local MAGNET_RADIUS = 50
+local MAGNET_RADIUS = 100
 local MIN_MAGNET_SPEED = 10
 local MAX_MAGNET_SPEED = 80
 
 -- Orb Tiers
 local ORB_TIERS = {
-	{ Name = "Common", XP = 100, Size = Vector3.new(1, 1, 1), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
+	{ Name = "Common", XP = 100, Size = Vector3.new(2, 2, 2), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
 	{ Name = "Uncommon", XP = 250, Size = Vector3.new(2.5, 2.5, 2.5), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
 	{ Name = "Rare", XP = 500, Size = Vector3.new(6, 6, 6), Color = Color3.fromRGB(163, 35, 35), Chance = 8 },
 	{ Name = "Legendary", XP = 2000, Size = Vector3.new(15, 15, 15), Color = Color3.fromRGB(197, 209, 28), Chance = 2 },
@@ -170,23 +170,6 @@ local function updateOrbs(dt)
 			-- Grow Stats
 			orb.xpValue = math.floor(orb.xpValue * 1.5)
 			orb.currentSize = orb.currentSize * 1.25 -- Grow visual size by 25% per stage
-
-			-- Replicate Update (We need a way to tell clients to resize)
-			-- Using Spawn action again or a new Update action?
-			-- Clients usually just render what they are told.
-			-- Let's send a "Update" packet or just rely on the spawn if we despawn/respawn?
-			-- Despawn/Respawn is expensive.
-			-- Let's assume for now we just update server data.
-			-- To visualize, we probably need a new Remote Event type or reusing Spawn with same ID?
-			-- Simple fix: Just update the XP value logic. Visual growth requires client support.
-			-- Given constraints, I will leave visuals static OR fire a "Grow" event if possible.
-			-- Checking OrbVisualsController... it listens to "Spawn" and "Despawn".
-			-- I will add a "Grow" action support implicitly by re-spawning it?
-			-- Actually, let's just update the internal logic so the REWARD is correct.
-			-- The user asked for "size scaling".
-			-- I will fire a "Spawn" event again with the new size? That might duplicate visuals.
-			-- I'll skip visual update replication for now to avoid breaking the client,
-			-- BUT I fixed the critical server bug (modifying global tier).
 		end
 		
 		-- Magnet logic
@@ -223,6 +206,15 @@ local ServiceBus = require(ServerScriptService.Services.ServiceBus)
 
 -- ... (existing code)
 
+-- Helper: Calculate dynamic collection range based on entity size
+local function getCollectionRange(entity)
+	local scale = entity:GetAttribute("Scale") or 1.0
+	-- Base 30 + (Scale * 5)
+	-- Scale 1 = 35 studs
+	-- Scale 50 = 280 studs
+	return 30 + (scale * 5)
+end
+
 -- Handle orb collection from client
 local function onCollectOrb(player, orbId)
 	local orb = activeOrbs[orbId]
@@ -234,15 +226,15 @@ local function onCollectOrb(player, orbId)
 	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
 		local dist = (player.Character.HumanoidRootPart.Position - orb.position).Magnitude
 		
-		-- More lenient check: If orb is magnetizing towards this player, allow collection within magnet radius
-		-- Otherwise use a smaller range to prevent long-distance collection
-		local maxDist = 50 -- Default
+		local maxDist = getCollectionRange(player.Character)
+		
+		-- Magnet tolerance
 		if orb.magnetTarget == player.UserId then
-			maxDist = MAGNET_RADIUS + 20 -- Extra tolerance for network latency
+			maxDist = maxDist + 20 
 		end
 		
 		if dist > maxDist then
-			warn("⚠️ Player", player.Name, "tried to collect orb from too far away:", dist, "magnetTarget:", orb.magnetTarget)
+			warn("⚠️ Player", player.Name, "tried to collect orb from too far away:", dist, "max:", maxDist)
 			return
 		end
 	else
@@ -257,6 +249,28 @@ local function onCollectOrb(player, orbId)
 	orbEvents:FireAllClients({Action = "Despawn", Id = orbId})
 end
 
+-- PUBLIC API: Server-side collection (for Bots)
+function XPOrbService.CollectOrb(entity: Model, orbId: number)
+	local orb = activeOrbs[orbId]
+	if not orb then return false end -- Orb gone
+	
+	local root = entity:FindFirstChild("HumanoidRootPart")
+	if not root then return false end
+	
+	local dist = (root.Position - orb.position).Magnitude
+	local maxDist = getCollectionRange(entity)
+	
+	if dist > maxDist then return false end 
+	
+	-- Award XP
+	ServiceBus.Get("AwardBiomass"):Fire(entity, orb.xpValue)
+	
+	-- Remove
+	activeOrbs[orbId] = nil
+	orbEvents:FireAllClients({Action = "Despawn", Id = orbId})
+	return true
+end
+
 -- PUBLIC API: Get nearest orb to a position
 function XPOrbService.GetNearestOrb(position: Vector3, maxRange: number)
 	local bestOrb = nil
@@ -267,6 +281,7 @@ function XPOrbService.GetNearestOrb(position: Vector3, maxRange: number)
 		if dist < bestDist then
 			bestDist = dist
 			bestOrb = {
+				ID = orb.id,
 				Position = orb.position,
 				Name = "XPOrb", -- Compatibility for BotService
 				XP = orb.xpValue
@@ -328,8 +343,10 @@ function XPOrbService.SpawnDrop(position: Vector3, totalXP: number)
 			id = orbId,
 			position = spawnPos,
 			tier = tier,
+			currentSize = tier.Size, -- Add currentSize to match spawnOrb structure
 			xpValue = xpPerOrb,
 			spawnTime = tick(),
+			growthStage = 0, -- Add growthStage to prevent nil comparison error
 			magnetTarget = nil,
 			isDrop = true
 		}

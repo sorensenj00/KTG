@@ -22,12 +22,13 @@ end
 
 function ShotReplicator.Start()
 	RunService.Heartbeat:Connect(function()
-		local now = tick()
+		local now = os.clock()
 		if now - lastReplicationTime >= REPLICATION_RATE then
 			lastReplicationTime = now
 
 			if #shotBuffer > 0 then
 				-- Fire all buffered shots in one packet
+				-- print("ShotReplicator: Sending", #shotBuffer, "shots")
 				replicateShotRemote:FireAllClients(shotBuffer)
 
 				-- Clear buffer

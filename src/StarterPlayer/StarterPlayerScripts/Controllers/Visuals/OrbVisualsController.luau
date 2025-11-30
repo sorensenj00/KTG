@@ -230,7 +230,7 @@ local function updateOrbVisuals(dt)
 		
 		-- Floating animation
 		local floatOffset = math.sin(elapsed * FLOAT_SPEED) * FLOAT_AMPLITUDE
-		orb.Position = Vector3.new(orb.Position.X, orbData.baseY + floatOffset, orb.Position.Z)
+		orb.Position = Vector3.new(orb.Position.X, orbData.baseY + floatOffset + FLOAT_AMPLITUDE, orb.Position.Z)
 		
 		-- Rotation
 		orb.Orientation = Vector3.new(0, elapsed * 60, 0)

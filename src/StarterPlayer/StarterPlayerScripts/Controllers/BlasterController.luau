@@ -417,9 +417,12 @@ local function processSingleShot(blaster: Tool, position: Vector3, rayResults: {
 
 	local handle = blaster:FindFirstChild("Handle")
 	local sounds = blaster:FindFirstChild("Sounds")
-	if not handle or not sounds then
+	if not handle then
+		warn("BlasterController: Missing Handle for", blaster.Name)
 		return
 	end
+	-- Relaxed check for Sounds to allow visuals even if audio fails
+	-- if not sounds then return end
 
 	local emitter = handle:FindFirstChild("AudioEmitter")
 	local muzzle = blaster:FindFirstChild("MuzzleAttachment", true)
@@ -458,6 +461,7 @@ local function onReplicateShotEvent(dataPacket)
 		if dataPacket[1].tool then
 			-- It is a list of shots
 			for _, shotData in ipairs(dataPacket) do
+				-- print("BlasterController: Processing shot from", shotData.tool)
 				processSingleShot(shotData.tool, shotData.origin, shotData.results)
 			end
 		else

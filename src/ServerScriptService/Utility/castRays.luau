@@ -97,7 +97,14 @@ local function castRays(
 			rayResult.normal = raycastResult.Normal
 			rayResult.instance = raycastResult.Instance
 
-			local humanoid = raycastResult.Instance.Parent:FindFirstChildOfClass("Humanoid")
+			local hitParent = raycastResult.Instance.Parent
+			local humanoid = hitParent:FindFirstChildOfClass("Humanoid")
+
+			-- If no humanoid found, check if we hit a Tool or Accessory (Grandparent check)
+			if not humanoid and hitParent.Parent then
+				humanoid = hitParent.Parent:FindFirstChildOfClass("Humanoid")
+			end
+
 			if humanoid and canPlayerDamageHumanoid(attacker, humanoid) then
 				rayResult.taggedHumanoid = humanoid
 			end

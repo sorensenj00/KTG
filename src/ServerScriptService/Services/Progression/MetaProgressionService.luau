@@ -52,7 +52,7 @@ MutationShopEvent.Parent = ReplicatedStorage
 
 local HarvestFunc = Instance.new("RemoteFunction")
 HarvestFunc.Name = "Harvest"
-HarvestFunc.Parent = ReplicatedStorage
+-- HarvestFunc.Parent = ReplicatedStorage
 
 -- Default Data
 local function getDefaultData()
@@ -471,6 +471,9 @@ task.spawn(function()
     if blaster then
         local remotes = blaster:WaitForChild("Remotes", 10)
         if remotes then
+            -- Parent HarvestFunc here so Client can find it
+            HarvestFunc.Parent = remotes
+
             -- RequestMetaData: Client requests current DNA/mutations
             local requestMetaFunc = remotes:WaitForChild("RequestMetaData", 10)
             if requestMetaFunc then

@@ -5,7 +5,7 @@ local CollectionService = game:GetService("CollectionService")
 
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 local ScalingEngine = require(ServerScriptService.Services.World.ScalingEngineService)
-local DamageTracker = require(ServerScriptService.Services.World.DamageTrackerService)
+-- local DamageTracker = require(ServerScriptService.Services.World.DamageTrackerService)
 -- local XPOrbService = require(ServerScriptService.Services.World.XPOrbService) -- Lazy loaded to avoid cycle
 
 local ProgressionManager = {}
@@ -88,6 +88,7 @@ local function setupPlayerScaling(player: Player)
 
 	player:GetAttributeChangedSignal("Level"):Connect(onStatsChanged)
 	player:GetAttributeChangedSignal("XP"):Connect(onStatsChanged)
+	player:GetAttributeChangedSignal("Biomass"):Connect(onStatsChanged) -- CRITICAL: Listen for Biomass changes
 end
 
 -- Helper: Initialize Data
@@ -139,6 +140,20 @@ local function initializePlayer(player: Player)
 
 	-- Setup reactive scaling via attribute signals
 	setupPlayerScaling(player)
+
+	-- Force update on respawn
+	player.CharacterAdded:Connect(function(newCharacter)
+		-- Clear cache to force update
+		lastUpdateCache[player] = nil
+		
+		-- Wait for character to be ready (Humanoid, etc)
+		task.spawn(function()
+			local humanoid = newCharacter:WaitForChild("Humanoid", 10)
+			if humanoid then
+				enforceEntityStats(player, newCharacter)
+			end
+		end)
+	end)
 end
 
 -- Public API: Add Biomass (Formerly XP)
