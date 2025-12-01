@@ -37,7 +37,8 @@ local pendingSaves = {}
 local ShopRotation = {
     Items = {}, -- { "MutationName1", "MutationName2", ... }
     NextRotationTime = 0,
-    Seed = 0
+    Seed = 0,
+    RerollCounts = {} -- { [UserId] = count }
 }
 local ROTATION_INTERVAL = 600 -- 10 Minutes
 
@@ -136,7 +137,9 @@ local function updateShopRotation()
 
     -- New Rotation
     ShopRotation.NextRotationTime = now + ROTATION_INTERVAL
+    ShopRotation.NextRotationTime = now + ROTATION_INTERVAL
     ShopRotation.Seed = now
+    ShopRotation.RerollCounts = {} -- Reset rerolls on rotation
 
     local rng = Random.new(ShopRotation.Seed)
     ShopRotation.Items = {}
@@ -209,9 +212,10 @@ function MetaProgressionManager.RequestDraft(player)
     if not data then return nil end
 
     -- Check cost
-    if data.DNA < MetaConfig.ROLL_COST then
-        return nil, "Not enough DNA"
-    end
+    -- Check cost (Initial roll is free/view only)
+    -- if data.DNA < MetaConfig.ROLL_COST then
+    --     return nil, "Not enough DNA"
+    -- end
 
     updateShopRotation() -- Ensure valid rotation
 
@@ -265,7 +269,9 @@ function MetaProgressionManager.RequestDraft(player)
     PlayerDrafts[player] = draft
 
     -- Return draft AND the next rotation time for the timer
-    return draft, ShopRotation.NextRotationTime
+    -- Return draft AND the next rotation time for the timer
+    local rerolls = ShopRotation.RerollCounts[player.UserId] or 0
+    return draft, ShopRotation.NextRotationTime, rerolls
 end
 
 -- Gacha: Select
@@ -273,15 +279,15 @@ function MetaProgressionManager.SelectMutation(player, index)
     local draft = PlayerDrafts[player]
     if not draft or not draft[index] then return false end
 
-    local data = PlayerMeta[player]
-    if data.DNA < MetaConfig.ROLL_COST then return false end
-
-    -- Deduct Cost
-    data.DNA = data.DNA - MetaConfig.ROLL_COST
-
-    -- Award Mutation
+    -- Calculate Dynamic Cost
     local mutationName = draft[index]
     local currentLevel = data.Upgrades[mutationName] or 0
+    local cost = MetaConfig.GetUpgradeCost(MetaConfig.Mutations[mutationName].Rarity, currentLevel)
+
+    if data.DNA < cost then return false, "Not enough DNA" end
+
+    -- Deduct Cost
+    data.DNA = data.DNA - cost
     data.Upgrades[mutationName] = currentLevel + 1
 
     -- Clear Draft
@@ -441,12 +447,54 @@ function MetaProgressionManager.Start()
     print("MetaProgressionManager started")
 end
 
+function MetaProgressionManager.RequestReroll(player)
+    local data = PlayerMeta[player]
+    if not data then return nil end
+
+    -- Check Reroll Limit
+    local rerolls = ShopRotation.RerollCounts[player.UserId] or 0
+    if rerolls >= 3 then
+        return nil, "Max rerolls reached"
+    end
+
+    -- Check Cost
+    if data.DNA < MetaConfig.REROLL_COST then
+        return nil, "Not enough DNA"
+    end
+
+    -- Deduct Cost
+    data.DNA = data.DNA - MetaConfig.REROLL_COST
+    
+    -- Increment Count
+    ShopRotation.RerollCounts[player.UserId] = rerolls + 1
+    
+    -- Generate New Draft (Force new seed/shuffle)
+    -- We can just call RequestDraft but we need to force a refresh.
+    -- Actually RequestDraft uses `os.time() + player.UserId` which changes every second.
+    -- But we want to ensure it's different from the "Rotation" items if possible?
+    -- The user wants a REROLL. 
+    -- Let's clear the current draft and call RequestDraft again.
+    PlayerDrafts[player] = nil
+    
+    -- Update Client DNA
+    UpdateMetaEvent:FireClient(player, data)
+    
+    return MetaProgressionManager.RequestDraft(player)
+end
+
 -- Remote Functions
 local DraftFunc = Instance.new("RemoteFunction")
 DraftFunc.Name = "RequestDraft"
 DraftFunc.Parent = ReplicatedStorage
 DraftFunc.OnServerInvoke = function(player)
     return MetaProgressionManager.RequestDraft(player)
+end
+
+local RerollFunc = Instance.new("RemoteFunction")
+RerollFunc.Name = "RequestReroll"
+RerollFunc.Parent = ReplicatedStorage
+RerollFunc.OnServerInvoke = function(player)
+    return MetaProgressionManager.RequestReroll(player)
 end
 
 local SelectFunc = Instance.new("RemoteFunction")
@@ -488,6 +536,9 @@ task.spawn(function()
                 print("✅ MetaProgressionManager: RequestMetaData handler connected")
             end
 
+            -- RerollFunc
+            RerollFunc.Parent = remotes
+            
             -- PurchaseUpgrade: Client requests to buy an upgrade
             local purchaseUpgradeFunc = remotes:WaitForChild("PurchaseUpgrade", 10)
             if purchaseUpgradeFunc then

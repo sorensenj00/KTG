@@ -23,6 +23,8 @@ local mutationConfig = require(ReplicatedStorage.GameLoop.MutationConfig)
 
 local closeCallback = nil
 local nextRotationTime = 0
+local currentRerolls = 0
+local MAX_REROLLS = 3
 
 function MutationShopController.SetCloseCallback(callback)
     closeCallback = callback
@@ -96,7 +98,39 @@ local function createCard(name, data, index)
     -- Cost Label
     local costLabel = Instance.new("TextLabel")
     costLabel.Name = "CostLabel"
-    costLabel.Text = "COST: 100 DNA" -- Placeholder or fetch from config
+    -- Cost Label
+    local costLabel = Instance.new("TextLabel")
+    costLabel.Name = "CostLabel"
+    -- Calculate Cost
+    local currentLvl = 0 -- We need to know current level to show cost. 
+    -- Ideally we pass current level in 'data' or fetch it.
+    -- For now, let's assume data has it or we default to 0 (Cost for Lvl 1)
+    -- The server passes 'draft' which is just names.
+    -- We need the player's current level of this mutation to calculate cost.
+    -- Let's fetch it from client state if possible, or just show "???"
+    -- Actually, we can get it from the HUDController's cached data if we had access, 
+    -- but better to just ask server or pass it in draft.
+    -- For now, let's just show "COST: [Dynamic]" placeholder or fetch it.
+    -- Let's use a helper to get cost.
+    costLabel.Text = "COST: ???" 
+    
+    -- Async fetch cost? Or just calculate if we know our level.
+    -- Let's assume we can get our level.
+    task.spawn(function()
+        local func = ReplicatedStorage:WaitForChild("RequestMetaData")
+        local _, upgrades = func:InvokeServer()
+        local lvl = upgrades[name] or 0
+        local cost = mutationConfig.GetUpgradeCost(data.Rarity, lvl)
+        costLabel.Text = "COST: " .. cost .. " DNA"
+        
+        -- Check affordability
+        local dna = ReplicatedStorage:WaitForChild("Blaster").Remotes.RequestMetaData:InvokeServer()
+        if dna < cost then
+            costLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+        else
+            costLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+        end
+    end)
     costLabel.Size = UDim2.new(1, 0, 0, 25)
     costLabel.Position = UDim2.new(0, 0, 0.82, 0)
     costLabel.BackgroundTransparency = 1
@@ -156,10 +190,16 @@ function MutationShopController.Open()
 
     -- Request Draft
     local func = ReplicatedStorage:WaitForChild("RequestDraft")
-    local draft, rotationTime = func:InvokeServer()
+    -- Request Draft
+    local func = ReplicatedStorage:WaitForChild("RequestDraft")
+    local draft, rotationTime, rerolls = func:InvokeServer()
 
     if rotationTime then
         nextRotationTime = tonumber(rotationTime) or 0
+    end
+    
+    if rerolls then
+        currentRerolls = rerolls
     end
 
     if not draft then
@@ -293,6 +333,59 @@ function MutationShopController.Start()
     timerLabel.TextSize = 14
     timerLabel.Parent = mainFrame
     
+    -- Reroll Button
+    local rerollButton = Instance.new("TextButton")
+    rerollButton.Name = "RerollButton"
+    rerollButton.Text = "REROLL (250 DNA)"
+    rerollButton.Size = UDim2.new(0, 150, 0, 30)
+    rerollButton.Position = UDim2.new(0.5, 0, 0.92, 0) -- Bottom Center
+    rerollButton.AnchorPoint = Vector2.new(0.5, 0)
+    rerollButton.BackgroundColor3 = Color3.fromRGB(255, 100, 50)
+    rerollButton.TextColor3 = Color3.new(1, 1, 1)
+    rerollButton.Font = Enum.Font.GothamBold
+    rerollButton.TextSize = 14
+    rerollButton.Parent = mainFrame
+    
+    local rerollCorner = Instance.new("UICorner")
+    rerollCorner.CornerRadius = UDim.new(0, 6)
+    rerollCorner.Parent = rerollButton
+    
+    -- Reroll Logic
+    rerollButton.MouseButton1Click:Connect(function()
+        if currentRerolls >= MAX_REROLLS then return end
+        
+        local func = ReplicatedStorage:WaitForChild("RequestReroll")
+        local draft, rotationTime, rerolls = func:InvokeServer()
+        
+        if draft then
+            -- Refresh UI
+            for _, child in ipairs(cardsContainer:GetChildren()) do
+                if child:IsA("GuiObject") then child:Destroy() end
+            end
+
+            for i, name in ipairs(draft) do
+                local data = mutationConfig.Mutations[name]
+                if data then
+                    local card = createCard(name, data, i)
+                    card.Parent = cardsContainer
+                end
+            end
+            
+            if rerolls then currentRerolls = rerolls end
+            rerollButton.Text = "REROLL (250 DNA) [" .. currentRerolls .. "/3]"
+            
+            if currentRerolls >= MAX_REROLLS then
+                rerollButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+                rerollButton.Text = "NO REROLLS LEFT"
+            end
+        else
+            -- Failed (No DNA?)
+            rerollButton.Text = "NOT ENOUGH DNA"
+            task.wait(1)
+            rerollButton.Text = "REROLL (250 DNA) [" .. currentRerolls .. "/3]"
+        end
+    end)
+
     -- Timer Logic (Server Synced)
     task.spawn(function()
         while gui.Parent do
@@ -305,6 +398,16 @@ function MutationShopController.Start()
             else
                 timerLabel.Text = "Synchronizing..."
             end
+            
+            -- Update Reroll Text
+            if currentRerolls < MAX_REROLLS then
+                 rerollButton.Text = "REROLL (250 DNA) [" .. currentRerolls .. "/3]"
+                 rerollButton.BackgroundColor3 = Color3.fromRGB(255, 100, 50)
+            else
+                 rerollButton.Text = "NO REROLLS LEFT"
+                 rerollButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+            end
+            
             task.wait(1)
         end
     end)

@@ -189,6 +189,7 @@ function MutationConfig.GetUpgradeCost(rarity, level)
     return math.floor(base * multiplier)
 end
 
-MutationConfig.ROLL_COST = 500 -- DNA per roll (Increased from 250)
+MutationConfig.REROLL_COST = 250 -- DNA per reroll
+MutationConfig.ROLL_COST = 0 -- Initial roll is free (viewing shop)
 
 return MutationConfig
