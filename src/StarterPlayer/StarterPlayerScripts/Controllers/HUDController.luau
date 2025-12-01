@@ -111,7 +111,7 @@ local ICON_MAP = {
     Magnetism = "rbxassetid://1234752", -- Magnet/Speed
     Thorns = "rbxassetid://10468915", -- Spikes/Sword
     Featherweight = "rbxassetid://1234752", -- Feather/Speed
-    ToxicAura = "rbxassetid://11563251", -- Gas/Bomb
+    ["Toxic Aura"] = "rbxassetid://11563251", -- Gas/Bomb
 }
 
 -- --- State --- --
@@ -558,7 +558,7 @@ local function createHUD()
 	shopTitle.BackgroundColor3 = Color3.new(0, 0, 0)
 	shopTitle.BackgroundTransparency = 0.5
 	shopTitle.BorderSizePixel = 0
-	shopTitle.Text = "SKILL TREE (DNA SHOP)"
+	shopTitle.Text = "SHOP"
 	shopTitle.TextColor3 = ARCADE_THEME.ACCENT_ORANGE
 	shopTitle.TextSize = 24
 	shopTitle.Font = Enum.Font.GothamBold
@@ -569,7 +569,7 @@ local function createHUD()
     shopDesc.Size = UDim2.new(1, 0, 0, 20)
     shopDesc.Position = UDim2.new(0, 0, 0, 35)
     shopDesc.BackgroundTransparency = 1
-    shopDesc.Text = "Evolve your base stats permanently."
+    shopDesc.Text = "Common Mutations only"
     shopDesc.TextColor3 = ARCADE_THEME.TEXT_GRAY
     shopDesc.TextSize = 14
     shopDesc.Font = Enum.Font.Gotham
@@ -701,6 +701,12 @@ local function createTierSection(tierNumber: number, tierData)
 	tierHeader.BackgroundColor3 = tierData.Color
 	tierHeader.BackgroundTransparency = 0.5
 	tierHeader.BorderSizePixel = 0
+    
+    if tierNumber == 1 then
+        tierHeader.Visible = false
+        tierHeader.Size = UDim2.new(1, 0, 0, 0)
+    end
+
 	tierHeader.Parent = tierFrame
     
     local headerCorner = Instance.new("UICorner")
@@ -729,7 +735,11 @@ local function createTierSection(tierNumber: number, tierData)
 	local upgradeContainer = Instance.new("Frame")
 	upgradeContainer.Name = "UpgradeContainer"
 	upgradeContainer.Size = UDim2.new(1, 0, 0, 0)
-	upgradeContainer.Position = UDim2.new(0, 0, 0, 50)
+    if tierNumber == 1 then
+        upgradeContainer.Position = UDim2.new(0, 0, 0, 0)
+    else
+	    upgradeContainer.Position = UDim2.new(0, 0, 0, 50)
+    end
 	upgradeContainer.BackgroundTransparency = 1
 	upgradeContainer.AutomaticSize = Enum.AutomaticSize.Y
 	upgradeContainer.Parent = tierFrame
@@ -929,7 +939,7 @@ task.spawn(function()
 		return
 	end
 
-	for tierNumber = 1, 4 do
+	for tierNumber = 1, 1 do
 		local tierData = MetaConfig.Tiers[tierNumber]
 		if tierData then
 			local tierFrame = createTierSection(tierNumber, tierData)
@@ -1114,6 +1124,12 @@ local function setShopState(isOpen, isDeath)
 			UserInputService.MouseIconEnabled = true
 		end)
 		
+		-- Hide Reticle (Crosshair)
+		local reticle = player:WaitForChild("PlayerGui"):FindFirstChild("ReticleGui")
+		if reticle then
+			reticle.Enabled = false
+		end
+		
 		if isDeath then
 			hud.RespawnButton.Visible = true
 			hud.ShopCloseButton.Visible = false
@@ -1129,6 +1145,15 @@ local function setShopState(isOpen, isDeath)
 		setUIInputSink(false)
 		
 		pcall(function() RunService:UnbindFromRenderStep("UnlockMouseForShop") end)
+		
+		-- Restore Reticle (Crosshair) if tool is equipped
+		local reticle = player:WaitForChild("PlayerGui"):FindFirstChild("ReticleGui")
+		if reticle then
+			local character = player.Character
+			if character and character:FindFirstChildOfClass("Tool") then
+				reticle.Enabled = true
+			end
+		end
 	end
 end
 
@@ -1170,7 +1195,21 @@ end)
 -- Keyboard shortcut: N to toggle shop
 ContextActionService:BindAction("ToggleShop", function(_, inputState)
 	if inputState == Enum.UserInputState.Begin then
-		toggleShop()
+		-- Toggle Mutation Shop
+		if MutationShopController.IsOpen() then
+			MutationShopController.Close()
+		else
+			local success = MutationShopController.Open()
+			if success then
+				-- If successful, ensure the main shop is closed if it was open
+				if hud.ShopMainFrame.Visible then
+					toggleShop()
+				end
+			else
+				-- Optional: Feedback if it fails (e.g., not enough DNA)
+				playSound(SOUNDS.Error)
+			end
+		end
 	end
 end, false, Enum.KeyCode.N)
 

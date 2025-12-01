@@ -25,6 +25,9 @@ local addXPEvent = createEvent("AddXP")
 local addGlobalXPEvent = createEvent("AddGlobalXP")
 local toggleGodModeEvent = createEvent("ToggleGodMode")
 local toggleInfiniteAmmoEvent = createEvent("ToggleInfiniteAmmo")
+local setSpeedEvent = createEvent("SetSpeed")
+local addMutationEvent = createEvent("AddMutation")
+local removeMutationEvent = createEvent("RemoveMutation")
 
 print("👮 AdminService: Started")
 
@@ -102,6 +105,101 @@ toggleInfiniteAmmoEvent.OnServerEvent:Connect(function(player, state)
 	print("👮 Admin:", player.Name, "toggled Infinite Ammo:", state)
 	player:SetAttribute("InfiniteAmmo", state)
 	-- Tool logic is handled in Blaster scripts by checking this attribute
+end)
+
+-- Set Speed
+setSpeedEvent.OnServerEvent:Connect(function(player, speed)
+	if typeof(speed) ~= "number" then return end
+	speed = math.clamp(speed, 0, 500) -- Allow up to 500 for testing
+	
+	print("👮 Admin:", player.Name, "set speed to", speed)
+	
+	if player.Character then
+		local humanoid = player.Character:FindFirstChild("Humanoid")
+		if humanoid then
+			humanoid.WalkSpeed = speed
+		end
+	end
+end)
+
+-- Add Mutation
+addMutationEvent.OnServerEvent:Connect(function(player, mutationName)
+	if typeof(mutationName) ~= "string" then return end
+	
+	print("👮 Admin:", player.Name, "adding mutation:", mutationName)
+	
+	-- Get current mutations
+	local mutationsData = player:GetAttribute("Mutations") or "{}"
+	local mutations = {}
+	
+	-- Parse JSON (simple approach - in production use HttpService:JSONDecode)
+	local success, decoded = pcall(function()
+		return game:GetService("HttpService"):JSONDecode(mutationsData)
+	end)
+	
+	if success then
+		mutations = decoded
+	else
+		mutations = {}
+	end
+	
+	-- Add or increment mutation level
+	if mutations[mutationName] then
+		mutations[mutationName] = mutations[mutationName] + 1
+	else
+		mutations[mutationName] = 1
+	end
+	
+	-- Encode and save
+	local encoded = game:GetService("HttpService"):JSONEncode(mutations)
+	player:SetAttribute("Mutations", encoded)
+	
+	-- Fire update event
+	local updateEvent = ReplicatedStorage:FindFirstChild("UpdateMetaEvent")
+	if updateEvent then
+		updateEvent:FireClient(player)
+	end
+end)
+
+-- Remove Mutation
+removeMutationEvent.OnServerEvent:Connect(function(player, mutationName)
+	if typeof(mutationName) ~= "string" then return end
+	
+	print("👮 Admin:", player.Name, "removing mutation:", mutationName)
+	
+	-- Get current mutations
+	local mutationsData = player:GetAttribute("Mutations") or "{}"
+	local mutations = {}
+	
+	-- Parse JSON
+	local success, decoded = pcall(function()
+		return game:GetService("HttpService"):JSONDecode(mutationsData)
+	end)
+	
+	if success then
+		mutations = decoded
+	else
+		mutations = {}
+	end
+	
+	-- Remove or decrement mutation level
+	if mutations[mutationName] then
+		if mutations[mutationName] > 1 then
+			mutations[mutationName] = mutations[mutationName] - 1
+		else
+			mutations[mutationName] = nil
+		end
+	end
+	
+	-- Encode and save
+	local encoded = game:GetService("HttpService"):JSONEncode(mutations)
+	player:SetAttribute("Mutations", encoded)
+	
+	-- Fire update event
+	local updateEvent = ReplicatedStorage:FindFirstChild("UpdateMetaEvent")
+	if updateEvent then
+		updateEvent:FireClient(player)
+	end
 end)
 
 -- God Mode Protection (Heal if damaged while active)

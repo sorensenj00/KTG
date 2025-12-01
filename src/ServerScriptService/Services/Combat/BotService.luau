@@ -30,10 +30,10 @@ local ProgressionManager = require(ServerScriptService.Services.Progression.Prog
 local XPOrbService = require(ServerScriptService.Services.World.XPOrbService)
 
 -- === Constants ===
-local UPDATE_INTERVAL = 15 -- Run AI logic every 15 frames (approx 4 times/sec)
+local UPDATE_INTERVAL = 10 -- Run AI logic every 10 frames (approx 6 times/sec)
 local AGGRO_DURATION = 8
 local NETWORK_OWNERSHIP_RADIUS = 200 -- Transfer ownership if player is within 200 studs
-local ORB_SEARCH_INTERVAL = 1.0 -- Search for orbs once per second
+local ORB_SEARCH_INTERVAL = 0.1 -- Search for orbs very frequently
 local STUCK_THRESHOLD = 0.5
 local STUCK_TIME = 1.0
 local REACTION_TIME = 1.2 -- Delay before shooting after acquiring target (Increased for easier difficulty)
@@ -74,7 +74,7 @@ local botStates: { [Model]: BotState } = {}
 
 type BotState = {
 	Target: Instance | {ID: number?, Position: Vector3, Name: string, XP: number} | nil,
-	State: "IDLE" | "COMBAT" | "ORB" | "ROAM",
+	State: "IDLE" | "COMBAT" | "ORB",
 	NextOrbSearch: number,
 	AggroTable: { [Instance]: number },
 	LastPos: Vector3,
@@ -88,7 +88,8 @@ type BotState = {
 	Path: Path?,
 	PathWaypoints: {PathWaypoint}?,
 	CurrentWaypointIndex: number?,
-	TargetAcquiredTime: number
+	TargetAcquiredTime: number,
+	OrbBlacklist: { [number]: number } -- [OrbID] = timestamp
 }
 
 -- Initialize State
@@ -107,7 +108,8 @@ local function getBotState(bot)
 			NextStrafeChange = 0,
 			IsPathfinding = false,
 			LastPathTime = 0,
-			TargetAcquiredTime = 0
+			TargetAcquiredTime = 0,
+			OrbBlacklist = {}
 		}
 	end
 	return botStates[bot]
@@ -158,12 +160,12 @@ local function updateNetworkOwnership(bot, target)
 end
 
 -- === Helper: Spatial Orb Search ===
-local function findNearestOrb(bot, range)
+local function findNearestOrb(bot, state, range)
 	local root = bot.PrimaryPart
 	if not root then return nil end
 
 	-- Use Optimized XPOrbService (Data-only query, no physics)
-	return XPOrbService.GetNearestOrb(root.Position, range)
+	return XPOrbService.GetNearestOrb(root.Position, range, state.OrbBlacklist)
 end
 
 -- === Helper: Target Validation & Scoring ===
@@ -247,20 +249,35 @@ local function moveToPath(bot, state, targetPos)
 		local direction = (targetPos - root.Position)
 		local distance = direction.Magnitude
 
+		local botLevel = bot:GetAttribute("Level") or 1
+		local botRadius = 2 * ScalingConfig.GetSizeMultiplier(botLevel)
+
 		local rayParams = RaycastParams.new()
 		rayParams.FilterType = Enum.RaycastFilterType.Exclude
 		rayParams.FilterDescendantsInstances = { bot, Workspace:FindFirstChild("Orbs") }
+		rayParams.RespectCanCollide = true
 
-		local blocked = Workspace:Raycast(root.Position, direction.Unit * math.min(distance, 50), rayParams)
+		-- Use Spherecast to account for bot width (Reduced radius for leniency)
+		local blocked = Workspace:Spherecast(root.Position, botRadius * 0.75, direction.Unit * math.min(distance, 50), rayParams)
 
-		if blocked and (blocked.Instance.CanCollide or blocked.Instance.Transparency < 0.9) then
+		-- Fix: Ignore floor/slopes
+		if blocked and blocked.Normal.Y > 0.5 then
+			blocked = nil
+		end
+
+		if blocked then
 			-- Blocked
-
+			
 			-- 1. Check if already pathfinding or cooldown
-			if state.IsPathfinding then return end
+			if state.IsPathfinding then
+				-- Keep moving towards target while waiting (Dumb Move)
+				hum:MoveTo(targetPos)
+				return
+			end
 			if os.clock() - state.LastPathTime < 1.0 then
-				-- On cooldown, wait (stand still)
-				hum:MoveTo(root.Position)
+				-- On cooldown: Just move directly (Dumb Move) instead of stopping
+				-- This prevents stuttering if the block is minor or a false positive
+				hum:MoveTo(targetPos)
 				return
 			end
 
@@ -300,8 +317,8 @@ local function moveToPath(bot, state, targetPos)
 				end
 			end)
 
-			-- While waiting, stand still or look at target
-			hum:MoveTo(root.Position)
+			-- While waiting, continue moving directly (Dumb Move)
+			hum:MoveTo(targetPos)
 		else
 			-- Clear, move directly
 			hum:MoveTo(targetPos)
@@ -316,6 +333,8 @@ local function handleCombat(bot, state, now)
 	if not isValidTarget(bot, target) then
 		state.Target = nil
 		state.State = "IDLE"
+		state.Path = nil
+		state.NextOrbSearch = 0
 		return
 	end
 
@@ -516,6 +535,28 @@ function BotController.Start()
 				end
 			end
 
+			-- Clean Blacklist
+			for id, time in pairs(state.OrbBlacklist) do
+				if now - time > 15 then -- Blacklist duration: 15 seconds
+					state.OrbBlacklist[id] = nil
+				end
+			end
+
+			-- Give Up Logic (Unreachable Orbs)
+			if (state.State :: any) == "ORB" and state.Target and state.Target.ID then
+				if now - state.TargetAcquiredTime > 5.0 then -- Give up after 5 seconds
+					-- Blacklist this orb
+					state.OrbBlacklist[state.Target.ID] = now
+					
+					-- Reset
+					state.State = "IDLE"
+					state.Target = nil
+					state.Path = nil
+					state.NextOrbSearch = 0 -- Search again immediately (for a different orb)
+					continue
+				end
+			end
+
 			-- Stuck Detection
 			local moved = (root.Position - state.LastPos).Magnitude
 			if moved < STUCK_THRESHOLD and hum.MoveDirection.Magnitude > 0.1 then
@@ -542,15 +583,15 @@ function BotController.Start()
 					state.State = "IDLE"
 					state.Target = nil
 					state.Path = nil
+					state.NextOrbSearch = 0
 				end
 			end
 
-			if (state.State :: any) == "IDLE" or (state.State :: any) == "ORB" or (state.State :: any) == "ROAM" then
+			if (state.State :: any) == "IDLE" or (state.State :: any) == "ORB" then
 				-- Look for Aggro Targets first
 				local bestAggro = nil
 				local bestTime = 0
 				for attacker, time in pairs(state.AggroTable) do
-					-- Note: attacker is always a character model now (from RecordAggro fix)
 					if time > bestTime and isValidTarget(bot, attacker) then
 						bestAggro = attacker
 						bestTime = time
@@ -571,56 +612,41 @@ function BotController.Start()
 					else
 						-- Look for Orbs
 						if now > state.NextOrbSearch then
-						local level = bot:GetAttribute("Level") or 1
-						local searchRange = 400 * ScalingConfig.GetSizeMultiplier(level)
-						local orb = findNearestOrb(bot, searchRange)
+							local level = bot:GetAttribute("Level") or 1
+							local searchRange = 1000 * ScalingConfig.GetSizeMultiplier(level)
+							local orb = findNearestOrb(bot, state, searchRange)
 
-						if orb then
-							state.State = "ORB"
-							state.Target = orb
-							-- Move to orb
-							moveToPath(bot, state, orb.Position)
-						else
-							-- No orb found, start Roaming
-							if (state.State :: any) ~= "ROAM" then
-								state.State = "ROAM"
-								local roamPos = root.Position + Vector3.new(math.random(-50,50), 0, math.random(-50,50))
-								-- Create a dummy target for consistency
-								state.Target = {Position = roamPos, Name = "Roam", XP = 0}
-								moveToPath(bot, state, roamPos)
+							if orb then
+								state.State = "ORB"
+								state.Target = orb
+								state.TargetAcquiredTime = now -- Track when we started chasing this orb
+								-- Move to orb
+								moveToPath(bot, state, orb.Position)
 							end
+							state.NextOrbSearch = now + ORB_SEARCH_INTERVAL
+						elseif (state.State :: any) == "IDLE" then
+							-- Idle logic
 						end
-						state.NextOrbSearch = now + ORB_SEARCH_INTERVAL
-					elseif (state.State :: any) == "ORB" and state.Target then
-						-- Continue moving to orb
-						local targetPos = state.Target.Position -- Orb is a table {Position, ...}
-						if (targetPos - root.Position).Magnitude < 30 then
-							-- Attempt collection
-							if state.Target.ID then
-								local collected = XPOrbService.CollectOrb(bot, state.Target.ID)
-								if collected then
-									state.State = "IDLE"
-									state.Target = nil
+						
+						if (state.State :: any) == "ORB" and state.Target then
+							-- Continue moving to orb
+							local targetPos = state.Target.Position
+							if (targetPos - root.Position).Magnitude < 30 then
+								-- Attempt collection
+								if state.Target.ID then
+									local collected = XPOrbService.CollectOrb(bot, state.Target.ID)
+									if collected then
+										state.State = "IDLE"
+										state.Target = nil
+									end
 								end
+							else
+								moveToPath(bot, state, targetPos)
 							end
-						else
-							moveToPath(bot, state, targetPos)
-						end
-					elseif (state.State :: any) == "ROAM" and state.Target then
-						-- Continue roaming
-						local targetPos = state.Target.Position
-						if (targetPos - root.Position).Magnitude < 5 then
-							-- Reached roam destination, go back to IDLE to trigger new search
-							state.State = "IDLE"
-							state.Target = nil
-						else
-							moveToPath(bot, state, targetPos)
 						end
 					end
 				end
 			end
-			end
-
 		end
 	end)
 end

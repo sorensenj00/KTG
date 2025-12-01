@@ -82,25 +82,7 @@ MetaConfig.Upgrades = {
 		MaxLevel = 5,
 	},
 
-	-- New Idle/Passive Skills (Tier 1/2)
-	Regeneration = {
-		Name = "Regeneration",
-		Description = "Heals X Health per second.",
-		Tier = 1,
-		BaseCost = 150,
-		CostExponent = 1.5,
-		Increment = 1, -- +1 HP/sec per level
-		MaxLevel = 20,
-	},
-	Photosynthesis = {
-		Name = "Photosynthesis",
-		Description = "Automatically gain Biomass every second.",
-		Tier = 1,
-		BaseCost = 300,
-		CostExponent = 1.8,
-		Increment = 5, -- +5 Biomass/sec per level
-		MaxLevel = 20,
-	},
+
     Magnetism = {
         Name = "Magnetism",
         Description = "Increases range to automatically pick up loot.",
@@ -139,15 +121,7 @@ MetaConfig.Upgrades = {
 		Increment = 0.02,
 		MaxLevel = 15,
 	},
-	Thorns = {
-		Name = "Thorns",
-		Description = "Enemies take damage when they shoot you.",
-		Tier = 2,
-		BaseCost = 800,
-		CostExponent = 1.8,
-		Increment = 2, -- +2 Damage reflection per level
-		MaxLevel = 10,
-	},
+
     Featherweight = {
         Name = "Featherweight",
         Description = "Reduces fall damage.",
@@ -159,30 +133,13 @@ MetaConfig.Upgrades = {
     },
 
 	-- TIER 3 (Apex)
-	Vampirism = {
-		Name = "Vampirism",
-		Description = "Heal for 5% of damage dealt per level.",
-		Tier = 3,
-		BaseCost = 2000,
-		CostExponent = 2.0,
-		Increment = 0.05,
-		MaxLevel = 5,
-	},
-	ToxicAura = {
-		Name = "Toxic Aura",
-		Description = "Deals damage to nearby enemies every second.",
-		Tier = 3,
-		BaseCost = 2500,
-		CostExponent = 2.1,
-		Increment = 5, -- +5 DPS per level
-		MaxLevel = 10,
-	},
+
 	StartLevel = {
 		Name = "Born Big",
 		Description = "Start every life at Level 2 instead of Level 1.",
 		Tier = 3,
-		BaseCost = 5000,
-		CostExponent = 2.0,
+		BaseCost = 10000,
+		CostExponent = 2.2,
 		Increment = 1,
 		MaxLevel = 1,
 	},
@@ -190,8 +147,8 @@ MetaConfig.Upgrades = {
 		Name = "Critical Strike",
 		Description = "1% chance to deal double damage per level.",
 		Tier = 3,
-		BaseCost = 1500,
-		CostExponent = 1.9,
+		BaseCost = 3000,
+		CostExponent = 2.0,
 		Increment = 0.01,
 		MaxLevel = 20,
 	},
@@ -199,8 +156,8 @@ MetaConfig.Upgrades = {
 		Name = "Velocity",
 		Description = "Increases projectile speed by 5% per level.",
 		Tier = 3,
-		BaseCost = 1200,
-		CostExponent = 1.7,
+		BaseCost = 2500,
+		CostExponent = 1.9,
 		Increment = 0.05,
 		MaxLevel = 10,
 	},
@@ -210,8 +167,8 @@ MetaConfig.Upgrades = {
 		Name = "Explosive Demise",
 		Description = "Explode on death, dealing 50% max health damage per level.",
 		Tier = 4,
-		BaseCost = 10000,
-		CostExponent = 2.2,
+		BaseCost = 25000,
+		CostExponent = 2.5,
 		Increment = 0.5,
 		MaxLevel = 5,
 	},
@@ -219,8 +176,8 @@ MetaConfig.Upgrades = {
 		Name = "Greed",
 		Description = "1% chance to gain double GXP from kills per level.",
 		Tier = 4,
-		BaseCost = 15000,
-		CostExponent = 2.5,
+		BaseCost = 30000,
+		CostExponent = 2.8,
 		Increment = 0.01,
 		MaxLevel = 10,
 	},

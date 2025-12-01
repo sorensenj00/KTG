@@ -182,14 +182,50 @@ function MutationShopController.Open()
 
     gui.Enabled = true
     UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    UserInputService.MouseIconEnabled = true -- Ensure cursor is visible
     
-    -- Enforce mouse unlock
+    -- Enforce mouse unlock and cursor visibility
     RunService:BindToRenderStep("UnlockMouseForMutationShop", Enum.RenderPriority.Last.Value, function()
         UserInputService.MouseBehavior = Enum.MouseBehavior.Default
         UserInputService.MouseIconEnabled = true
     end)
+    
+    -- Hide Reticle (Crosshair)
+    local reticle = player:WaitForChild("PlayerGui"):FindFirstChild("ReticleGui")
+    if reticle then
+        reticle.Enabled = false
+    end
 
     return true
+end
+
+function MutationShopController.Close()
+    if not gui or not gui.Enabled then return end
+    
+    gui.Enabled = false
+    pcall(function() RunService:UnbindFromRenderStep("UnlockMouseForMutationShop") end)
+    
+    -- Restore Reticle (Crosshair) if tool is equipped
+    local reticle = player:WaitForChild("PlayerGui"):FindFirstChild("ReticleGui")
+    if reticle then
+        local character = player.Character
+        if character and character:FindFirstChildOfClass("Tool") then
+            reticle.Enabled = true
+        end
+    end
+    
+    -- If we have a parent menu callback, use it to return smoothly
+    if closeCallback then
+        closeCallback()
+    else
+        -- Fallback: Just lock mouse and resume game
+        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        UserInputService.MouseIconEnabled = false
+    end
+end
+
+function MutationShopController.IsOpen()
+    return gui and gui.Enabled
 end
 
 function MutationShopController.Start()
@@ -276,11 +312,11 @@ function MutationShopController.Start()
     -- Close/Back Button
     local closeButton = Instance.new("TextButton")
     closeButton.Name = "CloseButton"
-    closeButton.Text = "BACK"
+    closeButton.Text = "SHOP"
     closeButton.Size = UDim2.new(0, 80, 0, 30)
-    closeButton.Position = UDim2.new(1, -10, 0, 10)
-    closeButton.AnchorPoint = Vector2.new(1, 0)
-    closeButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    closeButton.Position = UDim2.new(0, 10, 0, 10) -- Moved to left
+    closeButton.AnchorPoint = Vector2.new(0, 0)
+    closeButton.BackgroundColor3 = Color3.fromRGB(0, 255, 150) -- Green like shop
     closeButton.TextColor3 = Color3.new(1, 1, 1)
     closeButton.Font = Enum.Font.GothamBold
     closeButton.TextSize = 14

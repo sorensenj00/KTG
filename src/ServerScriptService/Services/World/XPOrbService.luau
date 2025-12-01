@@ -24,7 +24,8 @@ local XPOrbService = {}
 
 -- Configuration
 local SPAWN_INTERVAL = 1
-local ORB_LIFETIME = 60
+local ORB_LIFETIME = 60 -- Used for growth calculation logic naming, but actual lifetime is MAX_LIFETIME
+local MAX_LIFETIME = 240 -- 4 Minutes Auto-Despawn
 local ORB_GROWTH_INTERVAL = 10
 local MAX_GROWTH_STAGES = 5
 local MAX_ORBS = 100
@@ -34,10 +35,10 @@ local MAX_MAGNET_SPEED = 80
 
 -- Orb Tiers
 local ORB_TIERS = {
-	{ Name = "Common", XP = 100, Size = Vector3.new(2, 2, 2), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
-	{ Name = "Uncommon", XP = 250, Size = Vector3.new(2.5, 2.5, 2.5), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
-	{ Name = "Rare", XP = 500, Size = Vector3.new(6, 6, 6), Color = Color3.fromRGB(163, 35, 35), Chance = 8 },
-	{ Name = "Legendary", XP = 2000, Size = Vector3.new(15, 15, 15), Color = Color3.fromRGB(197, 209, 28), Chance = 2 },
+	{ Name = "Common", XP = 150, Size = Vector3.new(2, 2, 2), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
+	{ Name = "Uncommon", XP = 400, Size = Vector3.new(2.5, 2.5, 2.5), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
+	{ Name = "Rare", XP = 1000, Size = Vector3.new(6, 6, 6), Color = Color3.fromRGB(163, 35, 35), Chance = 8 },
+	{ Name = "Legendary", XP = 5000, Size = Vector3.new(15, 15, 15), Color = Color3.fromRGB(197, 209, 28), Chance = 2 },
 }
 
 -- Data Storage (Server only - no Part instances)
@@ -128,13 +129,23 @@ local function spawnOrb()
 	local orbId = nextOrbId
 	nextOrbId = nextOrbId + 1
 
+	-- Calculate Average Level for Scaling
+	local totalLevel = 0
+	local playerCount = 0
+	for _, p in ipairs(Players:GetPlayers()) do
+		totalLevel = totalLevel + (p:GetAttribute("Level") or 1)
+		playerCount = playerCount + 1
+	end
+	local avgLevel = playerCount > 0 and (totalLevel / playerCount) or 1
+	local scalingMult = 1 + (avgLevel * 0.5) -- +50% per average level
+
 	-- Store orb data
 	activeOrbs[orbId] = {
 		id = orbId,
 		position = spawnPos,
 		tier = selectedTier,
 		currentSize = selectedTier.Size, -- Copy size to allow individual scaling
-		xpValue = selectedTier.XP,
+		xpValue = math.floor(selectedTier.XP * scalingMult),
 		spawnTime = tick(),
 		growthStage = 0,
 		magnetTarget = nil
@@ -161,6 +172,13 @@ local function updateOrbs(dt)
 	for orbId, orb in pairs(activeOrbs) do
 		-- Check lifetime and upgrade
 		local age = currentTime - orb.spawnTime
+		
+		-- Auto-Despawn
+		if age > MAX_LIFETIME then
+			activeOrbs[orbId] = nil
+			orbEvents:FireAllClients({Action = "Despawn", Id = orbId})
+			continue
+		end
 		
 		-- Growth Logic
 		local currentStage = math.floor(age / ORB_GROWTH_INTERVAL)
@@ -272,11 +290,13 @@ function XPOrbService.CollectOrb(entity: Model, orbId: number)
 end
 
 -- PUBLIC API: Get nearest orb to a position
-function XPOrbService.GetNearestOrb(position: Vector3, maxRange: number)
+function XPOrbService.GetNearestOrb(position: Vector3, maxRange: number, excludeList: {[number]: boolean}?)
 	local bestOrb = nil
 	local bestDist = maxRange
 
 	for _, orb in pairs(activeOrbs) do
+		if excludeList and excludeList[orb.id] then continue end
+
 		local dist = (orb.position - position).Magnitude
 		if dist < bestDist then
 			bestDist = dist

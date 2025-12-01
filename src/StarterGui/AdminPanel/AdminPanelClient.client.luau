@@ -24,8 +24,8 @@ screenGui.Parent = playerGui
 
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 250, 0, 455) -- Increased height for bot controls
-frame.Position = UDim2.new(0.05, 0, 0.5, -227.5) -- Adjusted to center vertically
+frame.Size = UDim2.new(0, 250, 0, 600) -- Increased height for speed and mutation controls
+frame.Position = UDim2.new(0.05, 0, 0.5, -300) -- Adjusted to center vertically
 frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 frame.BorderSizePixel = 0
 frame.Active = true -- Allow input
@@ -158,11 +158,98 @@ local setBotCorner = Instance.new("UICorner")
 setBotCorner.CornerRadius = UDim.new(0, 6)
 setBotCorner.Parent = setBotLevelBtn
 
+-- Speed Control
+local speedContainer = Instance.new("Frame")
+speedContainer.Size = UDim2.new(1, 0, 0, 35)
+speedContainer.BackgroundTransparency = 1
+speedContainer.LayoutOrder = 4
+speedContainer.Parent = frame
+
+local speedInput = Instance.new("TextBox")
+speedInput.Size = UDim2.new(0.6, -5, 1, 0)
+speedInput.Position = UDim2.new(0, 0, 0, 0)
+speedInput.PlaceholderText = "Speed (16-100)"
+speedInput.Text = ""
+speedInput.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+speedInput.TextColor3 = Color3.new(0, 0, 0)
+speedInput.Font = Enum.Font.Gotham
+speedInput.TextSize = 14
+speedInput.Parent = speedContainer
+local speedInputCorner = Instance.new("UICorner")
+speedInputCorner.CornerRadius = UDim.new(0, 6)
+speedInputCorner.Parent = speedInput
+
+local setSpeedBtn = Instance.new("TextButton")
+setSpeedBtn.Text = "Set Speed"
+setSpeedBtn.Size = UDim2.new(0.4, -5, 1, 0)
+setSpeedBtn.Position = UDim2.new(0.6, 5, 0, 0)
+setSpeedBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 120)
+setSpeedBtn.TextColor3 = Color3.new(1, 1, 1)
+setSpeedBtn.Font = Enum.Font.GothamBold
+setSpeedBtn.TextSize = 14
+setSpeedBtn.Parent = speedContainer
+local speedBtnCorner = Instance.new("UICorner")
+speedBtnCorner.CornerRadius = UDim.new(0, 6)
+speedBtnCorner.Parent = setSpeedBtn
+
+-- Mutation Controls
+local mutationContainer = Instance.new("Frame")
+mutationContainer.Size = UDim2.new(1, 0, 0, 35)
+mutationContainer.BackgroundTransparency = 1
+mutationContainer.LayoutOrder = 5
+mutationContainer.Parent = frame
+
+local mutationInput = Instance.new("TextBox")
+mutationInput.Size = UDim2.new(1, 0, 0.45, 0)
+mutationInput.Position = UDim2.new(0, 0, 0, 0)
+mutationInput.PlaceholderText = "Mutation Name"
+mutationInput.Text = ""
+mutationInput.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+mutationInput.TextColor3 = Color3.new(0, 0, 0)
+mutationInput.Font = Enum.Font.Gotham
+mutationInput.TextSize = 12
+mutationInput.Parent = mutationContainer
+local mutInputCorner = Instance.new("UICorner")
+mutInputCorner.CornerRadius = UDim.new(0, 6)
+mutInputCorner.Parent = mutationInput
+
+local mutationBtnContainer = Instance.new("Frame")
+mutationBtnContainer.Size = UDim2.new(1, 0, 0.5, 0)
+mutationBtnContainer.Position = UDim2.new(0, 0, 0.55, 0)
+mutationBtnContainer.BackgroundTransparency = 1
+mutationBtnContainer.Parent = mutationContainer
+
+local addMutationBtn = Instance.new("TextButton")
+addMutationBtn.Text = "Add"
+addMutationBtn.Size = UDim2.new(0.48, 0, 1, 0)
+addMutationBtn.Position = UDim2.new(0, 0, 0, 0)
+addMutationBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+addMutationBtn.TextColor3 = Color3.new(1, 1, 1)
+addMutationBtn.Font = Enum.Font.GothamBold
+addMutationBtn.TextSize = 13
+addMutationBtn.Parent = mutationBtnContainer
+local addMutCorner = Instance.new("UICorner")
+addMutCorner.CornerRadius = UDim.new(0, 6)
+addMutCorner.Parent = addMutationBtn
+
+local removeMutationBtn = Instance.new("TextButton")
+removeMutationBtn.Text = "Remove"
+removeMutationBtn.Size = UDim2.new(0.48, 0, 1, 0)
+removeMutationBtn.Position = UDim2.new(0.52, 0, 0, 0)
+removeMutationBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+removeMutationBtn.TextColor3 = Color3.new(1, 1, 1)
+removeMutationBtn.Font = Enum.Font.GothamBold
+removeMutationBtn.TextSize = 13
+removeMutationBtn.Parent = mutationBtnContainer
+local removeMutCorner = Instance.new("UICorner")
+removeMutCorner.CornerRadius = UDim.new(0, 6)
+removeMutCorner.Parent = removeMutationBtn
+
 -- Buttons
-local addXPBtn = createButton("+1000 XP", 4)
-local addGlobalXPBtn = createButton("+1000 GlobalXP", 5)
-local godModeBtn = createButton("God Mode: OFF", 6)
-local infAmmoBtn = createButton("Inf Ammo: OFF", 7)
+local addXPBtn = createButton("+1000 XP", 6)
+local addGlobalXPBtn = createButton("+1000 GlobalXP", 7)
+local godModeBtn = createButton("God Mode: OFF", 8)
+local infAmmoBtn = createButton("Inf Ammo: OFF", 9)
 
 -- Logic
 local godMode = false
@@ -291,6 +378,34 @@ infAmmoBtn.MouseButton1Click:Connect(function()
 	infAmmoBtn.Text = "Inf Ammo: " .. (infAmmo and "ON" or "OFF")
 	infAmmoBtn.BackgroundColor3 = infAmmo and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(60, 60, 60)
 	remotes.ToggleInfiniteAmmo:FireServer(infAmmo)
+end)
+
+setSpeedBtn.MouseButton1Click:Connect(function()
+	local speed = tonumber(speedInput.Text)
+	print("🖱️ SetSpeed clicked. Input:", speedInput.Text)
+	if speed then
+		remotes.SetSpeed:FireServer(speed)
+	end
+end)
+
+addMutationBtn.MouseButton1Click:Connect(function()
+	local mutationName = mutationInput.Text
+	if mutationName and mutationName ~= "" then
+		print("🖱️ AddMutation clicked. Mutation:", mutationName)
+		remotes.AddMutation:FireServer(mutationName)
+	else
+		print("❌ Please enter a mutation name")
+	end
+end)
+
+removeMutationBtn.MouseButton1Click:Connect(function()
+	local mutationName = mutationInput.Text
+	if mutationName and mutationName ~= "" then
+		print("🖱️ RemoveMutation clicked. Mutation:", mutationName)
+		remotes.RemoveMutation:FireServer(mutationName)
+	else
+		print("❌ Please enter a mutation name")
+	end
 end)
 
 -- Update Stats Loop

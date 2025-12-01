@@ -61,7 +61,7 @@ local function applyToxicAura(player, character, level)
     local root = character:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    local dps = MetaProgressionManager.GetStatValue(player, "ToxicAura")
+    local dps = MetaProgressionManager.GetStatValue(player, "Toxic Aura")
     if dps <= 0 then return end
 
     local enemies = getNearbyEnemies(root.Position, AURA_RANGE_BASE + (level * 1), player)
@@ -156,7 +156,7 @@ local function onTick()
             end
 
             -- 3. Toxic Aura
-            local auraLevel = MetaProgressionManager.GetStatValue(player, "ToxicAura")
+            local auraLevel = MetaProgressionManager.GetStatValue(player, "Toxic Aura")
             if auraLevel > 0 then
                 applyToxicAura(player, character, auraLevel)
             end

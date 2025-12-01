@@ -88,6 +88,20 @@ MutationConfig.Mutations = {
         ImageId = "rbxassetid://8",
         GetStat = function(level) return level * 1 end,
     },
+    ["Photosynthesis"] = {
+        Rarity = 2,
+        MaxLevel = 20,
+        Description = "Automatically gain Biomass every second.",
+        ImageId = "rbxassetid://16", -- Placeholder
+        GetStat = function(level) return level * 5 end, -- +5 Biomass/sec
+    },
+    ["Thorns"] = {
+        Rarity = 2,
+        MaxLevel = 10,
+        Description = "Enemies take damage when they shoot you.",
+        ImageId = "rbxassetid://17",
+        GetStat = function(level) return level * 2 end, -- +2 Damage reflection
+    },
 
     -- 🟣 Rare (Specialization)
     ["Momentum"] = {
@@ -118,6 +132,20 @@ MutationConfig.Mutations = {
         ImageId = "rbxassetid://12",
         GetStat = function(level) return level * 0.15 end,
     },
+    ["Regeneration"] = {
+        Rarity = 3,
+        MaxLevel = 20,
+        Description = "Heals X Health per second.",
+        ImageId = "rbxassetid://18",
+        GetStat = function(level) return level * 1 end, -- +1 HP/sec
+    },
+    ["Toxic Aura"] = {
+        Rarity = 3,
+        MaxLevel = 10,
+        Description = "Deals damage to nearby enemies every second.",
+        ImageId = "rbxassetid://11563251", -- Gas/Bomb
+        GetStat = function(level) return level * 5 end, -- +5 DPS
+    },
 
     -- 🟡 Legendary (Raid Boss)
     ["Supernova"] = {
@@ -141,15 +169,26 @@ MutationConfig.Mutations = {
         ImageId = "rbxassetid://15",
         GetStat = function(level) return 0.5 end,
     },
+    ["Vampirism"] = {
+        Rarity = 4,
+        MaxLevel = 5,
+        Description = "Heal for 5% of damage dealt per level.",
+        ImageId = "rbxassetid://6238815272",
+        GetStat = function(level) return level * 0.05 end,
+    },
 }
 
 function MutationConfig.GetUpgradeCost(rarity, level)
-    -- Placeholder cost formula for Gacha (usually fixed price for roll, not per upgrade, but prompt says "Pays DNA cost" -> "Draft 3" -> "Select 1").
-    -- The cost is for the ROLL, not the item.
-    -- Let's define Roll Cost.
-    return 100 -- Flat cost for now
+    -- Scaling Cost: 100 * (Level ^ 1.5)
+    -- Lvl 1 -> 2: 100
+    -- Lvl 2 -> 3: ~280
+    -- Lvl 3 -> 4: ~520
+    -- Lvl 4 -> 5: ~800
+    local base = 100
+    local multiplier = math.pow(level, 1.5)
+    return math.floor(base * multiplier)
 end
 
-MutationConfig.ROLL_COST = 250 -- DNA per roll
+MutationConfig.ROLL_COST = 500 -- DNA per roll (Increased from 250)
 
 return MutationConfig

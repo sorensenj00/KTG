@@ -187,16 +187,22 @@ function ProgressionManager.AddBiomass(target: Instance, amount: number)
 			currentLevel = currentLevel + 1
 			levelsGained = levelsGained + 1
 			
-			-- Heal on level up
+			-- Update Level attribute FIRST so scaling can use it
+			target:SetAttribute("Level", currentLevel)
+			target:SetAttribute("Biomass", totalBiomass)
+			
+			-- Update scaling BEFORE healing (so MaxHealth is calculated with new biomass)
 			if isPlayer and target:IsA("Player") and target.Character then
+				ScalingEngine.UpdateCharacter(target.Character, totalBiomass)
 				local humanoid = target.Character:FindFirstChild("Humanoid")
 				if humanoid then
-					humanoid.Health = humanoid.MaxHealth
+					humanoid.Health = humanoid.MaxHealth -- Now heals to the NEW MaxHealth
 				end
 			elseif isBot and target:IsA("Model") then
+				ScalingEngine.UpdateCharacter(target, totalBiomass)
 				local humanoid = target:FindFirstChild("Humanoid")
 				if humanoid then
-					humanoid.Health = humanoid.MaxHealth
+					humanoid.Health = humanoid.MaxHealth -- Now heals to the NEW MaxHealth
 				end
 			end
 		else
@@ -204,19 +210,16 @@ function ProgressionManager.AddBiomass(target: Instance, amount: number)
 		end
 	end
 
-	-- Update Attributes
+	-- Update Attributes if not already set during level up
 	target:SetAttribute("Level", currentLevel)
 	target:SetAttribute("Biomass", totalBiomass)
 
-	-- Force Scaling Update
-	if target:IsA("Player") and target.Character then
-		task.spawn(function()
-			ScalingEngine.UpdateCharacter(target.Character, totalBiomass)
-		end)
-	elseif target:IsA("Model") then
-		task.spawn(function()
-			ScalingEngine.UpdateCharacter(target, totalBiomass)
-		end)
+	-- Force final Scaling Update for smooth scaling (only if we didn't level up)
+	-- If we leveled up, scaling was already applied during the level up with full heal
+	-- [FIX] Removed unthrottled update here to prevent stutter. 
+	-- The attribute change listener (setupPlayerScaling) will handle it with throttling (enforceEntityStats).
+	if levelsGained == 0 then
+		-- Let the throttled listener handle it
 	end
 
 	if levelsGained > 0 then

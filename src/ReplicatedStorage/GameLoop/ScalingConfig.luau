@@ -50,10 +50,16 @@ function ScalingConfig.GetXPRequired(level: number): number
 end
 
 function ScalingConfig.GetXPReward(victimLevel: number): number
-	local levelBonus = (victimLevel * ScalingConfig.KILL_REWARD_MULTIPLIER)
+	-- Exponential Scaling: Base * (Level ^ 1.8)
+	-- Level 1: 50
+	-- Level 10: 50 * 63 = 3150
+	-- Level 30: 50 * 450 = 22500
+	local levelBonus = math.pow(victimLevel, 1.8) * ScalingConfig.KILL_REWARD_MULTIPLIER
+	
 	if victimLevel >= 20 then
-		levelBonus = levelBonus * 2.0 -- Big reward for killing bosses
+		levelBonus = levelBonus * 1.5 -- Boss Bonus
 	end
+	
 	return math.floor(ScalingConfig.KILL_BASE_REWARD + levelBonus)
 end
 
