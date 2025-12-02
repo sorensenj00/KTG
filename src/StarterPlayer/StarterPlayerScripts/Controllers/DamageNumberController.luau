@@ -225,7 +225,10 @@ local function spawnDamageNumber(amount: number, position: Vector3, isKill: bool
 	table.insert(activeDamageNumbers, {
 		part = part,
 		spawnTime = tick(),
-		baseSize = baseSize
+		baseSize = baseSize,
+		-- Cache Visuals for Heartbeat Loop
+		billboard = bb,
+		label = label
 	})
 end
 
@@ -248,7 +251,7 @@ local function update(dt)
 			-- Gentler scaling: Starts at 30 studs, adds +100% size every 100 studs. Max 3x.
 			local scaleMultiplier = math.clamp(1 + (dist - 30) / 100, 1, 3)
 			
-			local bb = data.part:FindFirstChild("Display")
+			local bb = data.billboard
 			if bb then
 				bb.Size = UDim2.fromScale(
 					data.baseSize.X.Scale * scaleMultiplier, 
@@ -258,7 +261,7 @@ local function update(dt)
 				-- Fading
 				if age > (PART_LIFETIME - FADE_DURATION) then
 					local fadeAlpha = (age - (PART_LIFETIME - FADE_DURATION)) / FADE_DURATION
-					local label = bb:FindFirstChild("Label")
+					local label = data.label
 					if label then
 						label.TextTransparency = fadeAlpha
 						label.TextStrokeTransparency = fadeAlpha

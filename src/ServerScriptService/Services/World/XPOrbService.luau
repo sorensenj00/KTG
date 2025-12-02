@@ -166,8 +166,30 @@ local function spawnOrb()
 end
 
 -- Server update loop (single Heartbeat for all orbs)
+local magnetCheckTimer = 0
+local MAGNET_CHECK_INTERVAL = 0.15 -- Check for magnets ~6 times a second (Optimization)
+
 local function updateOrbs(dt)
 	local currentTime = tick()
+	magnetCheckTimer += dt
+	local checkMagnet = magnetCheckTimer >= MAGNET_CHECK_INTERVAL
+
+	if checkMagnet then
+		magnetCheckTimer = 0
+	end
+
+	-- Optimization: Cache player positions for this frame to avoid getting HumanoidRootPart N times
+	local playerPositions = {}
+	if checkMagnet then
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player.Character then
+				local root = player.Character:FindFirstChild("HumanoidRootPart")
+				if root then
+					table.insert(playerPositions, { Player = player, Position = root.Position, UserId = player.UserId })
+				end
+			end
+		end
+	end
 	
 	for orbId, orb in pairs(activeOrbs) do
 		-- Check lifetime and upgrade
@@ -190,32 +212,57 @@ local function updateOrbs(dt)
 			orb.currentSize = orb.currentSize * 1.25 -- Grow visual size by 25% per stage
 		end
 		
-		-- Magnet logic
-		local closestPlayer = nil
-		local closestDist = MAGNET_RADIUS
-		
-		for _, player in ipairs(Players:GetPlayers()) do
-			if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-				local dist = (player.Character.HumanoidRootPart.Position - orb.position).Magnitude
-				if dist < closestDist then
-					closestDist = dist
-					closestPlayer = player
+		-- Magnet logic (Throttled Search)
+		if checkMagnet then
+			local closestData = nil
+			local closestDistSq = MAGNET_RADIUS * MAGNET_RADIUS -- Compare squared distance (Optimization)
+
+			for _, pData in ipairs(playerPositions) do
+				local dx = pData.Position.X - orb.position.X
+				local dy = pData.Position.Y - orb.position.Y
+				local dz = pData.Position.Z - orb.position.Z
+				local distSq = (dx*dx) + (dy*dy) + (dz*dz)
+
+				if distSq < closestDistSq then
+					closestDistSq = distSq
+					closestData = pData
 				end
+			end
+
+			if closestData then
+				orb.magnetTarget = closestData.UserId -- Compatibility for collection
+				orb.targetPlayer = closestData.Player -- Direct Ref for movement
+			else
+				orb.magnetTarget = nil
+				orb.targetPlayer = nil
 			end
 		end
 		
-		if closestPlayer and closestPlayer.Character then
-			-- Move towards player
-			local targetPos = closestPlayer.Character.HumanoidRootPart.Position
-			local direction = (targetPos - orb.position).Unit
+		-- Magnet Movement (Run every frame if we have a target)
+		if orb.targetPlayer then
+			local targetPlayer = orb.targetPlayer
 			
-			local speedAlpha = 1 - math.clamp(closestDist / MAGNET_RADIUS, 0, 1)
-			local currentSpeed = MIN_MAGNET_SPEED + (MAX_MAGNET_SPEED - MIN_MAGNET_SPEED) * speedAlpha
-			
-			orb.position = orb.position + direction * currentSpeed * dt
-			orb.magnetTarget = closestPlayer.UserId
-		else
-			orb.magnetTarget = nil
+			if targetPlayer.Parent and targetPlayer.Character then
+				local root = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+				if root then
+					local targetPos = root.Position
+					local dist = (targetPos - orb.position).Magnitude -- We need actual dist for speed calc
+
+					if dist < MAGNET_RADIUS then
+						local direction = (targetPos - orb.position).Unit
+						local speedAlpha = 1 - math.clamp(dist / MAGNET_RADIUS, 0, 1)
+						local currentSpeed = MIN_MAGNET_SPEED + (MAX_MAGNET_SPEED - MIN_MAGNET_SPEED) * speedAlpha
+
+						orb.position = orb.position + direction * currentSpeed * dt
+					else
+						orb.magnetTarget = nil
+						orb.targetPlayer = nil
+					end
+				end
+			else
+				orb.magnetTarget = nil
+				orb.targetPlayer = nil
+			end
 		end
 	end
 end

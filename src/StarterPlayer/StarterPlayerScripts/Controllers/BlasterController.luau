@@ -403,9 +403,12 @@ function BlasterController:destroy()
 end
 
 -- === CLIENT REPLICATION ===
+local blasterCache = {} -- [Tool] = {Handle, AudioEmitter, Muzzle, Sounds}
+
 -- Draws lasers for OTHER players
 local function processSingleShot(blaster: Tool, position: Vector3, rayResults: { any })
 	if not blaster or not blaster:IsDescendantOf(game) then
+		blasterCache[blaster] = nil
 		return
 	end
 
@@ -415,38 +418,52 @@ local function processSingleShot(blaster: Tool, position: Vector3, rayResults: {
 		return
 	end
 
-	local handle = blaster:FindFirstChild("Handle")
-	local sounds = blaster:FindFirstChild("Sounds")
-	if not handle then
-		warn("BlasterController: Missing Handle for", blaster.Name)
-		return
+	-- Retrieve from cache or initialize
+	local cache = blasterCache[blaster]
+	if not cache then
+		local handle = blaster:FindFirstChild("Handle")
+		if not handle then
+			-- Don't warn every frame, just return
+			return
+		end
+
+		cache = {
+			Handle = handle,
+			AudioEmitter = handle:FindFirstChild("AudioEmitter"),
+			Muzzle = blaster:FindFirstChild("MuzzleAttachment", true), -- Recursive search ONCE
+			Sounds = blaster:FindFirstChild("Sounds")
+		}
+		blasterCache[blaster] = cache
+
+		-- Cleanup cache when blaster is destroyed
+		blaster.Destroying:Connect(function()
+			blasterCache[blaster] = nil
+		end)
 	end
-	-- Relaxed check for Sounds to allow visuals even if audio fails
-	-- if not sounds then return end
 
-	local emitter = handle:FindFirstChild("AudioEmitter")
-	local muzzle = blaster:FindFirstChild("MuzzleAttachment", true)
-
+	local muzzle = cache.Muzzle
 	if muzzle then
 		position = muzzle.WorldPosition
-		muzzle.FlashEmitter:Emit(1)
+		if muzzle:FindFirstChild("FlashEmitter") then
+			muzzle.FlashEmitter:Emit(1)
+		end
 	else
 		position = blaster:GetPivot().Position
 	end
 
 	-- Play SFX for others
-	local shootSound = sounds:FindFirstChild("Shoot")
-	if shootSound then
+	local shootSound = cache.Sounds and cache.Sounds:FindFirstChild("Shoot")
+	if shootSound and cache.AudioEmitter then
 		if shootSound:IsA("Folder") then
 			local soundList = shootSound:GetChildren()
 			if #soundList > 0 then
 				local randomSound = soundList[math.random(1, #soundList)]
 				if randomSound:IsA("Sound") then
-					playSoundFromSource(randomSound, emitter)
+					playSoundFromSource(randomSound, cache.AudioEmitter)
 				end
 			end
 		elseif shootSound:IsA("Sound") then
-			playSoundFromSource(shootSound, emitter)
+			playSoundFromSource(shootSound, cache.AudioEmitter)
 		end
 	end
 

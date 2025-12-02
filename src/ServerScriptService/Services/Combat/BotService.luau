@@ -51,6 +51,14 @@ end)
 
 local BotController = {}
 
+-- Optimization: Shared RaycastParams to prevent GC thrashing
+local sharedRayParams = RaycastParams.new()
+sharedRayParams.FilterType = Enum.RaycastFilterType.Exclude
+sharedRayParams.RespectCanCollide = true
+
+-- Optimization: Cache Orb Folder to avoid Finding it every frame
+local orbFolder = Workspace:WaitForChild("Orbs", 5)
+
 -- === State Management ===
 -- Storing state locally for speed
 local botStates: { [Model]: BotState } = {}
@@ -252,13 +260,11 @@ local function moveToPath(bot, state, targetPos)
 		local botLevel = bot:GetAttribute("Level") or 1
 		local botRadius = 2 * ScalingConfig.GetSizeMultiplier(botLevel)
 
-		local rayParams = RaycastParams.new()
-		rayParams.FilterType = Enum.RaycastFilterType.Exclude
-		rayParams.FilterDescendantsInstances = { bot, Workspace:FindFirstChild("Orbs") }
-		rayParams.RespectCanCollide = true
+		-- Optimization: Reuse shared RaycastParams
+		sharedRayParams.FilterDescendantsInstances = { bot, orbFolder or Workspace:FindFirstChild("Orbs") }
 
 		-- Use Spherecast to account for bot width (Reduced radius for leniency)
-		local blocked = Workspace:Spherecast(root.Position, botRadius * 0.75, direction.Unit * math.min(distance, 50), rayParams)
+		local blocked = Workspace:Spherecast(root.Position, botRadius * 0.75, direction.Unit * math.min(distance, 50), sharedRayParams)
 
 		-- Fix: Ignore floor/slopes
 		if blocked and blocked.Normal.Y > 0.5 then
@@ -387,11 +393,11 @@ local function handleCombat(bot, state, now)
 		
 		-- Check LOS before firing to save Raycasts? No, castRays handles it.
 		-- Actually, we should check if we are shooting a wall
-		local rayParams = RaycastParams.new()
-		rayParams.FilterType = Enum.RaycastFilterType.Exclude
-		rayParams.FilterDescendantsInstances = { bot }
 
-		local los = Workspace:Raycast(origin, (aimPos - origin).Unit * dist, rayParams)
+		-- Optimization: Use shared RaycastParams
+		sharedRayParams.FilterDescendantsInstances = { bot }
+
+		local los = Workspace:Raycast(origin, (aimPos - origin).Unit * dist, sharedRayParams)
 		if not los or los.Instance:IsDescendantOf(target) then
 			-- Clear shot
 			state.LastShot = now
