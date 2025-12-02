@@ -1,170 +1,112 @@
 --[[
-    Module: SafeZoneManager
-    Description: Manages safe zones where players can't take damage and can harvest.
+    Service: SafeZoneService
+    Description: Manages safe zone attributes on players.
 
-    Dependencies:
-    - ServerScriptService.Services.Progression.MetaProgressionService
-    - ReplicatedStorage.GameLoop.ScalingConfig
+    Refactor Goals:
+    - Decoupled from View (No GUI creation).
+    - Optimized detection (Interval checks + Spatial Query).
+    - Single Responsibility: Logic Only.
 
-    Author: System
+    Author: System (Refactored)
     Last Updated: 2025-01-20
 ]]
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
+--!strict
+
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
-local MetaProgressionManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
-local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
+local SafeZoneConfig = require(ReplicatedStorage.GameLoop.SafeZoneConfig)
 
-local SafeZoneManager = {}
-
--- Constants
-local SAFE_ZONE_SIZE = Vector3.new(120, 120, 120)
-local SAFE_ZONE_COLOR = Color3.fromRGB(0, 255, 100)
-local SAFE_ZONE_LOCATIONS = {
-	Vector3.new(2998, 105, 280), -- Original
-	Vector3.new(2208, 104, -611) -- Second Zone
-}
+local SafeZoneService = {}
 
 -- State
-local safeZoneParts = {}
+local safeZoneRegions = {} -- {CFrame, Size} for OBB checks
+local nextCheckTime = 0
+local CHECK_INTERVAL = 0.25 -- Check 4 times a second (instead of 60)
 
--- Helper: Create Visual Zone
--- Helper: Create Visual Zones
-local function createSafeZones()
-	-- Clear existing
-	for _, part in ipairs(safeZoneParts) do
-		part:Destroy()
-	end
-	safeZoneParts = {}
-
-	for i, pos in ipairs(SAFE_ZONE_LOCATIONS) do
-		local part = Instance.new("Part")
-		part.Name = "SafeZone_" .. i
-		part.Size = SAFE_ZONE_SIZE
-		part.Position = pos
-		part.Anchored = true
-		part.CanCollide = false
-		part.Transparency = 0.6
-		part.Color = SAFE_ZONE_COLOR
-		part.Material = Enum.Material.ForceField
-		part.CastShadow = false
-		part.Parent = Workspace
-
-		-- Create label
-		local billboard = Instance.new("BillboardGui")
-		billboard.Name = "SafeZoneLabel"
-		-- Increased size for visibility from distance
-		billboard.Size = UDim2.fromScale(60, 12) 
-		billboard.StudsOffset = Vector3.new(0, SAFE_ZONE_SIZE.Y/2 + 15, 0)
-		billboard.AlwaysOnTop = true
-		billboard.MaxDistance = 1000 -- Visible up to 1000 studs
-		billboard.Parent = part
-
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.fromScale(1, 1)
-		label.BackgroundTransparency = 1
-		label.Text = "SAFE ZONE (HARVEST)"
-		label.TextColor3 = SAFE_ZONE_COLOR
-		label.TextStrokeTransparency = 0
-		label.TextScaled = true
-		label.Font = Enum.Font.GothamBlack
-		label.Parent = billboard
-
-		table.insert(safeZoneParts, part)
-		
-		-- Add ZoneChecker Tag
-		part:SetAttribute("IsSafeZone", true)
-	end
+local function initializeRegions()
+    for _, pos in ipairs(SafeZoneConfig.SAFE_ZONE_LOCATIONS) do
+        table.insert(safeZoneRegions, {
+            CFrame = CFrame.new(pos),
+            Size = SafeZoneConfig.SAFE_ZONE_SIZE
+        })
+    end
 end
 
--- Check logic loop
--- We need to check if players are inside the box.
--- Using GetPartsInPart is accurate.
+-- Efficient OBB (Oriented Bounding Box) Check
+-- Since zones are currently Axis Aligned (Rotation 0), we can use simple AABB
+local function isPointInZone(point: Vector3): boolean
+    for _, zone in ipairs(safeZoneRegions) do
+        local relPos = zone.CFrame:PointToObjectSpace(point)
+        local size = zone.Size
+
+        if math.abs(relPos.X) <= size.X/2 and
+           math.abs(relPos.Y) <= size.Y/2 and
+           math.abs(relPos.Z) <= size.Z/2 then
+            return true
+        end
+    end
+    return false
+end
+
 local function updateSafeZones()
-	local safePlayers = {}
+    -- Only run logic periodically
+    local now = tick()
+    if now < nextCheckTime then return end
+    nextCheckTime = now + CHECK_INTERVAL
 
-	for _, player in ipairs(Players:GetPlayers()) do
-		local char = player.Character
-		if char then
-			local root = char:FindFirstChild("HumanoidRootPart")
-			if root then
-				-- Check against all safe zones
-				for _, zonePart in ipairs(safeZoneParts) do
-					local relPos = zonePart.CFrame:PointToObjectSpace(root.Position)
-					local size = zonePart.Size
+    for _, player in ipairs(Players:GetPlayers()) do
+        local character = player.Character
+        if not character then continue end
 
-					if math.abs(relPos.X) <= size.X/2 and math.abs(relPos.Y) <= size.Y/2 and math.abs(relPos.Z) <= size.Z/2 then
-						-- Level Cap Enforcement
-						local level = player:GetAttribute("Level") or 1
-						if level <= ScalingConfig.SAFE_ZONE_MAX_LEVEL then
-							safePlayers[player] = true
-						end
-						break -- Found one, no need to check others
-					end
-				end
-			end
-		end
-	end
+        local root = character:FindFirstChild("HumanoidRootPart") :: BasePart
+        if not root then continue end
 
-	-- Update Attributes
-	for _, player in ipairs(Players:GetPlayers()) do
-		local wasSafe = player:GetAttribute("SafeZone") == true
-		local isSafe = safePlayers[player] == true
+        -- Level Cap Check first (Cheapest)
+        local level = player:GetAttribute("Level") or 1
+        local isSafe = false
 
-		if isSafe ~= wasSafe then
-			player:SetAttribute("SafeZone", isSafe)
+        if level <= SafeZoneConfig.MAX_LEVEL then
+            -- Spatial Check
+            if isPointInZone(root.Position) then
+                isSafe = true
+            end
+        end
 
-			if isSafe then
-				-- Force ForceField visuals or relying on client HUD?
-				-- Client HUD handles the Harvest button.
-				-- We can give a visual indicator here if we want.
-				local char = player.Character
-				if char then
-					local ff = Instance.new("ForceField")
-					ff.Name = "SafeZoneFF"
-					ff.Visible = false -- Just for logic if needed, or visible for effect
-					ff.Parent = char
-				end
-			else
-				local char = player.Character
-				if char then
-					local ff = char:FindFirstChild("SafeZoneFF")
-					if ff then ff:Destroy() end
-				end
-			end
-		end
-	end
+        -- State Update
+        local wasSafe = player:GetAttribute("SafeZone") == true
+
+        if isSafe ~= wasSafe then
+            player:SetAttribute("SafeZone", isSafe)
+
+            -- ForceField Logic (Server-side Authority)
+            -- While Client visuals are nice, Server FF prevents standard Roblox damage
+            if isSafe then
+                local ff = Instance.new("ForceField")
+                ff.Name = "SafeZoneFF"
+                ff.Visible = false -- Client handles visuals
+                ff.Parent = character
+            else
+                local ff = character:FindFirstChild("SafeZoneFF")
+                if ff then ff:Destroy() end
+            end
+        end
+    end
 end
 
--- Hook into Damage System to prevent damage
--- We need to find where damage is dealt.
--- Since we don't have a centralized Damage Manager exposed fully yet (besides Tracker),
--- We might need to listen to Humanoid.HealthChanged and revert? No, that's hacky.
--- Best is to ensure the Blaster system checks this attribute.
--- OR we use ForceFields which Roblox natively supports for 0 damage.
--- I added a ForceField above. This automatically prevents most damage types in Roblox
--- IF the weapon system respects it or uses Roblox damage.
--- If weapons use custom Raycast -> TakeDamage, they might ignore ForceField.
+function SafeZoneService.Start()
+    print("--- Starting SafeZoneService (Logic Only) ---")
 
--- Let's check Blaster scripts if possible, or assume ForceField works.
--- Most "Blaster" kits use Raycast.
--- If I add a ForceField, `Humanoid:TakeDamage()` usually ignores it?
--- Actually `TakeDamage` respects ForceFields. `Health -= x` does not.
--- Let's hope the blaster uses TakeDamage.
+    initializeRegions()
 
-function SafeZoneManager.Start()
-	print("--- Starting SafeZoneManager ---")
-
-	createSafeZones()
-
-	-- Update loop
-	RunService.Heartbeat:Connect(function()
-		updateSafeZones()
-	end)
+    RunService.Heartbeat:Connect(updateSafeZones)
 end
 
-return SafeZoneManager
+function SafeZoneService.IsPlayerInSafeZone(player: Player): boolean
+    return player:GetAttribute("SafeZone") == true
+end
+
+return SafeZoneService
