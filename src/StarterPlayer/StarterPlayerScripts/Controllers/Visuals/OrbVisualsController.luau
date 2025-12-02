@@ -1,47 +1,57 @@
 --[[
 	Controller: OrbVisualsController
-	Description: Client-side rendering of XP Orbs with pooling and smooth animations.
+	Description: Client-side rendering of XP Orbs using strict types and config.
 	
-	Performance Features:
-	- Part pooling (reuse instances)
-	- Single RenderStepped loop for all orbs
-	- Local visual-only rendering
+	Refactor Goals:
+	- Use `XPOrbConfig` for constants.
+	- Decouple from legacy 'Blaster' remotes.
+	- Maintain efficient pooling.
 	
-	Author: System (Phase 3)
-	Last Updated: 2025-11-29
+	Author: System (Refactored)
+	Last Updated: 2025-01-20
 ]]
+
+--!strict
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
--- local Debris = game:GetService("Debris")
+
+local XPOrbConfig = require(ReplicatedStorage.GameLoop.XPOrbConfig)
+
+-- Types
+type OrbData = XPOrbConfig.OrbData
+type OrbVisual = {
+    part: Part,
+    hitbox: Part,
+    data: XPOrbConfig.OrbEvent, -- Using Event data which is partial OrbData
+    startTime: number,
+    baseY: number,
+    isDrop: boolean
+}
 
 local OrbVisualsController = {}
 
 local player = Players.LocalPlayer
 
--- Configuration
-local POOL_SIZE = 50
-local FLOAT_AMPLITUDE =1.5
-local FLOAT_SPEED = 2
-
-local MAGNET_RADIUS = 50
-local MIN_MAGNET_SPEED = 10
-local MAX_MAGNET_SPEED = 80
-
 -- Part Pool
-local orbPool = {}
-local activeOrbs = {} -- [orbId] = {part, hitbox, data, startTime}
+local orbPool: {Part} = {}
+local activeOrbs: { [number]: OrbVisual } = {}
 
 -- OrbsFolder
 local orbsFolder
 
 -- Remotes
-local orbEvents
-local collectOrbRemote
+local orbEvents: RemoteEvent
+local collectOrbRemote: RemoteEvent
 
--- Get orb folder
+--[[
+    -------------------------------------------------------------------------
+    POOLING
+    -------------------------------------------------------------------------
+]]
+
 local function getOrbsFolder()
 	if not orbsFolder then
 		orbsFolder = Workspace:FindFirstChild("Orbs")
@@ -54,25 +64,28 @@ local function getOrbsFolder()
 	return orbsFolder
 end
 
--- Get orb from pool or create new
-local function getOrbPart()
+local function createOrbTemplate(): Part
+    local orb = Instance.new("Part")
+    orb.Name = "XPOrb"
+    orb.Shape = Enum.PartType.Ball
+    orb.Material = Enum.Material.Glass
+    orb.Transparency = 0.4
+    orb.Reflectance = 0.3
+    orb.Anchored = true
+    orb.CanCollide = false
+    orb.CastShadow = false
+    return orb
+end
+
+local function getOrbPart(): Part
 	local orb = table.remove(orbPool)
 	if not orb then
-		orb = Instance.new("Part")
-		orb.Name = "XPOrb"
-		orb.Shape = Enum.PartType.Ball
-		orb.Material = Enum.Material.Glass
-		orb.Transparency = 0.4
-		orb.Reflectance = 0.3
-		orb.Anchored = true
-		orb.CanCollide = false
-		orb.CastShadow = false
+		orb = createOrbTemplate()
 	end
 	return orb
 end
 
--- Return orb to pool
-local function returnOrbPart(orb)
+local function returnOrbPart(orb: Part)
 	if orb and orb.Parent then
 		orb.Parent = nil
 		-- Clean up children
@@ -83,8 +96,15 @@ local function returnOrbPart(orb)
 	end
 end
 
--- Spawn orb visual
-local function spawnOrbVisual(orbData)
+--[[
+    -------------------------------------------------------------------------
+    RENDERING
+    -------------------------------------------------------------------------
+]]
+
+local function spawnOrbVisual(orbData: XPOrbConfig.OrbEvent)
+    if not orbData.Position or not orbData.Tier then return end
+
 	local orb = getOrbPart()
 	
 	-- Set properties
@@ -97,8 +117,8 @@ local function spawnOrbVisual(orbData)
 	hitbox.Name = "Hitbox"
 	hitbox.Size = orbData.Tier.Size * 3
 	hitbox.Transparency = 1
-	hitbox.CanCollide = false -- Don't block movement
-	hitbox.CanTouch = true -- But DO detect touches
+	hitbox.CanCollide = false
+	hitbox.CanTouch = true
 	hitbox.Anchored = true
 	hitbox.CastShadow = false
 	hitbox.Parent = orb
@@ -127,10 +147,8 @@ local function spawnOrbVisual(orbData)
 	particles.LightEmission = 1
 	particles.Parent = orb
 	
-	-- Parent to workspace
 	orb.Parent = getOrbsFolder()
 	
-	-- Store active orb data
 	activeOrbs[orbData.Id] = {
 		part = orb,
 		hitbox = hitbox,
@@ -150,26 +168,22 @@ local function spawnOrbVisual(orbData)
 			local humanoid = character:FindFirstChild("Humanoid")
 			if humanoid and humanoid.Health > 0 then
 				collected = true
-				-- Request collection from server
 				collectOrbRemote:FireServer(orbData.Id)
 			end
 		end
 	end)
 	
-	-- Drop animation (if death drop)
+	-- Drop animation
 	if orbData.IsDrop then
-		-- Target is the actual spawn position (on ground)
 		local targetPos = orbData.Position
 		
 		task.spawn(function()
 			local t = 0
-			-- local duration = 0.5
-			-- Start from above
 			local startPos = orbData.Position + Vector3.new(0, 10, 0)
 			orb.Position = startPos
 			
 			while t < 1 and orb.Parent and activeOrbs[orbData.Id] do
-				t = t + 0.1
+				t += 0.1
 				local linear = startPos:Lerp(targetPos, t)
 				local height = math.sin(t * math.pi) * 10
 				orb.Position = linear + Vector3.new(0, height, 0)
@@ -184,8 +198,7 @@ local function spawnOrbVisual(orbData)
 	end
 end
 
--- Despawn orb visual
-local function despawnOrbVisual(orbId)
+local function despawnOrbVisual(orbId: number)
 	local orbData = activeOrbs[orbId]
 	if orbData then
 		returnOrbPart(orbData.part)
@@ -193,8 +206,13 @@ local function despawnOrbVisual(orbId)
 	end
 end
 
--- Animation loop (single RenderStepped for all orbs)
-local function updateOrbVisuals(dt)
+--[[
+    -------------------------------------------------------------------------
+    LOOP
+    -------------------------------------------------------------------------
+]]
+
+local function updateOrbVisuals(dt: number)
 	local currentTime = tick()
 	
 	for orbId, orbData in pairs(activeOrbs) do
@@ -202,7 +220,6 @@ local function updateOrbVisuals(dt)
 		local hitbox = orbData.hitbox
 		
 		if not orb.Parent then
-			-- Orb was destroyed externally
 			activeOrbs[orbId] = nil
 			continue
 		end
@@ -212,38 +229,35 @@ local function updateOrbVisuals(dt)
 		-- Magnetism (Client Prediction)
 		local character = player.Character
 		if character and character:FindFirstChild("HumanoidRootPart") then
-			local root = character.HumanoidRootPart
+			local root = character.HumanoidRootPart :: BasePart
 			local dist = (root.Position - orb.Position).Magnitude
 			
-			if dist < MAGNET_RADIUS then
+			if dist < XPOrbConfig.MAGNET_RADIUS then
 				local direction = (root.Position - orb.Position).Unit
-				local speedAlpha = 1 - math.clamp(dist / MAGNET_RADIUS, 0, 1)
-				local currentSpeed = MIN_MAGNET_SPEED + (MAX_MAGNET_SPEED - MIN_MAGNET_SPEED) * speedAlpha
+				local speedAlpha = 1 - math.clamp(dist / XPOrbConfig.MAGNET_RADIUS, 0, 1)
+				local currentSpeed = XPOrbConfig.MIN_MAGNET_SPEED + (XPOrbConfig.MAX_MAGNET_SPEED - XPOrbConfig.MIN_MAGNET_SPEED) * speedAlpha
 				
 				local moveVec = direction * currentSpeed * dt
 				
-				-- Update base position (X/Z are in part, Y is in baseY)
-				orb.Position = orb.Position + moveVec
-				orbData.baseY = orbData.baseY + moveVec.Y
+				orb.Position += moveVec
+				orbData.baseY += moveVec.Y
 			end
 		end
 		
-		-- Floating animation
-		local floatOffset = math.sin(elapsed * FLOAT_SPEED) * FLOAT_AMPLITUDE
-		orb.Position = Vector3.new(orb.Position.X, orbData.baseY + floatOffset + FLOAT_AMPLITUDE, orb.Position.Z)
+		-- Floating
+		local floatOffset = math.sin(elapsed * XPOrbConfig.FLOAT_SPEED) * XPOrbConfig.FLOAT_AMPLITUDE
+		orb.Position = Vector3.new(orb.Position.X, orbData.baseY + floatOffset + XPOrbConfig.FLOAT_AMPLITUDE, orb.Position.Z)
 		
 		-- Rotation
 		orb.Orientation = Vector3.new(0, elapsed * 60, 0)
 		
-		-- Update hitbox (FIX: This was missing!)
 		if hitbox and hitbox.Parent then
 			hitbox.CFrame = orb.CFrame
 		end
 	end
 end
 
--- Handle server events
-local function onOrbEvent(eventData)
+local function onOrbEvent(eventData: XPOrbConfig.OrbEvent)
 	if eventData.Action == "Spawn" then
 		spawnOrbVisual(eventData)
 	elseif eventData.Action == "Despawn" then
@@ -251,13 +265,21 @@ local function onOrbEvent(eventData)
 	end
 end
 
+--[[
+    -------------------------------------------------------------------------
+    INIT
+    -------------------------------------------------------------------------
+]]
+
 function OrbVisualsController.Start()
 	print("🌟 OrbVisualsController: Starting client-side orb rendering...")
 	
-	-- Get remotes
-	local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes")
-	orbEvents = remotes:WaitForChild("OrbEvents", 30)
-	collectOrbRemote = remotes:WaitForChild("CollectOrb", 30)
+	-- Networking Discovery
+    local networking = ReplicatedStorage:WaitForChild("Networking", 10)
+    if not networking then warn("❌ Missing ReplicatedStorage.Networking") return end
+
+	orbEvents = networking:WaitForChild("OrbEvents", 10) :: RemoteEvent
+	collectOrbRemote = networking:WaitForChild("CollectOrb", 10) :: RemoteEvent
 	
 	if not orbEvents or not collectOrbRemote then
 		warn("❌ OrbVisualsController: Failed to find orb remotes!")
@@ -265,26 +287,15 @@ function OrbVisualsController.Start()
 	end
 	
 	-- Pre-populate pool
-	for i = 1, POOL_SIZE do
-		local orb = Instance.new("Part")
-		orb.Name = "XPOrb"
-		orb.Shape = Enum.PartType.Ball
-		orb.Material = Enum.Material.Glass
-		orb.Transparency = 0.4
-		orb.Reflectance = 0.3
-		orb.Anchored = true
-		orb.CanCollide = false
-		orb.CastShadow = false
-		table.insert(orbPool, orb)
+	for i = 1, XPOrbConfig.POOL_SIZE do
+		table.insert(orbPool, createOrbTemplate())
 	end
 	
-	-- Listen for orb events
+	-- Listeners
 	orbEvents.OnClientEvent:Connect(onOrbEvent)
-	
-	-- Start animation loop
 	RunService.RenderStepped:Connect(updateOrbVisuals)
 	
-	print("✅ OrbVisualsController: Ready (Pool size:", POOL_SIZE, ")")
+	print("✅ OrbVisualsController: Ready (Pool size:", XPOrbConfig.POOL_SIZE, ")")
 end
 
 return OrbVisualsController
