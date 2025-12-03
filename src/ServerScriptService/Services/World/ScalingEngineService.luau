@@ -84,7 +84,7 @@ function ScalingEngine.UpdateCharacter(character: Model, biomass: number)
 	
 	-- print(string.format("[ScalingDebug] Char: %s, Biomass: %d, Level: %.2f, Scale: %.2f", character.Name, biomass, smoothLevel, scale))
 	
-	local baseMaxHealth = ScalingConfig.GetMaxHealth(math.floor(currentLevel)) -- Use INTEGER LEVEL for health (step scaling)
+	local baseMaxHealth = ScalingConfig.GetMaxHealth(smoothLevel) -- Smooth scaling with biomass like size
 	local baseWalkSpeed = ScalingConfig.GetWalkSpeed(smoothLevel) -- Keep speed smooth or step? User said HP. Keeping speed smooth for now.
 
 	-- 2. Apply Mutation Modifiers
