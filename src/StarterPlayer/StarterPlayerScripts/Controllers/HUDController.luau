@@ -1545,6 +1545,11 @@ function HUDController.Start()
 
 	player:GetAttributeChangedSignal("Kills"):Connect(updateKills)
 	player:GetAttributeChangedSignal("SafeZone"):Connect(updateHarvestButton)
+	player:GetAttributeChangedSignal("DNA"):Connect(function()
+		local dna = player:GetAttribute("DNA") or 0
+		hud.DNALabel.Text = "DNA: " .. math.floor(dna)
+		currentDNA = dna
+	end)
 
 	-- Tool Connections
 	local function onChildAdded(child)
@@ -1617,6 +1622,13 @@ function HUDController.Start()
 		if reqRemote then
 			local dna, upgrades, biomass = reqRemote:InvokeServer()
 			updateMetaStats(dna, upgrades, biomass)
+		end
+
+		-- Also read DNA attribute directly as backup (in case it's set but remote hasn't fired)
+		local attrDNA = player:GetAttribute("DNA")
+		if attrDNA and attrDNA > 0 then
+			hud.DNALabel.Text = "DNA: " .. math.floor(attrDNA)
+			currentDNA = attrDNA
 		end
 	end)
 

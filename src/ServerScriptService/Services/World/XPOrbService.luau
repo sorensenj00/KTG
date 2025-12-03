@@ -334,12 +334,19 @@ function XPOrbService.CollectOrb(entity: Model, orbId: number)
 end
 
 -- PUBLIC API: Get nearest orb to a position
+-- Bots only target orbs near ground level (Y 95-110) to avoid chasing unreachable orbs on furniture
+local BOT_ORB_MIN_Y = 95
+local BOT_ORB_MAX_Y = 110
+
 function XPOrbService.GetNearestOrb(position: Vector3, maxRange: number, excludeList: {[number]: boolean}?)
 	local bestOrb = nil
 	local bestDist = maxRange
 
 	for _, orb in pairs(activeOrbs) do
 		if excludeList and excludeList[orb.id] then continue end
+		
+		-- Filter out orbs that are too high or low (likely on furniture/models)
+		if orb.position.Y < BOT_ORB_MIN_Y or orb.position.Y > BOT_ORB_MAX_Y then continue end
 
 		local dist = (orb.position - position).Magnitude
 		if dist < bestDist then

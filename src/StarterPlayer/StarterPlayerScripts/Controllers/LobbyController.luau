@@ -320,6 +320,21 @@ function LobbyController.Start()
 
 		updateStats() -- Initial update
 
+		-- Request saved DNA from server (attributes may not be set yet at load time)
+		task.spawn(function()
+			local ReplicatedStorage = game:GetService("ReplicatedStorage")
+			local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
+			if remotes then
+				local reqRemote = remotes:WaitForChild("RequestMetaData", 10)
+				if reqRemote then
+					local dna, _upgrades, _biomass = reqRemote:InvokeServer()
+					if dna then
+						statsLabels["DNA"].Text = "DNA: " .. math.floor(dna)
+					end
+				end
+			end
+		end)
+
 		-- ============================================
 		-- 2c. How To Play Section (Below Stats)
 		-- ============================================
@@ -366,7 +381,7 @@ function LobbyController.Start()
 			"🔹 Buy Mutations in the shop to get stronger",
 			"🔹 Reach Level 50 to WIN and earn a huge DNA",
 			"🔹 Use Yeetcannons around the map to get yeeted!",
-			"🔹 Mutations persist between sessions!",
+			"🔹 DNA and Mutations persist between sessions!",
 		}
 
 		for i, tip in ipairs(tipsList) do

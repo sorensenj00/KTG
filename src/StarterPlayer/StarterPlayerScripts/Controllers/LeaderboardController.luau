@@ -20,7 +20,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 -- Constants
 local MAX_ENTRIES = 5
-local UPDATE_RATE = 1 -- Update every 1 second to avoid spam
+local UPDATE_RATE = 3 -- Update every 3 second to avoid spam
 
 -- Colors
 local COLORS = {
@@ -82,16 +82,20 @@ local function createEntry(rank, playerObj, biomass, kills)
 	avatarBg.Size = UDim2.fromOffset(60, 60)
 	avatarBg.Position = UDim2.fromScale(0.5, 0)
 	avatarBg.AnchorPoint = Vector2.new(0.5, 0)
-	avatarBg.BackgroundColor3 = if rank == 1 then COLORS.RANK_1 elseif rank == 2 then COLORS.RANK_2 elseif rank == 3 then COLORS.RANK_3 else COLORS.RANK_OTHER
+	avatarBg.BackgroundColor3 = if rank == 1
+		then COLORS.RANK_1
+		elseif rank == 2 then COLORS.RANK_2
+		elseif rank == 3 then COLORS.RANK_3
+		else COLORS.RANK_OTHER
 	avatarBg.BorderSizePixel = 0
 	avatarBg.Parent = entryFrame
 
 	local avatarCorner = Instance.new("UICorner")
 	avatarCorner.CornerRadius = UDim.new(1, 0) -- Circle
 	avatarCorner.Parent = avatarBg
-	
+
 	local avatarStroke = Instance.new("UIStroke")
-	avatarStroke.Color = Color3.new(0,0,0)
+	avatarStroke.Color = Color3.new(0, 0, 0)
 	avatarStroke.Thickness = 2
 	avatarStroke.Parent = avatarBg
 
@@ -104,14 +108,15 @@ local function createEntry(rank, playerObj, biomass, kills)
 	avatarImage.BackgroundTransparency = 1
 	avatarImage.Image = ""
 	avatarImage.Parent = avatarBg
-	
+
 	local avatarImageCorner = Instance.new("UICorner")
 	avatarImageCorner.CornerRadius = UDim.new(1, 0)
 	avatarImageCorner.Parent = avatarImage
 
 	-- Load Avatar
 	task.spawn(function()
-		local content, isReady = Players:GetUserThumbnailAsync(playerObj.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+		local content, isReady =
+			Players:GetUserThumbnailAsync(playerObj.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
 		if isReady then
 			avatarImage.Image = content
 		end
@@ -129,7 +134,7 @@ local function createEntry(rank, playerObj, biomass, kills)
 	rankLabel.TextSize = 12
 	rankLabel.Font = Enum.Font.GothamBold
 	rankLabel.Parent = avatarBg
-	
+
 	local rankCorner = Instance.new("UICorner")
 	rankCorner.CornerRadius = UDim.new(0.5, 0)
 	rankCorner.Parent = rankLabel
@@ -157,7 +162,9 @@ local function createEntry(rank, playerObj, biomass, kills)
 	sizeLabel.TextColor3 = COLORS.RANK_1 -- Gold text for size
 	sizeLabel.TextSize = 16
 	sizeLabel.Font = Enum.Font.LuckiestGuy
-	if not pcall(function() sizeLabel.Font = Enum.Font.LuckiestGuy end) then
+	if not pcall(function()
+		sizeLabel.Font = Enum.Font.LuckiestGuy
+	end) then
 		sizeLabel.Font = Enum.Font.GothamBlack
 	end
 	sizeLabel.TextStrokeTransparency = 0
@@ -185,11 +192,13 @@ end
 -- --- Logic --- --
 
 local function updateLeaderboard()
-	if not container then return end
+	if not container then
+		return
+	end
 
 	-- Gather all players and bots (if applicable, but focusing on players for now)
 	local playerList = {}
-	
+
 	for _, p in ipairs(Players:GetPlayers()) do
 		local biomass = p:GetAttribute("Biomass") or 0
 		local kills = p:GetAttribute("Kills") or 0
@@ -197,10 +206,10 @@ local function updateLeaderboard()
 			Player = p,
 			Biomass = biomass,
 			Kills = kills,
-			IsBot = false
+			IsBot = false,
 		})
 	end
-	
+
 	-- TODO: Add Bot support if they have accessible attributes or a central registry
 	-- For now, just players as per standard leaderboard
 
@@ -232,14 +241,14 @@ local LeaderboardController = {}
 function LeaderboardController.Start()
 	print("🏆 LeaderboardController: Starting...")
 	_leaderboardGui, container = createLeaderboardUI()
-	
+
 	-- Initial Update
 	updateLeaderboard()
 
 	-- Listen for updates
 	-- We can use a loop or events. Events are better but AttributeChanged on all players can be messy to manage.
 	-- A slow loop (1s) is often sufficient for leaderboards and less error prone with player joining/leaving.
-	
+
 	RunService.Heartbeat:Connect(function(dt)
 		lastUpdate = lastUpdate + dt
 		if lastUpdate >= UPDATE_RATE then
@@ -247,15 +256,17 @@ function LeaderboardController.Start()
 			updateLeaderboard()
 		end
 	end)
-	
+
 	-- Input Listener
 	UserInputService.InputBegan:Connect(function(input, processed)
-		if processed then return end
+		if processed then
+			return
+		end
 		if input.KeyCode == Enum.KeyCode.Tab then
 			_leaderboardGui.Enabled = not _leaderboardGui.Enabled
 		end
 	end)
-	
+
 	print("✅ LeaderboardController: Initialized")
 end
 

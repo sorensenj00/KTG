@@ -180,6 +180,13 @@ end
 
 --== Combat Tracking ==--
 
+local function resetAllCombatStates()
+	for _, data in activeUIs do
+		data.inCombat = false
+		data.lastDamage = 0
+	end
+end
+
 local function setupCombatTracking()
 	local remotes = ReplicatedStorage:FindFirstChild("Blaster")
 	if not remotes then
@@ -191,26 +198,20 @@ local function setupCombatTracking()
 	end
 
 	local damageRemote = remotes:FindFirstChild("PlayerDamagedEntity")
-	if not damageRemote then
-		return
+	if damageRemote then
+		damageRemote.OnClientEvent:Connect(function(entity)
+			local data = activeUIs[entity]
+			if data then
+				data.lastDamage = tick()
+				data.inCombat = true
+			end
+		end)
 	end
-
-	damageRemote.OnClientEvent:Connect(function(entity)
-		local data = activeUIs[entity]
-		if data then
-			data.lastDamage = tick()
-			data.inCombat = true
-		end
-	end)
-
-	-- Reset combat on respawn
-	LocalPlayer.CharacterRemoving:Connect(function()
-		for _, data in activeUIs do
-			data.inCombat = false
-			data.lastDamage = 0
-		end
-	end)
 end
+
+-- Reset combat visibility on death AND respawn (outside of setupCombatTracking to always run)
+LocalPlayer.CharacterRemoving:Connect(resetAllCombatStates)
+LocalPlayer.CharacterAdded:Connect(resetAllCombatStates)
 
 --== Main Update Loop ==--
 

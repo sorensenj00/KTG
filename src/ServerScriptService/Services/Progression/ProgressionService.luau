@@ -166,7 +166,27 @@ local function initializePlayer(player: Player)
 	end)
 end
 
+-- Helper: Calculate level from total biomass (cumulative thresholds)
+local function getLevelFromBiomass(totalBiomass: number): number
+	local level = 1
+	local cumulativeRequired = 0
+	
+	while level < ScalingConfig.MAX_LEVEL do
+		local nextLevelReq = ScalingConfig.GetXPRequired(level)
+		if totalBiomass >= cumulativeRequired + nextLevelReq then
+			cumulativeRequired = cumulativeRequired + nextLevelReq
+			level = level + 1
+		else
+			break
+		end
+	end
+	
+	return level
+end
+
 -- Public API: Add Biomass (Formerly XP)
+-- NOTE: Biomass is cumulative and NOT consumed on level up.
+-- Biomass only changes on harvest (gain) or death (lose).
 function ProgressionManager.AddBiomass(target: Instance, amount: number)
 	local isPlayer = target:IsA("Player")
 	local isBot = target:IsA("Model") and CollectionService:HasTag(target, "BotAI")
@@ -182,59 +202,35 @@ function ProgressionManager.AddBiomass(target: Instance, amount: number)
 
 	local currentBiomass = target:GetAttribute("Biomass") or 0
 	local totalBiomass = currentBiomass + amount
-	local levelsGained = 0
+	
+	-- Calculate new level from total cumulative biomass (NOT consumed)
+	local newLevel = getLevelFromBiomass(totalBiomass)
+	newLevel = math.min(newLevel, ScalingConfig.MAX_LEVEL)
+	
+	local levelsGained = newLevel - currentLevel
 
-	-- Calc Level Up
-	while true do
-		if currentLevel >= ScalingConfig.MAX_LEVEL then
-			totalBiomass = 0
-			break
-		end
-
-		local biomassRequired = ScalingConfig.GetXPRequired(currentLevel) -- Config uses "XP" naming for legacy compatibility
-		if totalBiomass >= biomassRequired then
-			totalBiomass = totalBiomass - biomassRequired
-			currentLevel = currentLevel + 1
-			levelsGained = levelsGained + 1
-			
-			-- Update Level attribute FIRST so scaling can use it
-			target:SetAttribute("Level", currentLevel)
-			target:SetAttribute("Biomass", totalBiomass)
-			
-			-- Update scaling BEFORE healing (so MaxHealth is calculated with new biomass)
-			if isPlayer and target:IsA("Player") and target.Character then
-				ScalingEngine.UpdateCharacter(target.Character, totalBiomass)
-				local humanoid = target.Character:FindFirstChild("Humanoid")
-				if humanoid then
-					humanoid.Health = humanoid.MaxHealth -- Now heals to the NEW MaxHealth
-				end
-			elseif isBot and target:IsA("Model") then
-				ScalingEngine.UpdateCharacter(target, totalBiomass)
-				local humanoid = target:FindFirstChild("Humanoid")
-				if humanoid then
-					humanoid.Health = humanoid.MaxHealth -- Now heals to the NEW MaxHealth
-				end
-			end
-		else
-			break
-		end
-	end
-
-	-- Update Attributes if not already set during level up
-	target:SetAttribute("Level", currentLevel)
+	-- Update attributes
 	target:SetAttribute("Biomass", totalBiomass)
-
-	-- Force final Scaling Update for smooth scaling (only if we didn't level up)
-	-- If we leveled up, scaling was already applied during the level up with full heal
-	-- [FIX] Removed unthrottled update here to prevent stutter. 
-	-- The attribute change listener (setupPlayerScaling) will handle it with throttling (enforceEntityStats).
-	if levelsGained == 0 then
-		-- Let the throttled listener handle it
-	end
-
+	
 	if levelsGained > 0 then
-		-- print(string.format("⬆️ %s leveled up to %d", target.Name, currentLevel))
-		if currentLevel >= ScalingConfig.MAX_LEVEL then
+		target:SetAttribute("Level", newLevel)
+		
+		-- Update scaling and heal on level up
+		if isPlayer and target:IsA("Player") and target.Character then
+			ScalingEngine.UpdateCharacter(target.Character, totalBiomass)
+			local humanoid = target.Character:FindFirstChild("Humanoid")
+			if humanoid then
+				humanoid.Health = humanoid.MaxHealth
+			end
+		elseif isBot and target:IsA("Model") then
+			ScalingEngine.UpdateCharacter(target, totalBiomass)
+			local humanoid = target:FindFirstChild("Humanoid")
+			if humanoid then
+				humanoid.Health = humanoid.MaxHealth
+			end
+		end
+		
+		if newLevel >= ScalingConfig.MAX_LEVEL then
 			ProgressionManager.PlayerReachedMaxLevel:Fire(target)
 		end
 	end
