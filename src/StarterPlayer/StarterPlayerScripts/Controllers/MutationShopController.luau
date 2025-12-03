@@ -239,6 +239,21 @@ local function createCard(name, data, index)
             if title then
                 title.TextColor3 = Color3.fromRGB(150, 150, 150)
             end
+
+            -- Update Level Bar (Immediate Feedback)
+            local barContainer = card:FindFirstChild("LevelBar")
+            if barContainer then
+                -- We need to know the new level. We can assume it's +1 from previous.
+                -- But we didn't store the previous level easily.
+                -- However, we can just light up the next inactive segment.
+                for _, segment in ipairs(barContainer:GetChildren()) do
+                    if segment:IsA("Frame") and segment.BackgroundColor3 == Color3.fromRGB(60, 60, 70) then
+                        -- Found the first inactive segment, light it up
+                        segment.BackgroundColor3 = mutationConfig.RarityColors[data.Rarity] or Color3.new(1,1,1)
+                        break -- Only light up one
+                    end
+                end
+            end
             
             -- Disable Hover
             card.Active = false

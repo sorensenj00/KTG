@@ -910,6 +910,37 @@ local function createUpgradeCard(statName: string, upgradeConfig: any)
 			local success, _message = purchaseUpgradeRemote:InvokeServer(statName)
 			if success then
 				playSound(SOUNDS.Purchase)
+				
+				-- Immediate Local Update (Optimistic)
+				local currentLvl = currentUpgrades[statName] or 0
+				local newLvl = currentLvl + 1
+				currentUpgrades[statName] = newLvl
+				
+				-- Recalculate Cost for Next Level
+				local nextCost = MetaConfig.GetCost(statName, newLvl)
+				
+				-- Update UI Elements directly
+				local percent = math.clamp(newLvl / upgradeConfig.MaxLevel, 0, 1)
+				progressBarFill.Size = UDim2.fromScale(percent, 1)
+				
+				levelLabel.Text = string.format("Level %d / %d", newLvl, upgradeConfig.MaxLevel)
+				
+				if newLvl >= upgradeConfig.MaxLevel then
+					costLabel.Text = "MAX"
+					purchaseButton.BackgroundColor3 = COLORS.XP_GOLD
+					purchaseButton.Text = "MAXED"
+					purchaseButton.Active = false
+				else
+					costLabel.Text = string.format("%d DNA", math.floor(nextCost))
+					-- Button state will be re-evaluated on next updateShopUI or we can do it here
+					-- But simpler to just let the loop or next update handle the button color/active state based on DNA
+					-- For now, just update the text/bar which is the visual feedback requested.
+				end
+				
+				-- Deduct DNA locally for display?
+				-- currentDNA = currentDNA - (MetaConfig.GetCost(statName, currentLvl)) -- Need cost of *purchased* level
+				-- Actually, better to wait for server update for currency to avoid desync, 
+				-- but the bar/level is safe to increment.
 			else
 				playSound(SOUNDS.Error)
 			end

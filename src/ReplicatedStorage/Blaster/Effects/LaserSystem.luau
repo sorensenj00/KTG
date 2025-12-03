@@ -118,7 +118,7 @@ local function createLaserBeam(startPosition, endPosition)
 	container.Parent = Workspace
 
 	-- Get references to children
-	local att0 = container:FindFirstChild("Att0")
+	--local att0 = container:FindFirstChild("Att0")
 	local att1 = container:FindFirstChild("Att1")
 	local coreBeam = container:FindFirstChild("CoreBeam")
 	local glowBeam = container:FindFirstChild("GlowBeam")
