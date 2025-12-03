@@ -1,38 +1,5 @@
 --[[
-    Controller: BlasterController
-    Description: Manages weapon input, viewmodels, client-side raycasting, and shot replication.
-    Handles mouse input, plays local sounds/animations, applies camera recoil, and fires server events.
-    Also listens for ReplicateShot to draw beams for other players' shots.
-    
-    Dependencies:
-    - Players (Roblox Service)
-    - ReplicatedStorage (Roblox Service)
-    - UserInputService (Roblox Service)
-    - Workspace (Roblox Service)
-    - ReplicatedStorage.Blaster.Constants
-    - ReplicatedStorage.Blaster.Scripts.AimAssistController
-    - ReplicatedStorage.Blaster.Scripts.TouchInputController
-    - ReplicatedStorage.Blaster.Scripts.ViewModelController
-    - ReplicatedStorage.Blaster.Scripts.CharacterAnimationController
-    - ReplicatedStorage.Blaster.Scripts.HitmarkerController
-    - ReplicatedStorage.Blaster.Audio.AudioController
-    - ReplicatedStorage.Blaster.Utility.getRayDirections
-    - ReplicatedStorage.Blaster.Utility.drawRayResults
-    - ReplicatedStorage.Blaster.Utility.castRays
-    - ReplicatedStorage.Blaster.Utility.playSoundFromSource
-    - ReplicatedStorage.Utility.disconnectAndClear
-    - Controllers.CameraController
-    - ReplicatedStorage.Blaster.Remotes.Shoot (RemoteEvent)
-    - ReplicatedStorage.Blaster.Remotes.Reload (RemoteEvent)
-    - ReplicatedStorage.Blaster.Remotes.ReplicateShot (RemoteEvent)
-    - ReplicatedStorage.Blaster.Remotes.Killfeed (RemoteEvent)
-    
-    Public API:
-    - Start(): void - Initialize the controller and set up ReplicateShot listener
-    - new(blaster: Tool): BlasterController - Create a new BlasterController instance for a tool
-    
-    Author: System
-    Last Updated: 2025-01-20
+	BlasterController: Weapon input, viewmodels, client-side raycasting, shot replication
 ]]
 
 local Players = game:GetService("Players")
@@ -40,423 +7,409 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
-local Constants = require(ReplicatedStorage.Blaster.Constants)
-local AimAssistController = require(ReplicatedStorage.Blaster.Scripts.AimAssistController)
-local AimAssistEnum = require(ReplicatedStorage.Blaster.Scripts.AimAssistController.AimAssistEnum)
-local TouchInputController = require(ReplicatedStorage.Blaster.Scripts.TouchInputController)
-local ViewModelController = require(ReplicatedStorage.Blaster.Scripts.ViewModelController)
-local CharacterAnimationController = require(ReplicatedStorage.Blaster.Scripts.CharacterAnimationController)
-local HitmarkerController = require(ReplicatedStorage.Blaster.Scripts.HitmarkerController)
-local AudioController = require(ReplicatedStorage.Blaster.Audio.AudioController)
+local Blaster = ReplicatedStorage.Blaster
+local Constants = require(Blaster.Constants)
+local AimAssistController = require(Blaster.Scripts.AimAssistController)
+local AimAssistEnum = require(Blaster.Scripts.AimAssistController.AimAssistEnum)
+local TouchInputController = require(Blaster.Scripts.TouchInputController)
+local ViewModelController = require(Blaster.Scripts.ViewModelController)
+local CharacterAnimationController = require(Blaster.Scripts.CharacterAnimationController)
+local HitmarkerController = require(Blaster.Scripts.HitmarkerController)
+local AudioController = require(Blaster.Audio.AudioController)
 local disconnectAndClear = require(ReplicatedStorage.Utility.disconnectAndClear)
-local getRayDirections = require(ReplicatedStorage.Blaster.Utility.getRayDirections)
-local drawRayResults = require(ReplicatedStorage.Blaster.Utility.drawRayResults)
-local castRays = require(ReplicatedStorage.Blaster.Utility.castRays)
-local playSoundFromSource = require(ReplicatedStorage.Blaster.Utility.playSoundFromSource)
+local getRayDirections = require(Blaster.Utility.getRayDirections)
+local drawRayResults = require(Blaster.Utility.drawRayResults)
+local castRays = require(Blaster.Utility.castRays)
+local playSoundFromSource = require(Blaster.Utility.playSoundFromSource)
 
--- Lazy load CameraController to avoid circular dependency
-local CameraController = nil
-local function getCameraController()
+local Player = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+local Remotes = Blaster:WaitForChild("Remotes")
+local ShootRemote = Remotes:WaitForChild("Shoot")
+local ReloadRemote = Remotes:WaitForChild("Reload")
+local Random = Random.new()
+
+-- Lazy load to avoid circular dependency
+local CameraController
+local function getCamera()
 	if not CameraController then
 		CameraController = require(script.Parent.CameraController)
 	end
 	return CameraController
 end
 
-local player = Players.LocalPlayer
-local camera = Workspace.CurrentCamera
-local remotes = ReplicatedStorage.Blaster:WaitForChild("Remotes")
-local shootRemote = remotes:WaitForChild("Shoot")
-local reloadRemote = remotes:WaitForChild("Reload")
-local random = Random.new()
-
 local BlasterController = {}
 BlasterController.__index = BlasterController
 
+--== Constructor ==--
+
 function BlasterController.new(blaster: Tool)
-	local aimAssistController = AimAssistController.new()
-	local viewModelController = ViewModelController.new(blaster)
-	local hitmarkerController = HitmarkerController.new()
-	local touchInputController = TouchInputController.new(blaster)
-	local characterAnimationController = CharacterAnimationController.new(blaster)
-	local audioController = AudioController.new()
-	local self = {
+	local self = setmetatable({
 		blaster = blaster,
-		aimAssistController = aimAssistController,
-		viewModelController = viewModelController,
-		hitmarkerController = hitmarkerController,
-		touchInputController = touchInputController,
-		characterAnimationController = characterAnimationController,
-		audioController = audioController,
+		aimAssist = AimAssistController.new(),
+		viewModel = ViewModelController.new(blaster),
+		hitmarker = HitmarkerController.new(),
+		touchInput = TouchInputController.new(blaster),
+		charAnim = CharacterAnimationController.new(blaster),
+		audio = AudioController.new(),
 		activated = false,
 		equipped = false,
 		shooting = false,
 		ammo = blaster:GetAttribute(Constants.AMMO_ATTRIBUTE),
 		reloading = blaster:GetAttribute(Constants.RELOADING_ATTRIBUTE),
+		reloadTask = nil,
+		humanoid = nil,
 		connections = {},
 		shootHaptic = blaster:WaitForChild("Haptics"):WaitForChild("ShootHaptic"),
-	}
-	setmetatable(self, BlasterController)
-	self:initialize()
+	}, BlasterController)
+
+	self:_bindEvents()
 	return self
 end
 
-function BlasterController:isHumanoidAlive(): boolean
+--== State Checks ==--
+
+function BlasterController:_isAlive()
 	return self.humanoid and self.humanoid.Health > 0
 end
 
-function BlasterController:canShoot(): boolean
-	return self:isHumanoidAlive() and self.equipped and self.ammo > 0 and not self.reloading
+function BlasterController:_canShoot()
+	return self:_isAlive() and self.equipped and self.ammo > 0 and not self.reloading
 end
 
-function BlasterController:canReload(): boolean
-	local magazineSize = self.blaster:GetAttribute(Constants.MAGAZINE_SIZE_ATTRIBUTE)
-	return self:isHumanoidAlive() and self.equipped and self.ammo < magazineSize and not self.reloading
+function BlasterController:_canReload()
+	local magSize = self.blaster:GetAttribute(Constants.MAGAZINE_SIZE_ATTRIBUTE)
+	return self:_isAlive() and self.equipped and self.ammo < magSize and not self.reloading
 end
 
-function BlasterController:recoil()
-	local recoilMin = self.blaster:GetAttribute(Constants.RECOIL_MIN_ATTRIBUTE)
-	local recoilMax = self.blaster:GetAttribute(Constants.RECOIL_MAX_ATTRIBUTE)
-	local xDif = recoilMax.X - recoilMin.X
-	local yDif = recoilMax.Y - recoilMin.Y
-	local x = recoilMin.X + random:NextNumber() * xDif
-	local y = recoilMin.Y + random:NextNumber() * yDif
-	local recoil = Vector2.new(math.rad(-x), math.rad(y))
-	getCameraController().Recoil(recoil)
+--== Actions ==--
+
+function BlasterController:_applyRecoil()
+	local min = self.blaster:GetAttribute(Constants.RECOIL_MIN_ATTRIBUTE)
+	local max = self.blaster:GetAttribute(Constants.RECOIL_MAX_ATTRIBUTE)
+	local x = min.X + Random:NextNumber() * (max.X - min.X)
+	local y = min.Y + Random:NextNumber() * (max.Y - min.Y)
+	getCamera().Recoil(Vector2.new(math.rad(-x), math.rad(y)))
 end
 
-function BlasterController:shoot()
+function BlasterController:_shoot()
 	local spread = self.blaster:GetAttribute(Constants.SPREAD_ATTRIBUTE)
 	local raysPerShot = self.blaster:GetAttribute(Constants.RAYS_PER_SHOT_ATTRIBUTE)
 	local range = self.blaster:GetAttribute(Constants.RANGE_ATTRIBUTE)
 	local rayRadius = self.blaster:GetAttribute(Constants.RAY_RADIUS_ATTRIBUTE)
-	self.viewModelController:playShootAnimation()
-	self.characterAnimationController:playShootAnimation()
-	self:recoil()
+
+	-- Animations & effects
+	self.viewModel:playShootAnimation()
+	self.charAnim:playShootAnimation()
+	self:_applyRecoil()
+
+	-- Decrement ammo
 	self.ammo -= 1
+
+	-- Cast rays
 	local now = Workspace:GetServerTimeNow()
-	local origin = camera.CFrame
-	local rayDirections = getRayDirections(origin, raysPerShot, math.rad(spread), now)
-	for index, direction in rayDirections do
-		rayDirections[index] = direction * range
+	local origin = Camera.CFrame
+	local directions = getRayDirections(origin, raysPerShot, math.rad(spread), now)
+
+	for i, dir in directions do
+		directions[i] = dir * range
 	end
-	local rayResults = castRays(player, origin.Position, rayDirections, rayRadius)
-	
-	-- Check if we hit anything to show hitmarker
-	local didTag = false
-	for _, rayResult in rayResults do
-		if rayResult.taggedHumanoid then
-			didTag = true
+
+	local results = castRays(Player, origin.Position, directions, rayRadius)
+
+	-- Check for hits
+	local didHit = false
+	for _, result in results do
+		if result.taggedHumanoid then
+			didHit = true
 			break
 		end
 	end
-	if didTag then
-		self.hitmarkerController:showHitmarker()
-		-- Play hit marker sound immediately (no server wait)
-		self.audioController:playHitMarkerSound()
+
+	if didHit then
+		self.hitmarker:showHitmarker()
+		self.audio:playHitMarkerSound()
 	end
-	shootRemote:FireServer(now, self.blaster, origin)
 
-	local muzzlePosition = self.viewModelController:getMuzzlePosition()
+	-- Send to server
+	ShootRemote:FireServer(now, self.blaster, origin)
 
-	-- INSTANT FEEDBACK: Draw Local Laser
-	drawRayResults(muzzlePosition, rayResults)
+	-- Draw local laser immediately
+	drawRayResults(self.viewModel:getMuzzlePosition(), results)
 
-	getCameraController().ShakeOnShoot()
+	-- Camera shake & haptics
+	getCamera().ShakeOnShoot()
 	self.shootHaptic:Play()
 end
 
-function BlasterController:startShooting()
-	-- If the player tries to shoot without any ammo, reload instead
+function BlasterController:_startShooting()
 	if self.ammo == 0 then
-		self:reload()
+		self:_reload()
 		return
 	end
-	if not self:canShoot() then
+
+	if not self:_canShoot() or self.shooting then
 		return
 	end
-	if self.shooting then
-		return
-	end
+
 	local fireMode = self.blaster:GetAttribute(Constants.FIRE_MODE_ATTRIBUTE)
 	local rateOfFire = self.blaster:GetAttribute(Constants.RATE_OF_FIRE_ATTRIBUTE)
+	local fireDelay = 60 / rateOfFire
+
 	if fireMode == Constants.FIRE_MODE.SEMI then
 		self.shooting = true
-		self:shoot()
-		task.delay(60 / rateOfFire, function()
+		self:_shoot()
+		task.delay(fireDelay, function()
 			self.shooting = false
 			if self.ammo == 0 then
-				self:reload()
+				self:_reload()
 			end
 		end)
 	elseif fireMode == Constants.FIRE_MODE.AUTO then
 		task.spawn(function()
 			self.shooting = true
-			while self.activated and self:canShoot() do
-				self:shoot()
-				task.wait(60 / rateOfFire)
+			while self.activated and self:_canShoot() do
+				self:_shoot()
+				task.wait(fireDelay)
 			end
 			self.shooting = false
 			if self.ammo == 0 then
-				self:reload()
+				self:_reload()
 			end
 		end)
 	end
 end
 
-function BlasterController:reload()
-	if not self:canReload() then
+function BlasterController:_reload()
+	if not self:_canReload() then
 		return
 	end
+
 	local reloadTime = self.blaster:GetAttribute(Constants.RELOAD_TIME_ATTRIBUTE)
-	local magazineSize = self.blaster:GetAttribute(Constants.MAGAZINE_SIZE_ATTRIBUTE)
-	self.viewModelController:playReloadAnimation(reloadTime)
-	self.characterAnimationController:playReloadAnimation(reloadTime)
+	local magSize = self.blaster:GetAttribute(Constants.MAGAZINE_SIZE_ATTRIBUTE)
+
+	self.viewModel:playReloadAnimation(reloadTime)
+	self.charAnim:playReloadAnimation(reloadTime)
 	self.reloading = true
-	reloadRemote:FireServer(self.blaster)
+
+	ReloadRemote:FireServer(self.blaster)
+
 	self.reloadTask = task.delay(reloadTime, function()
-		self.ammo = magazineSize
+		self.ammo = magSize
 		self.reloading = false
 		self.reloadTask = nil
 	end)
 end
 
-function BlasterController:activate()
+--== Input Handlers ==--
+
+function BlasterController:_activate()
 	if self.activated then
 		return
 	end
 	self.activated = true
-	self:startShooting()
+	self:_startShooting()
 end
 
-function BlasterController:deactivate()
+function BlasterController:_deactivate()
 	if not self.activated then
 		return
 	end
 	self.activated = false
 end
 
-function BlasterController:equip()
+--== Equip/Unequip ==--
+
+function BlasterController:_equip()
 	if self.equipped then
 		return
 	end
 	self.equipped = true
-	-- Resync ammo and reloading values
+
+	-- Sync state
 	self.ammo = self.blaster:GetAttribute(Constants.AMMO_ATTRIBUTE)
 	self.reloading = self.blaster:GetAttribute(Constants.RELOADING_ATTRIBUTE)
-	-- Resync aim assist values
-	self.range = self.blaster:GetAttribute(Constants.AIM_ASSIST_RANGE_ATTRIBUTE)
-	self.fov = self.blaster:GetAttribute(Constants.AIM_ASSIST_FOV_ATTRIBUTE)
-	self.friction = self.blaster:GetAttribute(Constants.AIM_ASSIST_FRICTION_STRENGTH_ATTRIBUTE)
-	self.tracking = self.blaster:GetAttribute(Constants.AIM_ASSIST_TRACKING_STRENGTH_ATTRIBUTE)
-	self.centering = self.blaster:GetAttribute(Constants.AIM_ASSIST_TRACKING_STRENGTH_ATTRIBUTE)
-	-- Set up the Aim Assist Controller
-	self.aimAssistController:setSubject(Workspace.CurrentCamera)
-	self.aimAssistController:setRange(self.range)
-	self.aimAssistController:setFieldOfView(self.fov)
-	self.aimAssistController:addTargetTag(Constants.AIM_ASSIST_TARGET_TAG)
-	self.aimAssistController:addPlayerTargets(true, true)
-	self.aimAssistController:setMethodStrength(AimAssistEnum.AimAssistMethod.Friction, self.friction)
-	self.aimAssistController:setMethodStrength(AimAssistEnum.AimAssistMethod.Tracking, self.tracking)
-	self.aimAssistController:setMethodStrength(AimAssistEnum.AimAssistMethod.Centering, self.centering)
-	self.aimAssistController:setEasingFunc(
-		AimAssistEnum.AimAssistEasingAttribute.Distance,
-		function(distance: number): number
-			if distance < Constants.AIM_ASSIST_MIN_RANGE then
-				return 0
-			else
-				return 1
-			end
-		end
-	)
-	self.aimAssistController:setDebug(false)
-	-- Enable Aim Assist
-	self.aimAssistController:enable()
-	-- Enable view model
-	self.viewModelController:enable()
-	-- Enable hitmarker/reticle
-	self.hitmarkerController:enable()
-	-- Enable touch input controller
-	self.touchInputController:enable()
-	-- Enable character animations
-	self.characterAnimationController:enable()
-	-- Keep track of the humanoid in the character currently equipping the blaster.
-	-- We need this to make sure the player can't shoot while dead.
 	self.humanoid = self.blaster.Parent:FindFirstChildOfClass("Humanoid")
+
+	-- Setup aim assist
+	local aa = self.aimAssist
+	aa:setSubject(Camera)
+	aa:setRange(self.blaster:GetAttribute(Constants.AIM_ASSIST_RANGE_ATTRIBUTE))
+	aa:setFieldOfView(self.blaster:GetAttribute(Constants.AIM_ASSIST_FOV_ATTRIBUTE))
+	aa:addTargetTag(Constants.AIM_ASSIST_TARGET_TAG)
+	aa:addPlayerTargets(true, true)
+
+	local friction = self.blaster:GetAttribute(Constants.AIM_ASSIST_FRICTION_STRENGTH_ATTRIBUTE)
+	local tracking = self.blaster:GetAttribute(Constants.AIM_ASSIST_TRACKING_STRENGTH_ATTRIBUTE)
+	aa:setMethodStrength(AimAssistEnum.AimAssistMethod.Friction, friction)
+	aa:setMethodStrength(AimAssistEnum.AimAssistMethod.Tracking, tracking)
+	aa:setMethodStrength(AimAssistEnum.AimAssistMethod.Centering, tracking)
+
+	aa:setEasingFunc(AimAssistEnum.AimAssistEasingAttribute.Distance, function(dist)
+		return dist < Constants.AIM_ASSIST_MIN_RANGE and 0 or 1
+	end)
+
+	aa:setDebug(false)
+	aa:enable()
+
+	-- Enable controllers
+	self.viewModel:enable()
+	self.hitmarker:enable()
+	self.touchInput:enable()
+	self.charAnim:enable()
 end
 
-function BlasterController:unequip()
+function BlasterController:_unequip()
 	if not self.equipped then
 		return
 	end
 	self.equipped = false
-	-- Force deactivate the blaster when unequipping it
-	self:deactivate()
-	-- If the blaster is being reloaded, stop it
+
+	self:_deactivate()
+
 	if self.reloadTask then
 		task.cancel(self.reloadTask)
 		self.reloadTask = nil
 	end
-	-- Disable Aim Assist debug UI
-	self.aimAssistController:setDebug(false)
-	-- Disable Aim Assist
-	self.aimAssistController:disable()
-	-- Disable view model
-	self.viewModelController:disable()
-	-- Disable hitmarker/reticle
-	self.hitmarkerController:disable()
-	-- Disable touch input controller
-	self.touchInputController:disable()
-	-- Disable character animations
-	self.characterAnimationController:disable()
+
+	-- Disable controllers
+	self.aimAssist:setDebug(false)
+	self.aimAssist:disable()
+	self.viewModel:disable()
+	self.hitmarker:disable()
+	self.touchInput:disable()
+	self.charAnim:disable()
 end
 
-function BlasterController:initialize()
-	table.insert(
-		self.connections,
-		self.blaster.Equipped:Connect(function()
-			self:equip()
-		end)
-	)
-	table.insert(
-		self.connections,
-		self.blaster.Unequipped:Connect(function()
-			self:unequip()
-		end)
-	)
-	table.insert(
-		self.connections,
-		self.blaster.Activated:Connect(function()
-			self:activate()
-		end)
-	)
-	table.insert(
-		self.connections,
-		self.blaster.Deactivated:Connect(function()
-			self:deactivate()
-		end)
-	)
-	table.insert(
-		self.connections,
-		UserInputService.InputBegan:Connect(function(inputObject: InputObject, processed: boolean)
-			if processed then
-				return
-			end
-			if
-				inputObject.KeyCode == Constants.KEYBOARD_RELOAD_KEY_CODE
-				or inputObject.KeyCode == Constants.GAMEPAD_RELOAD_KEY_CODE
-			then
-				self:reload()
-			end
-		end)
-	)
-	table.insert(
-		self.connections,
-		UserInputService.InputChanged:Connect(function(inputObject: InputObject, _)
-			if
-				inputObject.UserInputType == Enum.UserInputType.Gamepad1
-				and (inputObject.KeyCode == Enum.KeyCode.Thumbstick1 or inputObject.KeyCode == Enum.KeyCode.Thumbstick2)
-			then
-				self.aimAssistController:updateGamepadEligibility(inputObject.KeyCode, inputObject.Position)
-			end
-		end)
-	)
-	table.insert(
-		self.connections,
-		UserInputService.TouchPan:Connect(function()
-			self.aimAssistController:updateTouchEligibility()
-		end)
-	)
-	self.touchInputController:setReloadCallback(function()
-		self:reload()
+--== Event Binding ==--
+
+function BlasterController:_bindEvents()
+	local conns = self.connections
+
+	conns[#conns + 1] = self.blaster.Equipped:Connect(function()
+		self:_equip()
 	end)
 
-	-- Listen for kills to trigger camera shake
-	local killfeedRemote = remotes:FindFirstChild("Killfeed")
-	if killfeedRemote then
-		table.insert(
-			self.connections,
-			killfeedRemote.OnClientEvent:Connect(
-				function(killerName, _killerLevel, killerIsBot, _victimName, _victimLevel, _victimIsBot)
-					-- If local player got a kill, shake camera
-					if killerName == player.Name and not killerIsBot then
-						getCameraController().ShakeOnKill()
-					end
-				end
-			)
-		)
+	conns[#conns + 1] = self.blaster.Unequipped:Connect(function()
+		self:_unequip()
+	end)
+
+	conns[#conns + 1] = self.blaster.Activated:Connect(function()
+		self:_activate()
+	end)
+
+	conns[#conns + 1] = self.blaster.Deactivated:Connect(function()
+		self:_deactivate()
+	end)
+
+	conns[#conns + 1] = UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then
+			return
+		end
+		if
+			input.KeyCode == Constants.KEYBOARD_RELOAD_KEY_CODE
+			or input.KeyCode == Constants.GAMEPAD_RELOAD_KEY_CODE
+		then
+			self:_reload()
+		end
+	end)
+
+	conns[#conns + 1] = UserInputService.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Gamepad1 then
+			if input.KeyCode == Enum.KeyCode.Thumbstick1 or input.KeyCode == Enum.KeyCode.Thumbstick2 then
+				self.aimAssist:updateGamepadEligibility(input.KeyCode, input.Position)
+			end
+		end
+	end)
+
+	conns[#conns + 1] = UserInputService.TouchPan:Connect(function()
+		self.aimAssist:updateTouchEligibility()
+	end)
+
+	self.touchInput:setReloadCallback(function()
+		self:_reload()
+	end)
+
+	-- Kill camera shake
+	local killfeed = Remotes:FindFirstChild("Killfeed")
+	if killfeed then
+		conns[#conns + 1] = killfeed.OnClientEvent:Connect(function(killerName, _, killerIsBot)
+			if killerName == Player.Name and not killerIsBot then
+				getCamera().ShakeOnKill()
+			end
+		end)
 	end
 end
 
+--== Cleanup ==--
+
 function BlasterController:destroy()
-	self:unequip()
+	self:_unequip()
 	disconnectAndClear(self.connections)
-	self.aimAssistController:destroy()
-	self.viewModelController:destroy()
-	self.touchInputController:destroy()
-	self.characterAnimationController:destroy()
-	self.hitmarkerController:destroy()
-	self.audioController:destroy()
+	self.aimAssist:destroy()
+	self.viewModel:destroy()
+	self.touchInput:destroy()
+	self.charAnim:destroy()
+	self.hitmarker:destroy()
+	self.audio:destroy()
 end
 
--- === CLIENT REPLICATION ===
-local blasterCache = {} -- [Tool] = {Handle, AudioEmitter, Muzzle, Sounds}
+--== Shot Replication (for other players) ==--
 
--- Draws lasers for OTHER players
-local function processSingleShot(blaster: Tool, position: Vector3, rayResults: { any })
+local blasterCache = {}
+
+local function processShot(blaster, _origin, results)
 	if not blaster or not blaster:IsDescendantOf(game) then
 		blasterCache[blaster] = nil
 		return
 	end
 
-	-- SKIPS LOCAL PLAYER (Already drew instant laser in shoot())
-	local char = blaster.Parent
-	if char == player.Character then
+	-- Skip local player (already drew instant laser)
+	if blaster.Parent == Player.Character then
 		return
 	end
 
-	-- Retrieve from cache or initialize
+	-- Get or create cache
 	local cache = blasterCache[blaster]
 	if not cache then
 		local handle = blaster:FindFirstChild("Handle")
 		if not handle then
-			-- Don't warn every frame, just return
 			return
 		end
 
 		cache = {
 			Handle = handle,
 			AudioEmitter = handle:FindFirstChild("AudioEmitter"),
-			Muzzle = blaster:FindFirstChild("MuzzleAttachment", true), -- Recursive search ONCE
-			Sounds = blaster:FindFirstChild("Sounds")
+			Muzzle = blaster:FindFirstChild("MuzzleAttachment", true),
+			Sounds = blaster:FindFirstChild("Sounds"),
 		}
 		blasterCache[blaster] = cache
 
-		-- Cleanup cache when blaster is destroyed
-		blaster.Destroying:Connect(function()
+		blaster.Destroying:Once(function()
 			blasterCache[blaster] = nil
 		end)
 	end
 
+	-- Get muzzle position
 	local muzzle = cache.Muzzle
+	local pos = muzzle and muzzle.WorldPosition or blaster:GetPivot().Position
+
 	if muzzle then
-		position = muzzle.WorldPosition
-		if muzzle:FindFirstChild("FlashEmitter") then
-			muzzle.FlashEmitter:Emit(1)
+		local flash = muzzle:FindFirstChild("FlashEmitter")
+		if flash then
+			flash:Emit(1)
 		end
-	else
-		position = blaster:GetPivot().Position
 	end
 
-	-- Play SFX for others
+	-- Play shoot sound
 	local shootSound = cache.Sounds and cache.Sounds:FindFirstChild("Shoot")
 	if shootSound and cache.AudioEmitter then
 		if shootSound:IsA("Folder") then
-			local soundList = shootSound:GetChildren()
-			if #soundList > 0 then
-				local randomSound = soundList[math.random(1, #soundList)]
-				if randomSound:IsA("Sound") then
-					playSoundFromSource(randomSound, cache.AudioEmitter)
+			local sounds = shootSound:GetChildren()
+			if #sounds > 0 then
+				local sound = sounds[math.random(#sounds)]
+				if sound:IsA("Sound") then
+					playSoundFromSource(sound, cache.AudioEmitter)
 				end
 			end
 		elseif shootSound:IsA("Sound") then
@@ -464,36 +417,26 @@ local function processSingleShot(blaster: Tool, position: Vector3, rayResults: {
 		end
 	end
 
-	drawRayResults(position, rayResults)
+	drawRayResults(pos, results)
 end
 
-local function onReplicateShotEvent(dataPacket)
-	-- dataPacket is now a list of shots: { {tool, origin, results}, ... }
-	-- Or fallback to single shot for backward compatibility if needed, but we controlled the server change.
+local function onReplicateShot(packet)
+	if type(packet) ~= "table" or #packet == 0 then
+		return
+	end
 
-	if type(dataPacket) == "table" and #dataPacket > 0 then
-		if dataPacket[1].tool then
-			-- It is a list of shots
-			for _, shotData in ipairs(dataPacket) do
-				-- print("BlasterController: Processing shot from", shotData.tool)
-				processSingleShot(shotData.tool, shotData.origin, shotData.results)
-			end
-		else
-			-- Assume legacy single shot format? No, we replaced the server logic completely.
-			-- If we receive something else, it's likely a malformed packet or mixed version.
+	for _, shot in packet do
+		if shot.tool then
+			processShot(shot.tool, shot.origin, shot.results)
 		end
 	end
 end
 
+--== Module Start ==--
+
 function BlasterController.Start()
-	-- Set up ReplicateShot listener
-	local replicateShotRemote = remotes:WaitForChild("ReplicateShot")
-	replicateShotRemote.OnClientEvent:Connect(onReplicateShotEvent)
-
-	-- Set up tool initialization (tools will create BlasterController instances when equipped)
-	-- This is handled by the tool's Equipped event, which calls BlasterController.new()
-
-	print("✅ BlasterController: Initialized and listening for ReplicateShot events")
+	Remotes:WaitForChild("ReplicateShot").OnClientEvent:Connect(onReplicateShot)
+	print("✅ BlasterController initialized")
 end
 
 return BlasterController

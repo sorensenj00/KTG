@@ -524,14 +524,27 @@ function BotController.RecordAggro(bot, attacker)
 	if not bot or not attacker then
 		return
 	end
-	local char = attacker:IsA("Player") and attacker.Character
-		or (CollectionService:HasTag(attacker, "BotAI") and attacker)
+
+	-- Normalize attacker to character model
+	local char
+	if typeof(attacker) == "Instance" then
+		if attacker:IsA("Player") then
+			char = attacker.Character
+		elseif attacker:IsA("Model") and CollectionService:HasTag(attacker, "BotAI") then
+			char = attacker
+		end
+	end
+
 	if not char or not isValidTarget(char) then
 		return
 	end
+
 	local s = getState(bot)
 	s.aggro[char] = os.clock()
-	if not Players:GetPlayerFromCharacter(s.target) then
+
+	-- Only switch target if current target isn't a player
+	local currentTargetIsPlayer = typeof(s.target) == "Instance" and Players:GetPlayerFromCharacter(s.target)
+	if not currentTargetIsPlayer then
 		s.target = char
 		s.mode = "COMBAT"
 		s.path = nil

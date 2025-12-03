@@ -1,3 +1,8 @@
+--[[
+	RankManager: Overhead UI for players and bots
+	Shows level, XP, and health bar above entities
+]]
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
@@ -5,409 +10,388 @@ local RunService = game:GetService("RunService")
 
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 
--- ============================================
--- CONFIGURATION
--- All magic numbers consolidated here for easy tuning
--- ============================================
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
--- UI Appearance
-local CONFIG = {
-	-- Text Styling
-	TEXT_SIZE = 14,
-	TEXT_COLOR = Color3.fromRGB(255, 255, 255),
-	STROKE_TRANSPARENCY = 0,
+-- Config
+local VISIBILITY_RANGE = 100
+local COMBAT_RANGE = 600
+local COMBAT_DURATION = 10
+local FADE_START = 0.8
+local SCALE_DIVISOR = 25
 
-	-- Billboard Positioning
-	STUDS_OFFSET = Vector3.new(0, 1, 0), -- Above head
-	BASE_SIZE = UDim2.fromScale(4, 1.5),
-	DEFAULT_MAX_DISTANCE = 600,
+-- All active overhead UIs: [entity] = { ui, connections, lastDamage, inCombat }
+local activeUIs = {}
 
-	-- Health Bar Colors
-	HEALTH_FULL_COLOR = Color3.fromRGB(0, 255, 100),
-	HEALTH_EMPTY_COLOR = Color3.fromRGB(255, 50, 50),
-	HEALTH_BG_COLOR = Color3.fromRGB(40, 40, 40),
+-- Track setup attempts for retry logic
+local setupAttempts = {}
+local MAX_ATTEMPTS = 5
 
-	-- Visibility Ranges (studs)
-	PASSIVE_VISIBILITY_RANGE = 100, -- Range when not in combat
-	COMBAT_VISIBILITY_RANGE = 600, -- Range after damaging entity
-	DAMAGE_SHOW_DURATION = 10, -- Seconds to stay visible after damage
+--== UI Creation ==--
 
-	-- Distance Scaling
-	FADE_START_PERCENT = 0.8, -- Fade starts at 80% of visibility range
-	BASE_SCALE_DIVISOR = 25, -- dist / 25 = scale factor
-	COMBAT_SCALE_DIVISOR = 20, -- dist / 20 = scale factor when damaged
-	MIN_COMBAT_SCALE = 1.5, -- Minimum scale when damaged
-	MAX_SCALE = 20, -- Cap to prevent massive UI at extreme distances
-
-	-- Timeouts (shorter since we have retry logic)
-	WAIT_FOR_HEAD_TIMEOUT = 5,
-	WAIT_FOR_HUMANOID_TIMEOUT = 5,
-	WAIT_FOR_REMOTE_TIMEOUT = 10,
-}
-
-local function createOverheadUI()
+local function createUI()
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "RankOverhead"
-	billboard.Size = CONFIG.BASE_SIZE
-	billboard.StudsOffset = CONFIG.STUDS_OFFSET
+	billboard.Size = UDim2.fromScale(4, 1.5)
+	billboard.StudsOffset = Vector3.new(0, 1, 0)
 	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = CONFIG.DEFAULT_MAX_DISTANCE
-	billboard.Enabled = false -- Hidden by default
+	billboard.MaxDistance = VISIBILITY_RANGE
 
-	local textLabel = Instance.new("TextLabel")
-	textLabel.Name = "InfoLabel"
-	textLabel.Size = UDim2.fromScale(1, 0.6) -- Top 60%
-	textLabel.Position = UDim2.fromScale(0, 0)
-	textLabel.BackgroundTransparency = 1
-	textLabel.TextColor3 = CONFIG.TEXT_COLOR
-	textLabel.TextStrokeTransparency = CONFIG.STROKE_TRANSPARENCY
-	textLabel.TextSize = CONFIG.TEXT_SIZE
-	textLabel.Font = Enum.Font.GothamBold
-	textLabel.TextScaled = true
-	textLabel.Parent = billboard
+	local label = Instance.new("TextLabel")
+	label.Name = "InfoLabel"
+	label.Size = UDim2.fromScale(1, 0.6)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextStrokeTransparency = 0
+	label.Font = Enum.Font.GothamBold
+	label.TextScaled = true
+	label.Parent = billboard
 
-	-- Health Bar Background
 	local healthBg = Instance.new("Frame")
-	healthBg.Name = "HealthBarBg"
+	healthBg.Name = "HealthBg"
 	healthBg.Size = UDim2.fromScale(0.8, 0.15)
 	healthBg.Position = UDim2.fromScale(0.1, 0.65)
-	healthBg.BackgroundColor3 = CONFIG.HEALTH_BG_COLOR
+	healthBg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 	healthBg.BorderSizePixel = 0
 	healthBg.Parent = billboard
 
-	local healthStroke = Instance.new("UIStroke")
-	healthStroke.Color = Color3.fromRGB(0, 0, 0)
-	healthStroke.Thickness = 1.5
-	healthStroke.Parent = healthBg
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.new(0, 0, 0)
+	stroke.Thickness = 1.5
+	stroke.Parent = healthBg
 
-	-- Health Bar Fill
 	local healthFill = Instance.new("Frame")
-	healthFill.Name = "HealthBarFill"
+	healthFill.Name = "HealthFill"
 	healthFill.Size = UDim2.fromScale(1, 1)
-	healthFill.BackgroundColor3 = CONFIG.HEALTH_FULL_COLOR
+	healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
 	healthFill.BorderSizePixel = 0
 	healthFill.Parent = healthBg
 
 	return billboard
 end
 
-local function updateLabel(dataSource: Instance, label: TextLabel)
-	local level = dataSource:GetAttribute("Level") or 1
-	local xp = dataSource:GetAttribute("XP") or 0
-	local requiredXP = ScalingConfig.GetXPRequired(level)
+--== Update Functions ==--
+
+local function updateLabel(entity, label)
+	local level = entity:GetAttribute("Level") or 1
+	local xp = entity:GetAttribute("XP") or 0
+	local required = ScalingConfig.GetXPRequired(level)
 
 	if level >= ScalingConfig.MAX_LEVEL then
 		label.Text = string.format("MAX LEVEL (%d)", ScalingConfig.MAX_LEVEL)
 		label.TextColor3 = ScalingConfig.STAR_MODE_COLOR
 	else
-		label.Text = string.format("Level %d | XP: %d/%d", level, xp, requiredXP)
-		label.TextColor3 = CONFIG.TEXT_COLOR
+		label.Text = string.format("Level %d | XP: %d/%d", level, xp, required)
+		label.TextColor3 = Color3.new(1, 1, 1)
 	end
 end
 
-local function updateHealthBar(humanoid: Humanoid, fill: Frame)
-	local hp = humanoid.Health
-	local maxHp = humanoid.MaxHealth
-	local percent = math.clamp(hp / maxHp, 0, 1)
-
-	fill.Size = UDim2.fromScale(percent, 1)
-
-	-- Color shift from Green to Red based on health percent
-	local color = CONFIG.HEALTH_FULL_COLOR:Lerp(CONFIG.HEALTH_EMPTY_COLOR, 1 - percent)
-	fill.BackgroundColor3 = color
+local function updateHealth(humanoid, fill)
+	local pct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+	fill.Size = UDim2.fromScale(pct, 1)
+	fill.BackgroundColor3 = Color3.fromRGB(0, 255, 100):Lerp(Color3.fromRGB(255, 50, 50), 1 - pct)
 end
 
-local function setupEntity(entity: Model, dataSource: Instance)
-	-- Don't show overhead for local player
-	if dataSource == Players.LocalPlayer then
-		return
+--== Entity Setup ==--
+
+local function setupEntity(entity, dataSource)
+	-- Skip local player
+	if dataSource == LocalPlayer then
+		return false
 	end
 
-	-- Use a longer timeout for streaming/loading
-	local head = entity:WaitForChild("Head", CONFIG.WAIT_FOR_HEAD_TIMEOUT)
-	if not head then
-		return
+	local head = entity:FindFirstChild("Head")
+	local humanoid = entity:FindFirstChild("Humanoid")
+
+	if not head or not humanoid then
+		return false -- Will retry
 	end
 
-	-- Check if already exists
+	-- Already has UI
 	if head:FindFirstChild("RankOverhead") then
-		return
+		return true
 	end
 
-	local ui = createOverheadUI()
+	-- Create UI
+	local ui = createUI()
 	ui.Adornee = head
 	ui.Parent = head
 
 	local label = ui.InfoLabel
+	local healthFill = ui.HealthBg.HealthFill
+
 	updateLabel(dataSource, label)
+	updateHealth(humanoid, healthFill)
 
-	-- Track ALL connections for cleanup (prevents memory leaks)
-	local connections: { RBXScriptConnection } = {}
+	-- Disable default health bar
+	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
 
-	-- Helper to cleanup all connections and UI
-	local function cleanup()
-		for _, conn in ipairs(connections) do
-			if conn.Connected then
-				conn:Disconnect()
-			end
-		end
-		table.clear(connections)
+	-- Connections
+	local connections = {}
 
-		if ui and ui.Parent then
-			ui:Destroy()
-		end
-	end
-
-	-- Listen for attribute changes
 	table.insert(
 		connections,
-		dataSource.AttributeChanged:Connect(function(attributeName)
-			if attributeName == "Level" or attributeName == "XP" then
+		dataSource.AttributeChanged:Connect(function(attr)
+			if attr == "Level" or attr == "XP" then
 				updateLabel(dataSource, label)
 			end
 		end)
 	)
 
-	-- Setup Health Bar
-	local humanoid = entity:WaitForChild("Humanoid", CONFIG.WAIT_FOR_HUMANOID_TIMEOUT)
-	if humanoid then
-		-- Disable default Roblox health bar
-		humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	table.insert(
+		connections,
+		humanoid.HealthChanged:Connect(function()
+			updateHealth(humanoid, healthFill)
+		end)
+	)
 
-		local healthFill = ui:FindFirstChild("HealthBarBg") and ui.HealthBarBg:FindFirstChild("HealthBarFill")
+	table.insert(
+		connections,
+		humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+			updateHealth(humanoid, healthFill)
+		end)
+	)
 
-		-- Visibility state
-		local lastDamageTime = 0
-		local wasDamagedByPlayer = false
+	-- Store data
+	activeUIs[entity] = {
+		ui = ui,
+		head = head,
+		connections = connections,
+		lastDamage = 0,
+		inCombat = false,
+	}
 
-		-- Listen for player damaging this entity
-		local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes")
-		local playerDamagedRemote = remotes:WaitForChild("PlayerDamagedEntity", CONFIG.WAIT_FOR_REMOTE_TIMEOUT)
-
-		-- Helper to force UI fully visible instantly
-		local function forceUIVisible()
-			ui.Enabled = true
-			ui.MaxDistance = math.huge
-
-			-- Force full opacity on all elements immediately
-			for _, child in ipairs(ui:GetDescendants()) do
-				if child:IsA("TextLabel") then
-					child.TextTransparency = 0
-					child.TextStrokeTransparency = 0.3
-				elseif child:IsA("Frame") then
-					if not child:GetAttribute("OriginalTransparency") then
-						child:SetAttribute("OriginalTransparency", child.BackgroundTransparency)
-					end
-					child.BackgroundTransparency = child:GetAttribute("OriginalTransparency")
-				elseif child:IsA("UIStroke") then
-					child.Transparency = 0
-				end
+	-- Cleanup on death
+	humanoid.Died:Once(function()
+		local data = activeUIs[entity]
+		if data then
+			for _, conn in data.connections do
+				conn:Disconnect()
 			end
+			if data.ui and data.ui.Parent then
+				data.ui:Destroy()
+			end
+			activeUIs[entity] = nil
 		end
-
-		if playerDamagedRemote then
-			table.insert(
-				connections,
-				playerDamagedRemote.OnClientEvent:Connect(function(damagedEntity)
-					if damagedEntity == entity then
-						wasDamagedByPlayer = true
-						lastDamageTime = tick()
-
-						-- IMMEDIATELY enable and show UI - don't wait for Heartbeat
-						forceUIVisible()
-					end
-				end)
-			)
-		end
-
-		-- Reset tracking when local player's character is removed (death/respawn)
-		local localPlayer = Players.LocalPlayer
-		table.insert(
-			connections,
-			localPlayer.CharacterRemoving:Connect(function()
-				wasDamagedByPlayer = false
-				lastDamageTime = 0
-			end)
-		)
-
-		-- Update loop for visibility and scaling
-		local camera = workspace.CurrentCamera
-
-		table.insert(
-			connections,
-			RunService.Heartbeat:Connect(function()
-				-- Cleanup check: if entity or head is gone, cleanup everything
-				if not head or not head.Parent or not entity or not entity.Parent then
-					cleanup()
-					return
-				end
-
-				local dist = (camera.CFrame.Position - head.Position).Magnitude
-				local recentlyDamaged = wasDamagedByPlayer and (tick() - lastDamageTime) < CONFIG.DAMAGE_SHOW_DURATION
-
-				local currentVisibilityRange = recentlyDamaged and CONFIG.COMBAT_VISIBILITY_RANGE
-					or CONFIG.PASSIVE_VISIBILITY_RANGE
-
-				-- Visibility with smooth fade
-				if dist <= currentVisibilityRange then
-					ui.Enabled = true
-
-					-- Fade based on distance (0 = fully visible, currentVisibilityRange = transparent)
-					local fadeStart = currentVisibilityRange * CONFIG.FADE_START_PERCENT
-					local fadeAlpha = math.clamp((dist - fadeStart) / (currentVisibilityRange - fadeStart), 0, 1)
-
-					-- Force visibility if recently damaged (override fade)
-					if recentlyDamaged then
-						fadeAlpha = 0
-						ui.MaxDistance = math.huge -- Infinite range within combat logic
-					else
-						ui.MaxDistance = currentVisibilityRange
-					end
-
-					-- Apply transparency to all UI elements
-					for _, child in ipairs(ui:GetDescendants()) do
-						if child:IsA("TextLabel") then
-							child.TextTransparency = fadeAlpha
-							child.TextStrokeTransparency = math.clamp(0.3 + fadeAlpha * 0.7, 0, 1)
-						elseif child:IsA("Frame") then
-							-- Save original transparency
-							if not child:GetAttribute("OriginalTransparency") then
-								child:SetAttribute("OriginalTransparency", child.BackgroundTransparency)
-							end
-							local origTrans = child:GetAttribute("OriginalTransparency")
-							child.BackgroundTransparency = origTrans + fadeAlpha * (1 - origTrans)
-						elseif child:IsA("UIStroke") then
-							child.Transparency = fadeAlpha
-						end
-					end
-				else
-					ui.Enabled = false
-				end
-
-				-- Distance-based scaling that grows with distance for readability
-				local scaleFactor = math.max(1.0, dist / CONFIG.BASE_SCALE_DIVISOR)
-
-				if recentlyDamaged then
-					-- When damaged: slightly larger and grows faster, but capped
-					scaleFactor = math.min(
-						CONFIG.MAX_SCALE,
-						math.max(CONFIG.MIN_COMBAT_SCALE, dist / CONFIG.COMBAT_SCALE_DIVISOR)
-					)
-				end
-
-				ui.Size =
-					UDim2.fromScale(CONFIG.BASE_SIZE.X.Scale * scaleFactor, CONFIG.BASE_SIZE.Y.Scale * scaleFactor)
-				ui.StudsOffset = CONFIG.STUDS_OFFSET * scaleFactor
-			end)
-		)
-
-		if healthFill then
-			updateHealthBar(humanoid, healthFill)
-
-			table.insert(
-				connections,
-				humanoid.HealthChanged:Connect(function()
-					updateHealthBar(humanoid, healthFill)
-				end)
-			)
-
-			table.insert(
-				connections,
-				humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
-					updateHealthBar(humanoid, healthFill)
-				end)
-			)
-		end
-
-		-- Also cleanup when humanoid dies
-		table.insert(connections, humanoid.Died:Connect(cleanup))
-	end
-end
-
-local function onPlayerAdded(player: Player)
-	player.CharacterAdded:Connect(function(character)
-		task.spawn(setupEntity, character, player)
 	end)
 
-	if player.Character then
-		task.spawn(setupEntity, player.Character, player)
+	return true
+end
+
+--== Combat Tracking ==--
+
+local function setupCombatTracking()
+	local remotes = ReplicatedStorage:FindFirstChild("Blaster")
+	if not remotes then
+		return
+	end
+	remotes = remotes:FindFirstChild("Remotes")
+	if not remotes then
+		return
+	end
+
+	local damageRemote = remotes:FindFirstChild("PlayerDamagedEntity")
+	if not damageRemote then
+		return
+	end
+
+	damageRemote.OnClientEvent:Connect(function(entity)
+		local data = activeUIs[entity]
+		if data then
+			data.lastDamage = tick()
+			data.inCombat = true
+		end
+	end)
+
+	-- Reset combat on respawn
+	LocalPlayer.CharacterRemoving:Connect(function()
+		for _, data in activeUIs do
+			data.inCombat = false
+			data.lastDamage = 0
+		end
+	end)
+end
+
+--== Main Update Loop ==--
+
+local function updateAllUIs()
+	local now = tick()
+	local camPos = Camera.CFrame.Position
+
+	for entity, data in activeUIs do
+		local ui = data.ui
+		local head = data.head
+
+		-- Cleanup dead entities
+		if not head or not head.Parent or not entity.Parent then
+			for _, conn in data.connections do
+				conn:Disconnect()
+			end
+			if ui and ui.Parent then
+				ui:Destroy()
+			end
+			activeUIs[entity] = nil
+			continue
+		end
+
+		-- Distance check
+		local dist = (camPos - head.Position).Magnitude
+		local inCombat = data.inCombat and (now - data.lastDamage) < COMBAT_DURATION
+		local range = inCombat and COMBAT_RANGE or VISIBILITY_RANGE
+
+		if dist > range then
+			ui.Enabled = false
+			continue
+		end
+
+		ui.Enabled = true
+
+		-- Fade calculation
+		local fadeStart = range * FADE_START
+		local alpha = inCombat and 0 or math.clamp((dist - fadeStart) / (range - fadeStart), 0, 1)
+
+		-- Apply fade
+		ui.InfoLabel.TextTransparency = alpha
+		ui.InfoLabel.TextStrokeTransparency = 0.3 + alpha * 0.7
+		ui.HealthBg.BackgroundTransparency = alpha
+		ui.HealthBg.HealthFill.BackgroundTransparency = alpha
+
+		local stroke = ui.HealthBg:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Transparency = alpha
+		end
+
+		-- Scale with distance
+		local scale = math.clamp(dist / SCALE_DIVISOR, 1, 20)
+		ui.Size = UDim2.fromScale(4 * scale, 1.5 * scale)
+		ui.StudsOffset = Vector3.new(0, scale, 0)
+		ui.MaxDistance = inCombat and math.huge or range
 	end
 end
 
-local function onBotAdded(bot: Instance)
-	if bot:IsA("Model") then
-		task.spawn(setupEntity, bot, bot)
-	end
-end
+--== Bot Management ==--
 
--- Track which bots we've attempted to setup (to avoid spamming retries)
-local setupAttempts: { [Instance]: number } = {}
-local MAX_SETUP_ATTEMPTS = 5
-
--- Ensure a bot has overhead UI, with retry logic
-local function ensureBotHasOverhead(bot: Instance)
+local function trySetupBot(bot)
 	if not bot:IsA("Model") or not bot.Parent then
 		return
 	end
 
-	local head = bot:FindFirstChild("Head")
-	if not head then
-		-- Head not loaded yet, will retry on next sweep
+	-- Already tracked
+	if activeUIs[bot] then
 		return
 	end
 
-	-- Already has overhead UI
-	if head:FindFirstChild("RankOverhead") then
-		setupAttempts[bot] = nil -- Clear attempts tracking
-		return
-	end
-
-	-- Track attempts to avoid infinite retries
 	local attempts = setupAttempts[bot] or 0
-	if attempts >= MAX_SETUP_ATTEMPTS then
-		return -- Give up after max attempts
+	if attempts >= MAX_ATTEMPTS then
+		return
 	end
 
 	setupAttempts[bot] = attempts + 1
-	task.spawn(setupEntity, bot, bot)
+
+	if setupEntity(bot, bot) then
+		setupAttempts[bot] = nil
+	end
 end
 
--- Initialize for all players
-for _, player in ipairs(Players:GetPlayers()) do
+local function onBotAdded(bot)
+	task.defer(trySetupBot, bot)
+end
+
+local function onBotRemoved(bot)
+	local data = activeUIs[bot]
+	if data then
+		for _, conn in data.connections do
+			conn:Disconnect()
+		end
+		if data.ui and data.ui.Parent then
+			data.ui:Destroy()
+		end
+		activeUIs[bot] = nil
+	end
+	setupAttempts[bot] = nil
+end
+
+--== Player Management ==--
+
+local function onPlayerAdded(player)
+	if player == LocalPlayer then
+		return
+	end
+
+	local function onCharacter(character)
+		task.defer(function()
+			setupEntity(character, player)
+		end)
+	end
+
+	player.CharacterAdded:Connect(onCharacter)
+	if player.Character then
+		onCharacter(player.Character)
+	end
+end
+
+local function onPlayerRemoving(player)
+	if player.Character then
+		local data = activeUIs[player.Character]
+		if data then
+			for _, conn in data.connections do
+				conn:Disconnect()
+			end
+			if data.ui and data.ui.Parent then
+				data.ui:Destroy()
+			end
+			activeUIs[player.Character] = nil
+		end
+	end
+end
+
+--== Initialize ==--
+
+-- Setup existing players
+for _, player in Players:GetPlayers() do
 	onPlayerAdded(player)
 end
-
 Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
 
--- Initialize for all bots
-for _, bot in ipairs(CollectionService:GetTagged("BotAI")) do
+-- Setup existing bots
+for _, bot in CollectionService:GetTagged("BotAI") do
 	onBotAdded(bot)
 end
-for _, bot in ipairs(CollectionService:GetTagged("DisplayBot")) do
+for _, bot in CollectionService:GetTagged("DisplayBot") do
 	onBotAdded(bot)
 end
 
 CollectionService:GetInstanceAddedSignal("BotAI"):Connect(onBotAdded)
 CollectionService:GetInstanceAddedSignal("DisplayBot"):Connect(onBotAdded)
+CollectionService:GetInstanceRemovedSignal("BotAI"):Connect(onBotRemoved)
+CollectionService:GetInstanceRemovedSignal("DisplayBot"):Connect(onBotRemoved)
 
--- Periodic sweep to catch any bots that missed overhead UI setup
--- This handles race conditions, streaming, and edge cases
+-- Combat tracking
+setupCombatTracking()
+
+-- Main update loop
+RunService.Heartbeat:Connect(updateAllUIs)
+
+-- Periodic retry for failed setups
 task.spawn(function()
 	while true do
-		task.wait(2) -- Check every 2 seconds
+		task.wait(2)
 
-		-- Check all BotAI tagged entities
-		for _, bot in ipairs(CollectionService:GetTagged("BotAI")) do
-			ensureBotHasOverhead(bot)
+		for _, bot in CollectionService:GetTagged("BotAI") do
+			if not activeUIs[bot] then
+				trySetupBot(bot)
+			end
 		end
 
-		-- Check all DisplayBot tagged entities
-		for _, bot in ipairs(CollectionService:GetTagged("DisplayBot")) do
-			ensureBotHasOverhead(bot)
+		for _, bot in CollectionService:GetTagged("DisplayBot") do
+			if not activeUIs[bot] then
+				trySetupBot(bot)
+			end
 		end
 
-		-- Clean up attempts tracking for dead bots
-		for bot in pairs(setupAttempts) do
+		-- Cleanup dead attempts
+		for bot in setupAttempts do
 			if not bot.Parent then
 				setupAttempts[bot] = nil
 			end

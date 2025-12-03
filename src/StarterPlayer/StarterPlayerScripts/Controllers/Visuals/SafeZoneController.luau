@@ -34,7 +34,7 @@ local function createZoneVisuals()
         part.Position = pos
         part.Anchored = true
         part.CanCollide = false
-        part.Transparency = 0.98
+        part.Transparency = 0.8
         part.Color = Color3.fromRGB(0, 255, 100)
         part.Material = Enum.Material.ForceField
         part.CastShadow = false

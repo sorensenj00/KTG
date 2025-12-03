@@ -18,13 +18,13 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ScalingEngine = require(ServerScriptService.Services.World.ScalingEngineService)
-local GameConfig = require(ReplicatedStorage.GameLoop.GameConfig)
+-- local GameConfig = require(ReplicatedStorage.GameLoop.GameConfig)
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 local SafeZoneConfig = require(ReplicatedStorage.GameLoop.SafeZoneConfig)
 
 local BotSpawner = {}
 
-local SPAWN_COUNT = GameConfig.Performance.MaxBots
+local SPAWN_COUNT = 8 -- GameConfig.Performance.MaxBots
 local RESPAWN_DELAY = 3
 
 -- Bots spawn directly in Workspace (no folder)
