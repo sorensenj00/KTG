@@ -97,7 +97,9 @@ type BotState = {
 	PathWaypoints: {PathWaypoint}?,
 	CurrentWaypointIndex: number?,
 	TargetAcquiredTime: number,
-	OrbBlacklist: { [number]: number } -- [OrbID] = timestamp
+	OrbBlacklist: { [number]: number }, -- [OrbID] = timestamp
+	LastMoveToPos: Vector3?, -- Track last MoveTo position to avoid spam
+	LastMoveToTime: number, -- Track when we last called MoveTo
 }
 
 -- Initialize State
@@ -117,10 +119,40 @@ local function getBotState(bot)
 			IsPathfinding = false,
 			LastPathTime = 0,
 			TargetAcquiredTime = 0,
-			OrbBlacklist = {}
+			OrbBlacklist = {},
+			LastMoveToPos = nil,
+			LastMoveToTime = 0,
 		}
 	end
 	return botStates[bot]
+end
+
+-- Throttled MoveTo to prevent stuttering
+-- Only issues a new MoveTo if position changed significantly or enough time passed
+local MOVE_TO_MIN_INTERVAL = 0.15 -- Minimum time between MoveTo calls
+local MOVE_TO_MIN_DISTANCE = 3 -- Minimum distance change to trigger new MoveTo
+
+local function throttledMoveTo(hum, state, targetPos)
+	local now = os.clock()
+	local shouldMove = false
+	
+	-- Always move if we haven't moved yet
+	if not state.LastMoveToPos then
+		shouldMove = true
+	-- Move if enough time has passed
+	elseif now - state.LastMoveToTime > MOVE_TO_MIN_INTERVAL then
+		-- Check if target position changed significantly
+		local distChange = (targetPos - state.LastMoveToPos).Magnitude
+		if distChange > MOVE_TO_MIN_DISTANCE then
+			shouldMove = true
+		end
+	end
+	
+	if shouldMove then
+		hum:MoveTo(targetPos)
+		state.LastMoveToPos = targetPos
+		state.LastMoveToTime = now
+	end
 end
 
 -- === Helper: Network Ownership ===
@@ -236,7 +268,10 @@ local function moveToPath(bot, state, targetPos)
 			-- Reached, move to next
 			state.CurrentWaypointIndex = state.CurrentWaypointIndex + 1
 			if state.CurrentWaypointIndex <= #state.PathWaypoints then
+				-- Force immediate MoveTo for waypoint transitions
 				hum:MoveTo(state.PathWaypoints[state.CurrentWaypointIndex].Position)
+				state.LastMoveToPos = state.PathWaypoints[state.CurrentWaypointIndex].Position
+				state.LastMoveToTime = os.clock()
 
 				-- Jump if needed
 				if waypoint.Action == Enum.PathWaypointAction.Jump then
@@ -244,12 +279,12 @@ local function moveToPath(bot, state, targetPos)
 				end
 			else
 				-- End of path, move directly to target
-				hum:MoveTo(targetPos)
+				throttledMoveTo(hum, state, targetPos)
 				state.Path = nil
 			end
 		else
-			-- Continue to current waypoint
-			hum:MoveTo(waypoint.Position)
+			-- Continue to current waypoint (throttled)
+			throttledMoveTo(hum, state, waypoint.Position)
 		end
 	else
 		-- No path, create one?
@@ -276,14 +311,14 @@ local function moveToPath(bot, state, targetPos)
 			
 			-- 1. Check if already pathfinding or cooldown
 			if state.IsPathfinding then
-				-- Keep moving towards target while waiting (Dumb Move)
-				hum:MoveTo(targetPos)
+				-- Keep moving towards target while waiting (throttled)
+				throttledMoveTo(hum, state, targetPos)
 				return
 			end
 			if os.clock() - state.LastPathTime < 1.0 then
-				-- On cooldown: Just move directly (Dumb Move) instead of stopping
+				-- On cooldown: Just move directly (throttled) instead of stopping
 				-- This prevents stuttering if the block is minor or a false positive
-				hum:MoveTo(targetPos)
+				throttledMoveTo(hum, state, targetPos)
 				return
 			end
 
@@ -291,7 +326,6 @@ local function moveToPath(bot, state, targetPos)
 			state.IsPathfinding = true
 			state.LastPathTime = os.clock()
 
-			local botLevel = bot:GetAttribute("Level") or 1
 			local agentRadius = 2 * ScalingConfig.GetSizeMultiplier(botLevel)
 			local agentHeight = 5 * ScalingConfig.GetSizeMultiplier(botLevel)
 			local startPos = root.Position
@@ -323,11 +357,11 @@ local function moveToPath(bot, state, targetPos)
 				end
 			end)
 
-			-- While waiting, continue moving directly (Dumb Move)
-			hum:MoveTo(targetPos)
+			-- While waiting, continue moving directly (throttled)
+			throttledMoveTo(hum, state, targetPos)
 		else
-			-- Clear, move directly
-			hum:MoveTo(targetPos)
+			-- Clear, move directly (throttled)
+			throttledMoveTo(hum, state, targetPos)
 			state.Path = nil -- Clear old path
 		end
 	end
@@ -351,6 +385,9 @@ local function handleCombat(bot, state, now)
 	local dist = (targetRoot.Position - root.Position).Magnitude
 
 	-- Movement: Strafe or Chase
+	local hum = bot:FindFirstChild("Humanoid")
+	if not hum then return end
+	
 	if dist < 30 then
 		-- Close range: Strafe
 		if now > state.NextStrafeChange then
@@ -362,10 +399,8 @@ local function handleCombat(bot, state, now)
 		local right = Vector3.new(-toEnemy.Z, 0, toEnemy.X)
 		local strafePos = root.Position + (right * state.StrafeDir * 10) + (toEnemy * math.random(-5, 5))
 		
-		-- Use direct move for strafing (responsive)
-		-- Check path clear for strafe?
-		-- For optimization, we assume short strafes are clear, or collision handles it
-		bot.Humanoid:MoveTo(strafePos)
+		-- Use throttled move to prevent stuttering
+		throttledMoveTo(hum, state, strafePos)
 	else
 		-- Long range: Chase
 		moveToPath(bot, state, targetRoot.Position)
@@ -648,6 +683,15 @@ function BotController.Start()
 								end
 							else
 								moveToPath(bot, state, targetPos)
+							end
+						elseif (state.State :: any) == "IDLE" then
+							-- Idle wandering: pick a random nearby position and walk there
+							-- This prevents bots from standing completely still
+							if not state.LastMoveToPos or (root.Position - state.LastMoveToPos).Magnitude < 5 or now - state.LastMoveToTime > 3 then
+								local wanderDist = 30
+								local randomDir = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5).Unit
+								local wanderPos = root.Position + randomDir * wanderDist
+								throttledMoveTo(hum, state, wanderPos)
 							end
 						end
 					end
