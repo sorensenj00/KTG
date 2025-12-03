@@ -17,6 +17,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 
 local XPOrbConfig = require(ReplicatedStorage.GameLoop.XPOrbConfig)
 
@@ -206,6 +207,28 @@ local function despawnOrbVisual(orbId: number)
 	end
 end
 
+local function growOrbVisual(orbId: number, newSize: Vector3?)
+	local orbData = activeOrbs[orbId]
+	if orbData and newSize then
+		local orb = orbData.part
+		local hitbox = orbData.hitbox
+		
+		-- Tween size
+		local info = TweenInfo.new(0.5, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out)
+		
+		TweenService:Create(orb, info, {Size = newSize}):Play()
+		if hitbox then
+			TweenService:Create(hitbox, info, {Size = newSize * 3}):Play()
+		end
+		
+		-- Update light range
+		local light = orb:FindFirstChildOfClass("PointLight")
+		if light then
+			light.Range = newSize.Y * 1.5
+		end
+	end
+end
+
 --[[
     -------------------------------------------------------------------------
     LOOP
@@ -262,6 +285,8 @@ local function onOrbEvent(eventData: XPOrbConfig.OrbEvent)
 		spawnOrbVisual(eventData)
 	elseif eventData.Action == "Despawn" then
 		despawnOrbVisual(eventData.Id)
+	elseif eventData.Action == "Grow" then
+		growOrbVisual(eventData.Id, eventData.NewSize)
 	end
 end
 

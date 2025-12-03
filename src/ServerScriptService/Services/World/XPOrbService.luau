@@ -20,26 +20,9 @@ local Players = game:GetService("Players")
 
 
 
+local XPOrbConfig = require(ReplicatedStorage.GameLoop.XPOrbConfig)
+
 local XPOrbService = {}
-
--- Configuration
-local SPAWN_INTERVAL = 1
-local ORB_LIFETIME = 60 -- Used for growth calculation logic naming, but actual lifetime is MAX_LIFETIME
-local MAX_LIFETIME = 240 -- 4 Minutes Auto-Despawn
-local ORB_GROWTH_INTERVAL = 10
-local MAX_GROWTH_STAGES = 5
-local MAX_ORBS = 100
-local MAGNET_RADIUS = 100
-local MIN_MAGNET_SPEED = 10
-local MAX_MAGNET_SPEED = 80
-
--- Orb Tiers
-local ORB_TIERS = {
-	{ Name = "Common", XP = 150, Size = Vector3.new(2, 2, 2), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
-	{ Name = "Uncommon", XP = 400, Size = Vector3.new(2.5, 2.5, 2.5), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
-	{ Name = "Rare", XP = 1000, Size = Vector3.new(6, 6, 6), Color = Color3.fromRGB(163, 35, 35), Chance = 8 },
-	{ Name = "Legendary", XP = 5000, Size = Vector3.new(15, 15, 15), Color = Color3.fromRGB(197, 209, 28), Chance = 2 },
-}
 
 -- Data Storage (Server only - no Part instances)
 local activeOrbs = {} -- [orbId] = {id, position, tier, xpValue, spawnTime, magnetTarget}
@@ -100,7 +83,7 @@ end
 
 -- Spawn orb (data only)
 local function spawnOrb()
-	if #activeOrbs >= MAX_ORBS then
+	if #activeOrbs >= XPOrbConfig.MAX_ORBS then
 		-- Remove oldest orb
 		local oldestId = next(activeOrbs)
 		if oldestId then
@@ -112,9 +95,9 @@ local function spawnOrb()
 	-- Select tier
 	local randomValue = math.random(1, 100)
 	local accumulatedChance = 0
-	local selectedTier = ORB_TIERS[1]
+	local selectedTier = XPOrbConfig.TIER_LIST[1]
 
-	for _, tier in ipairs(ORB_TIERS) do
+	for _, tier in ipairs(XPOrbConfig.TIER_LIST) do
 		accumulatedChance = accumulatedChance + tier.Chance
 		if randomValue <= accumulatedChance then
 			selectedTier = tier
@@ -196,26 +179,33 @@ local function updateOrbs(dt)
 		local age = currentTime - orb.spawnTime
 		
 		-- Auto-Despawn
-		if age > MAX_LIFETIME then
+		if age > XPOrbConfig.MAX_LIFETIME then
 			activeOrbs[orbId] = nil
 			orbEvents:FireAllClients({Action = "Despawn", Id = orbId})
 			continue
 		end
 		
 		-- Growth Logic
-		local currentStage = math.floor(age / ORB_GROWTH_INTERVAL)
-		if currentStage > orb.growthStage and orb.growthStage < MAX_GROWTH_STAGES then
+		local currentStage = math.floor(age / XPOrbConfig.ORB_GROWTH_INTERVAL)
+		if currentStage > orb.growthStage and orb.growthStage < XPOrbConfig.MAX_GROWTH_STAGES then
 			orb.growthStage = currentStage
 
 			-- Grow Stats
-			orb.xpValue = math.floor(orb.xpValue * 1.5)
-			orb.currentSize = orb.currentSize * 1.25 -- Grow visual size by 25% per stage
+			orb.xpValue = math.floor(orb.xpValue * XPOrbConfig.GROWTH_XP_MULTIPLIER)
+			orb.currentSize = orb.currentSize * XPOrbConfig.GROWTH_SIZE_MULTIPLIER -- Grow visual size
+			
+			-- Replicate Growth
+			orbEvents:FireAllClients({
+				Action = "Grow",
+				Id = orbId,
+				NewSize = orb.currentSize
+			})
 		end
 		
 		-- Magnet logic (Throttled Search)
 		if checkMagnet then
 			local closestData = nil
-			local closestDistSq = MAGNET_RADIUS * MAGNET_RADIUS -- Compare squared distance (Optimization)
+			local closestDistSq = XPOrbConfig.MAGNET_RADIUS * XPOrbConfig.MAGNET_RADIUS -- Compare squared distance (Optimization)
 
 			for _, pData in ipairs(playerPositions) do
 				local dx = pData.Position.X - orb.position.X
@@ -248,10 +238,10 @@ local function updateOrbs(dt)
 					local targetPos = root.Position
 					local dist = (targetPos - orb.position).Magnitude -- We need actual dist for speed calc
 
-					if dist < MAGNET_RADIUS then
+					if dist < XPOrbConfig.MAGNET_RADIUS then
 						local direction = (targetPos - orb.position).Unit
-						local speedAlpha = 1 - math.clamp(dist / MAGNET_RADIUS, 0, 1)
-						local currentSpeed = MIN_MAGNET_SPEED + (MAX_MAGNET_SPEED - MIN_MAGNET_SPEED) * speedAlpha
+						local speedAlpha = 1 - math.clamp(dist / XPOrbConfig.MAGNET_RADIUS, 0, 1)
+						local currentSpeed = XPOrbConfig.MIN_MAGNET_SPEED + (XPOrbConfig.MAX_MAGNET_SPEED - XPOrbConfig.MIN_MAGNET_SPEED) * speedAlpha
 
 						orb.position = orb.position + direction * currentSpeed * dt
 					else
@@ -368,7 +358,7 @@ function XPOrbService.SpawnDrop(position: Vector3, totalXP: number)
 	local xpPerOrb = math.floor(totalXP / orbCount)
 
 	for i = 1, orbCount do
-		if #activeOrbs >= MAX_ORBS then
+		if #activeOrbs >= XPOrbConfig.MAX_ORBS then
 			local oldestId = next(activeOrbs)
 			if oldestId then
 				activeOrbs[oldestId] = nil
@@ -377,10 +367,10 @@ function XPOrbService.SpawnDrop(position: Vector3, totalXP: number)
 		end
 
 		-- Determine tier
-		local tier = ORB_TIERS[1]
-		if xpPerOrb >= 2000 then tier = ORB_TIERS[4]
-		elseif xpPerOrb >= 500 then tier = ORB_TIERS[3]
-		elseif xpPerOrb >= 250 then tier = ORB_TIERS[2]
+		local tier = XPOrbConfig.TIERS.Common
+		if xpPerOrb >= 2000 then tier = XPOrbConfig.TIERS.Legendary
+		elseif xpPerOrb >= 500 then tier = XPOrbConfig.TIERS.Rare
+		elseif xpPerOrb >= 250 then tier = XPOrbConfig.TIERS.Uncommon
 		end
 
 		-- Scatter position
@@ -478,7 +468,7 @@ function XPOrbService.Start()
 	task.spawn(function()
 		while true do
 			spawnOrb()
-			task.wait(SPAWN_INTERVAL)
+			task.wait(XPOrbConfig.SPAWN_INTERVAL)
 		end
 	end)
 	

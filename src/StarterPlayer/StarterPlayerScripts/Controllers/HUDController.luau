@@ -207,6 +207,48 @@ function HUDController.Start()
 		killsLabel.Parent = topBar
 
 		-- ============================================
+		-- 0b. Stats (Without Mutations)
+		-- ============================================
+		local statsFrame = Instance.new("Frame")
+		statsFrame.Name = "StatsFrame"
+		statsFrame.Size = UDim2.new(0, 200, 0, 100)
+		statsFrame.Position = UDim2.new(0, 10, 0, 80) -- Below Kills
+		statsFrame.BackgroundTransparency = 1
+		statsFrame.Parent = topBar
+
+		local statsHeader = Instance.new("TextLabel")
+		statsHeader.Name = "Header"
+		statsHeader.Size = UDim2.new(1, 0, 0, 20)
+		statsHeader.BackgroundTransparency = 1
+		statsHeader.Text = "Stats (without mutations)"
+		statsHeader.TextColor3 = ARCADE_THEME.TEXT_GRAY
+		statsHeader.TextSize = 14
+		statsHeader.Font = Enum.Font.GothamBold
+		statsHeader.TextXAlignment = Enum.TextXAlignment.Left
+		statsHeader.Parent = statsFrame
+
+		local function createStatLabel(name, order)
+			local label = Instance.new("TextLabel")
+			label.Name = name .. "Label"
+			label.Size = UDim2.new(1, 0, 0, 15)
+			label.Position = UDim2.new(0, 0, 0, 20 + (order * 15))
+			label.BackgroundTransparency = 1
+			label.Text = name .. ": -"
+			label.TextColor3 = ARCADE_THEME.TEXT_WHITE
+			label.TextSize = 12
+			label.Font = Enum.Font.Gotham
+			label.TextXAlignment = Enum.TextXAlignment.Left
+			label.TextStrokeTransparency = 0.5
+			label.Parent = statsFrame
+			return label
+		end
+
+		local statSizeLabel = createStatLabel("Size", 0)
+		local statHealthLabel = createStatLabel("Health", 1)
+		local statDamageLabel = createStatLabel("Damage", 2)
+		local statSpeedLabel = createStatLabel("Speed", 3)
+
+		-- ============================================
 		-- 1. Health Bar (Bottom Left)
 		-- ============================================
 		local healthFrame = Instance.new("Frame")
@@ -662,6 +704,12 @@ function HUDController.Start()
 			SizeLabel = sizeLabel,
 			DNALabel = dnaLabel,
 			KillsLabel = killsLabel,
+
+			-- Stats Widget
+			StatSizeLabel = statSizeLabel,
+			StatHealthLabel = statHealthLabel,
+			StatDamageLabel = statDamageLabel,
+			StatSpeedLabel = statSpeedLabel,
 
 			-- Health Widget
 			HealthText = healthText,
@@ -1226,21 +1274,20 @@ function HUDController.Start()
 		end
 	end)
 
-	-- Keyboard shortcut: N to toggle shop
-	ContextActionService:BindAction("ToggleShop", function(_, inputState)
+	-- Keyboard shortcut: N to toggle mutation shop
+	ContextActionService:BindAction("ToggleMutationShop", function(_, inputState)
 		if inputState == Enum.UserInputState.Begin then
-			-- Toggle Mutation Shop
-			if MutationShopController.IsOpen() then
-				MutationShopController.Close()
+			-- Priority: Close any open shop first
+			if hud.ShopMainFrame.Visible then
+				-- Main shop is open, close it
+				setShopState(false, false)
+			elseif MutationShopController.IsOpen() then
+				-- Mutation shop is open, close it (skip callback to prevent main shop reopening)
+				MutationShopController.Close(true)
 			else
+				-- Nothing is open, open mutation shop
 				local success = MutationShopController.Open()
-				if success then
-					-- If successful, ensure the main shop is closed if it was open
-					if hud.ShopMainFrame.Visible then
-						toggleShop()
-					end
-				else
-					-- Optional: Feedback if it fails (e.g., not enough DNA)
+				if not success then
 					playSound(SOUNDS.Error)
 				end
 			end
@@ -1294,6 +1341,17 @@ function HUDController.Start()
 			{ Size = UDim2.fromScale(percent, 1) }
 		)
 		tween:Play()
+
+		-- Update Base Stats (Without Mutations)
+		local baseSize = ScalingConfig.GetSizeMultiplier(level)
+		local baseHealth = ScalingConfig.GetMaxHealth(level)
+		local baseDamage = ScalingConfig.GetDamageMultiplier(level)
+		local baseSpeed = ScalingConfig.GetWalkSpeed(level)
+
+		hud.StatSizeLabel.Text = string.format("Size: %.2fx", baseSize)
+		hud.StatHealthLabel.Text = string.format("Health: %d", baseHealth)
+		hud.StatDamageLabel.Text = string.format("Damage: %.2fx", baseDamage)
+		hud.StatSpeedLabel.Text = string.format("Speed: %d", math.floor(baseSpeed))
 	end
 
 	local function updateKills()

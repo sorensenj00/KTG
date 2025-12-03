@@ -109,10 +109,11 @@ local function createCard(name, data, index)
     barCorner.Parent = barContainer
 
     local barLayout = Instance.new("UIListLayout")
+    barLayout.Name = "BarLayout"
     barLayout.FillDirection = Enum.FillDirection.Horizontal
     barLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     barLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    barLayout.Padding = UDim.new(0, 2)
+    barLayout.Padding = UDim.new(0, 2) -- Will be adjusted based on segment count
     barLayout.Parent = barContainer
 
     
@@ -147,27 +148,36 @@ local function createCard(name, data, index)
         local maxLevel = data.MaxLevel or 5
         -- Clear existing segments (if any)
         for _, child in ipairs(barContainer:GetChildren()) do
-            if child:IsA("GuiObject") then child:Destroy() end
+            if child:IsA("Frame") then child:Destroy() end
         end
         
-        -- Create Segments
-        -- Adjust for padding: We have (maxLevel - 1) paddings of 2px.
-        -- It's easier to just use Scale and let UIListLayout handle it, but with padding it might overflow if we use 1/N.
-        -- Let's use a simple calculation or just rely on layout with a small size.
-        -- Actually, better to use a fixed size per segment or calculate it.
-        -- Let's try to fit them.
+        -- Adjust padding based on segment count (smaller padding for more segments)
+        local layout = barContainer:FindFirstChild("BarLayout")
+        local padding = maxLevel > 10 and 1 or 2
+        if layout then
+            layout.Padding = UDim.new(0, padding)
+        end
+        
+        -- Calculate segment size properly
+        -- Total padding = (maxLevel - 1) * padding pixels
+        -- We use scale for the main width and subtract padding share from each segment
+        local totalPaddingRatio = (maxLevel - 1) * padding / 176 -- Approximate container width
+        local segmentScale = (1 - totalPaddingRatio) / maxLevel
         
         for i = 1, maxLevel do
             local segment = Instance.new("Frame")
             segment.Name = "Segment" .. i
             segment.BackgroundColor3 = (i <= lvl) and (mutationConfig.RarityColors[data.Rarity] or Color3.new(1,1,1)) or Color3.fromRGB(60, 60, 70)
-            segment.Size = UDim2.new(1 / maxLevel, -2, 1, 0) -- Rough fit
+            segment.Size = UDim2.new(segmentScale, 0, 1, 0)
             segment.BorderSizePixel = 0
             segment.Parent = barContainer
             
-            local segCorner = Instance.new("UICorner")
-            segCorner.CornerRadius = UDim.new(0, 2)
-            segCorner.Parent = segment
+            -- Only add corner radius if segments are big enough
+            if maxLevel <= 10 then
+                local segCorner = Instance.new("UICorner")
+                segCorner.CornerRadius = UDim.new(0, 2)
+                segCorner.Parent = segment
+            end
         end
 
         
@@ -339,7 +349,7 @@ function MutationShopController.Open()
     return true
 end
 
-function MutationShopController.Close()
+function MutationShopController.Close(skipCallback)
     if not gui or not gui.Enabled then return end
     
     gui.Enabled = false
@@ -354,8 +364,8 @@ function MutationShopController.Close()
         end
     end
     
-    -- If we have a parent menu callback, use it to return smoothly
-    if closeCallback then
+    -- If we have a parent menu callback, use it to return smoothly (unless skipped)
+    if closeCallback and not skipCallback then
         closeCallback()
     else
         -- Fallback: Just lock mouse and resume game

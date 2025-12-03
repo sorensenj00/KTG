@@ -20,6 +20,10 @@ XPOrbConfig.ORB_GROWTH_INTERVAL = 10
 XPOrbConfig.MAX_GROWTH_STAGES = 5
 XPOrbConfig.MAX_ORBS = 100
 
+-- Growth Scaling
+XPOrbConfig.GROWTH_SIZE_MULTIPLIER = 1.5 -- 50% size increase per stage
+XPOrbConfig.GROWTH_XP_MULTIPLIER = 1.5 -- 50% XP increase per stage
+
 -- Magnetism
 XPOrbConfig.MAGNET_RADIUS = 50 -- Reduced from 100 to 50 to match Client
 XPOrbConfig.MIN_MAGNET_SPEED = 10
@@ -62,12 +66,13 @@ export type OrbData = {
 }
 
 export type OrbEvent = {
-    Action: "Spawn" | "Despawn",
+    Action: "Spawn" | "Despawn" | "Grow",
     Id: number,
     Position: Vector3?,
     Tier: OrbTier?,
     XP: number?,
     IsDrop: boolean?,
+    NewSize: Vector3?,
 }
 
 --[[
@@ -77,10 +82,10 @@ export type OrbEvent = {
 ]]
 
 XPOrbConfig.TIERS = {
-    Common = { Name = "Common", XP = 150, Size = Vector3.new(2, 2, 2), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
-    Uncommon = { Name = "Uncommon", XP = 400, Size = Vector3.new(2.5, 2.5, 2.5), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
-    Rare = { Name = "Rare", XP = 1000, Size = Vector3.new(6, 6, 6), Color = Color3.fromRGB(163, 35, 35), Chance = 8 },
-    Legendary = { Name = "Legendary", XP = 5000, Size = Vector3.new(15, 15, 15), Color = Color3.fromRGB(197, 209, 28), Chance = 2 },
+    Common = { Name = "Common", XP = 150, Size = Vector3.new(3, 3, 3), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
+    Uncommon = { Name = "Uncommon", XP = 400, Size = Vector3.new(4, 4, 4), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
+    Rare = { Name = "Rare", XP = 1000, Size = Vector3.new(8, 8, 8), Color = Color3.fromRGB(163, 35, 35), Chance = 8 },
+    Legendary = { Name = "Legendary", XP = 5000, Size = Vector3.new(20, 20, 20), Color = Color3.fromRGB(197, 209, 28), Chance = 2 },
 } :: { [string]: OrbTier }
 
 XPOrbConfig.TIER_LIST = {
