@@ -115,10 +115,22 @@ local function createEntry(rank, playerObj, biomass, kills)
 
 	-- Load Avatar
 	task.spawn(function()
-		local content, isReady =
-			Players:GetUserThumbnailAsync(playerObj.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
-		if isReady then
+		local success, content, isReady = pcall(function()
+			return Players:GetUserThumbnailAsync(playerObj.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+		end)
+		if success and isReady and content ~= "" then
 			avatarImage.Image = content
+		else
+			-- Fallback: Use a generic avatar or the bust thumbnail
+			local fallbackSuccess, fallbackContent = pcall(function()
+				return Players:GetUserThumbnailAsync(playerObj.UserId, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailSize.Size100x100)
+			end)
+			if fallbackSuccess and fallbackContent and fallbackContent ~= "" then
+				avatarImage.Image = fallbackContent
+			else
+				-- Final fallback - use Roblox default avatar placeholder
+				avatarImage.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+			end
 		end
 	end)
 

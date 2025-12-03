@@ -123,8 +123,9 @@ local function setupEntity(entity, dataSource)
 	updateLabel(dataSource, label)
 	updateHealth(humanoid, healthFill)
 
-	-- Disable default health bar
+	-- Disable default health bar and name display
 	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 
 	-- Connections
 	local connections = {}
@@ -314,6 +315,28 @@ end
 
 --== Player Management ==--
 
+local function trySetupPlayer(player, character)
+	if not character or not character.Parent then
+		return
+	end
+
+	-- Already tracked
+	if activeUIs[character] then
+		return
+	end
+
+	local attempts = setupAttempts[character] or 0
+	if attempts >= MAX_ATTEMPTS then
+		return
+	end
+
+	setupAttempts[character] = attempts + 1
+
+	if setupEntity(character, player) then
+		setupAttempts[character] = nil
+	end
+end
+
 local function onPlayerAdded(player)
 	if player == LocalPlayer then
 		return
@@ -321,7 +344,7 @@ local function onPlayerAdded(player)
 
 	local function onCharacter(character)
 		task.defer(function()
-			setupEntity(character, player)
+			trySetupPlayer(player, character)
 		end)
 	end
 
@@ -391,10 +414,19 @@ task.spawn(function()
 			end
 		end
 
+		-- Retry players whose characters failed to setup
+		for _, player in Players:GetPlayers() do
+			if player ~= LocalPlayer and player.Character then
+				if not activeUIs[player.Character] then
+					trySetupPlayer(player, player.Character)
+				end
+			end
+		end
+
 		-- Cleanup dead attempts
-		for bot in setupAttempts do
-			if not bot.Parent then
-				setupAttempts[bot] = nil
+		for entity in setupAttempts do
+			if not entity.Parent then
+				setupAttempts[entity] = nil
 			end
 		end
 	end

@@ -6,10 +6,10 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 -- Configuration
-local MAX_ENTRIES = 6
-local ENTRY_LIFETIME = 6 -- seconds
+local MAX_ENTRIES = 4
+local ENTRY_LIFETIME = 5 -- seconds before fade out
 local FADE_IN_TIME = 0.25
-local FADE_OUT_TIME = 0.4
+local FADE_OUT_TIME = 0.3
 
 -- Color definitions
 local COLORS = {
