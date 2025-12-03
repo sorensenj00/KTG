@@ -4,6 +4,11 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
+if player.Name ~= "usernameRoblox8000" then
+	script:Destroy()
+	return
+end
+
 local playerGui = player:WaitForChild("PlayerGui")
 local remotes = ReplicatedStorage:WaitForChild("AdminRemotes", 10)
 

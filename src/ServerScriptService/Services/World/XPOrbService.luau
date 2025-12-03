@@ -264,11 +264,14 @@ local ServiceBus = require(ServerScriptService.Services.ServiceBus)
 -- Helper: Calculate dynamic collection range based on entity size
 local function getCollectionRange(entity)
 	local scale = entity:GetAttribute("Scale") or 1.0
-	-- Base 30 + (Scale * 5)
-	-- Scale 1 = 35 studs
-	-- Scale 50 = 280 studs
-	return 30 + (scale * 5)
+	-- Very forgiving base range + scale bonus
+	-- Base 50 studs minimum (easy to collect when small)
+	-- Scale 1 = 55 studs, Scale 50 = 300 studs
+	return 50 + (scale * 5)
 end
+
+-- Network latency tolerance (studs)
+local COLLECTION_LATENCY_TOLERANCE = 25
 
 -- Handle orb collection from client
 local function onCollectOrb(player, orbId)
@@ -277,19 +280,22 @@ local function onCollectOrb(player, orbId)
 		return -- Orb already collected or doesn't exist
 	end
 	
-	-- Validate proximity (anti-cheat)
+	-- Validate proximity (anti-cheat) - very forgiving to account for latency
 	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
 		local dist = (player.Character.HumanoidRootPart.Position - orb.position).Magnitude
 		
-		local maxDist = getCollectionRange(player.Character)
+		local maxDist = getCollectionRange(player.Character) + COLLECTION_LATENCY_TOLERANCE
 		
-		-- Magnet tolerance
+		-- Extra tolerance if orb was being magneted to player
 		if orb.magnetTarget == player.UserId then
-			maxDist = maxDist + 20 
+			maxDist = maxDist + 30 
 		end
 		
 		if dist > maxDist then
-			warn("⚠️ Player", player.Name, "tried to collect orb from too far away:", dist, "max:", maxDist)
+			-- Only warn for very suspicious distances (potential exploit)
+			if dist > maxDist * 2 then
+				warn("⚠️ Player", player.Name, "tried to collect orb from too far away:", dist, "max:", maxDist)
+			end
 			return
 		end
 	else

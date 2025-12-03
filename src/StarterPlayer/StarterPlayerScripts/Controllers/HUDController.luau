@@ -1343,13 +1343,17 @@ function HUDController.Start()
 		tween:Play()
 
 		-- Update Base Stats (Without Mutations)
-		local baseSize = ScalingConfig.GetSizeMultiplier(level)
-		local baseHealth = ScalingConfig.GetMaxHealth(level)
-		local baseDamage = ScalingConfig.GetDamageMultiplier(level)
-		local baseSpeed = ScalingConfig.GetWalkSpeed(level)
+		-- Calculate smooth level for stats that scale with biomass (size, health, speed)
+		local progress = requiredBiomass > 0 and math.clamp(biomass / requiredBiomass, 0, 0.99) or 0
+		local smoothLevel = level + progress
+
+		local baseSize = ScalingConfig.GetSizeMultiplier(smoothLevel)
+		local baseHealth = ScalingConfig.GetMaxHealth(smoothLevel)
+		local baseDamage = ScalingConfig.GetDamageMultiplier(level) -- Damage stays at integer level
+		local baseSpeed = ScalingConfig.GetWalkSpeed(smoothLevel)
 
 		hud.StatSizeLabel.Text = string.format("Size: %.2fx", baseSize)
-		hud.StatHealthLabel.Text = string.format("Health: %d", baseHealth)
+		hud.StatHealthLabel.Text = string.format("Health: %.1fx", baseHealth / ScalingConfig.GetMaxHealth(1))
 		hud.StatDamageLabel.Text = string.format("Damage: %.2fx", baseDamage)
 		hud.StatSpeedLabel.Text = string.format("Speed: %d", math.floor(baseSpeed))
 	end

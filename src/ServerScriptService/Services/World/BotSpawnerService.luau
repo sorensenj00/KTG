@@ -78,7 +78,8 @@ local function spawnBot()
 	bot:SetAttribute("XP", 0)
 	bot:SetAttribute("SpawnTime", Workspace:GetServerTimeNow())
 
-	CollectionService:AddTag(bot, "BotAI")
+	-- NOTE: "BotAI" tag is added AFTER physics initialization (see below)
+	-- This prevents BotController from trying to move a bot in Physics state
 
 	-- Give Weapon
 	local weapon = ServerStorage:FindFirstChild("AutoBlaster")
@@ -227,6 +228,12 @@ local function spawnBot()
 		-- Reset to running so they can move
 		if humanoid then
 			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+		end
+		
+		-- NOW add the BotAI tag so BotController can start managing this bot
+		-- This ensures the bot is in Running state and ready for MoveTo commands
+		if bot and bot.Parent then
+			CollectionService:AddTag(bot, "BotAI")
 		end
 	end)
 

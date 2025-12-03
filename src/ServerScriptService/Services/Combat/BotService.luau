@@ -36,6 +36,7 @@ local NETWORK_OWNERSHIP_RADIUS = 200 -- Transfer ownership if player is within 2
 local ORB_SEARCH_INTERVAL = 0.1 -- Search for orbs very frequently
 local STUCK_THRESHOLD = 0.5
 local STUCK_TIME = 1.0
+local IDLE_TIMEOUT = 2.0 -- Max seconds a bot can be idle without any movement command
 local REACTION_TIME = 1.2 -- Delay before shooting after acquiring target (Increased for easier difficulty)
 
 -- === Events ===
@@ -379,6 +380,8 @@ local function handleCombat(bot, state, now)
 		state.State = "IDLE"
 		state.Path = nil
 		state.NextOrbSearch = 0
+		state.LastMoveToPos = nil -- Force immediate movement on next update
+		state.LastMoveToTime = 0
 		return
 	end
 
@@ -602,7 +605,7 @@ function BotController.Start()
 				end
 			end
 
-			-- Stuck Detection
+			-- Stuck Detection (bot trying to move but can't)
 			local moved = (root.Position - state.LastPos).Magnitude
 			if moved < STUCK_THRESHOLD and hum.MoveDirection.Magnitude > 0.1 then
 				if not state.StuckSince then state.StuckSince = now end
@@ -613,11 +616,38 @@ function BotController.Start()
 					hum:MoveTo(root.Position + randomDir)
 					state.Path = nil -- Reset path
 					state.StuckSince = nil -- Reset and wait
+					state.LastMoveToPos = nil -- Force new movement command
+					state.LastMoveToTime = 0
 					state.LastPos = root.Position
 					continue
 				end
 			else
 				state.StuckSince = nil
+			end
+			
+			-- Idle Timeout Detection (bot has no movement command at all)
+			-- This catches bots that are completely frozen with MoveDirection = 0
+			if moved < STUCK_THRESHOLD and hum.MoveDirection.Magnitude < 0.1 then
+				-- Bot is stationary AND not trying to move - force recovery
+				if now - state.LastMoveToTime > IDLE_TIMEOUT then
+					-- Force a wander command to wake up the bot
+					local randomDir = Vector3.new(math.random()-0.5, 0, math.random()-0.5).Unit * 20
+					local wanderPos = root.Position + randomDir
+					hum:MoveTo(wanderPos)
+					state.LastMoveToPos = wanderPos
+					state.LastMoveToTime = now
+					state.Path = nil
+					state.IsPathfinding = false -- Reset pathfinding state
+					-- Also reset state to IDLE if stuck in a bad state
+					if state.State == "ORB" and state.Target then
+						-- Blacklist the orb we couldn't reach
+						if state.Target.ID then
+							state.OrbBlacklist[state.Target.ID] = now
+						end
+						state.State = "IDLE"
+						state.Target = nil
+					end
+				end
 			end
 			state.LastPos = root.Position
 
@@ -629,6 +659,8 @@ function BotController.Start()
 					state.Target = nil
 					state.Path = nil
 					state.NextOrbSearch = 0
+					state.LastMoveToPos = nil -- Force immediate movement
+					state.LastMoveToTime = 0
 				end
 			end
 
@@ -691,7 +723,8 @@ function BotController.Start()
 						elseif (state.State :: any) == "IDLE" then
 							-- Idle wandering: pick a random nearby position and walk there
 							-- This prevents bots from standing completely still
-							if not state.LastMoveToPos or (root.Position - state.LastMoveToPos).Magnitude < 5 or now - state.LastMoveToTime > 3 then
+							-- Reduced timeout from 3s to 1.5s for more responsive wandering
+							if not state.LastMoveToPos or (root.Position - state.LastMoveToPos).Magnitude < 5 or now - state.LastMoveToTime > 1.5 then
 								local wanderDist = 30
 								local randomDir = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5).Unit
 								local wanderPos = root.Position + randomDir * wanderDist

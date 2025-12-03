@@ -17,7 +17,7 @@ ScalingConfig.KILL_REWARD_MULTIPLIER = 50
 
 -- Health Constants (Geometric Progression)
 -- Goal: Lvl 1 = 50, Lvl 15 = ~250, Lvl 30 = 1500
-ScalingConfig.HEALTH_BASE = 45
+ScalingConfig.HEALTH_BASE = 60
 ScalingConfig.HEALTH_GROWTH_FACTOR = 1.125 
 
 -- Speed Constants

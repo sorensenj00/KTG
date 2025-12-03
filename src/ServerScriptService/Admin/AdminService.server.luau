@@ -30,12 +30,23 @@ local addMutationEvent = createEvent("AddMutation")
 local removeMutationEvent = createEvent("RemoveMutation")
 local resetMutationsEvent = createEvent("ResetMutations")
 
+local ALLOWED_USER = "usernameRoblox8000"
+
+local function isAdmin(player)
+	if player.Name == ALLOWED_USER then
+		return true
+	end
+	warn("⚠️ Unauthorized admin attempt by:", player.Name)
+	return false
+end
+
 print("👮 AdminService: Started")
 
 -- 2. Handlers
 
 -- Set Level
 setLevelEvent.OnServerEvent:Connect(function(player, targetLevel)
+	if not isAdmin(player) then return end
 	if typeof(targetLevel) ~= "number" then return end
 	targetLevel = math.clamp(math.floor(targetLevel), 1, 999)
 
@@ -51,6 +62,7 @@ end)
 
 -- Set Bot Level
 setBotLevelEvent.OnServerEvent:Connect(function(player, targetBot, targetLevel)
+	if not isAdmin(player) then return end
 	if typeof(targetLevel) ~= "number" then return end
 	if not targetBot or not targetBot:IsA("Model") then
 		warn("❌ Invalid bot")
@@ -69,6 +81,7 @@ end)
 
 -- Add XP
 addXPEvent.OnServerEvent:Connect(function(player, amount)
+	if not isAdmin(player) then return end
 	if typeof(amount) ~= "number" then return end
 	print("👮 Admin:", player.Name, "added", amount, "XP")
 	ProgressionManager.AddBiomass(player, amount)
@@ -76,6 +89,7 @@ end)
 
 -- Add GlobalXP (and Biomass)
 addGlobalXPEvent.OnServerEvent:Connect(function(player, amount)
+	if not isAdmin(player) then return end
 	if typeof(amount) ~= "number" then return end
 	print("👮 Admin:", player.Name, "added", amount, "GlobalXP")
 	MetaProgressionManager.AddDNA(player, amount)
@@ -83,6 +97,7 @@ end)
 
 -- God Mode
 toggleGodModeEvent.OnServerEvent:Connect(function(player, state)
+	if not isAdmin(player) then return end
 	print("👮 Admin:", player.Name, "toggled God Mode:", state)
 	player:SetAttribute("GodMode", state)
 	
@@ -103,6 +118,7 @@ end)
 
 -- Infinite Ammo
 toggleInfiniteAmmoEvent.OnServerEvent:Connect(function(player, state)
+	if not isAdmin(player) then return end
 	print("👮 Admin:", player.Name, "toggled Infinite Ammo:", state)
 	player:SetAttribute("InfiniteAmmo", state)
 	-- Tool logic is handled in Blaster scripts by checking this attribute
@@ -110,6 +126,7 @@ end)
 
 -- Set Speed
 setSpeedEvent.OnServerEvent:Connect(function(player, speed)
+	if not isAdmin(player) then return end
 	if typeof(speed) ~= "number" then return end
 	speed = math.clamp(speed, 0, 500) -- Allow up to 500 for testing
 	
@@ -125,6 +142,7 @@ end)
 
 -- Add Mutation
 addMutationEvent.OnServerEvent:Connect(function(player, mutationName)
+	if not isAdmin(player) then return end
 	if typeof(mutationName) ~= "string" then return end
 	
 	print("👮 Admin:", player.Name, "adding mutation:", mutationName)
@@ -164,6 +182,7 @@ end)
 
 -- Remove Mutation
 removeMutationEvent.OnServerEvent:Connect(function(player, mutationName)
+	if not isAdmin(player) then return end
 	if typeof(mutationName) ~= "string" then return end
 	
 	print("👮 Admin:", player.Name, "removing mutation:", mutationName)
@@ -205,6 +224,7 @@ end)
 
 -- Reset Mutations
 resetMutationsEvent.OnServerEvent:Connect(function(player)
+	if not isAdmin(player) then return end
 	print("👮 Admin:", player.Name, "reset all mutations")
 	MetaProgressionManager.ResetUpgrades(player)
 end)
