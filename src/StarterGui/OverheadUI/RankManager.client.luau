@@ -102,12 +102,29 @@ local function setupEntity(entity: Model, dataSource: Instance)
 	local label = ui.InfoLabel
 	updateLabel(dataSource, label)
 	
+	-- Track ALL connections for cleanup (prevents memory leaks)
+	local connections: {RBXScriptConnection} = {}
+	
+	-- Helper to cleanup all connections and UI
+	local function cleanup()
+		for _, conn in ipairs(connections) do
+			if conn.Connected then
+				conn:Disconnect()
+			end
+		end
+		table.clear(connections)
+		
+		if ui and ui.Parent then
+			ui:Destroy()
+		end
+	end
+	
 	-- Listen for attribute changes
-	dataSource.AttributeChanged:Connect(function(attributeName)
+	table.insert(connections, dataSource.AttributeChanged:Connect(function(attributeName)
 		if attributeName == "Level" or attributeName == "XP" then
 			updateLabel(dataSource, label)
 		end
-	end)
+	end))
 	
 	-- Setup Health Bar
 	local humanoid = entity:WaitForChild("Humanoid", 60)
@@ -122,7 +139,6 @@ local function setupEntity(entity: Model, dataSource: Instance)
 		local PASSIVE_VISIBILITY_RANGE = 100
 		local COMBAT_VISIBILITY_RANGE = 600
 		local DAMAGE_SHOW_DURATION = 10
-		-- Distance at which UI is smallest
 		
 		-- Track if this entity was damaged by the local player
 		local wasDamagedByPlayer = false
@@ -152,9 +168,8 @@ local function setupEntity(entity: Model, dataSource: Instance)
 			end
 		end
 		
-		local damageConnection
 		if playerDamagedRemote then
-			damageConnection = playerDamagedRemote.OnClientEvent:Connect(function(damagedEntity)
+			table.insert(connections, playerDamagedRemote.OnClientEvent:Connect(function(damagedEntity)
 				if damagedEntity == entity then
 					wasDamagedByPlayer = true
 					lastDamageTime = tick()
@@ -162,33 +177,24 @@ local function setupEntity(entity: Model, dataSource: Instance)
 					-- IMMEDIATELY enable and show UI - don't wait for Heartbeat
 					forceUIVisible()
 				end
-			end)
+			end))
 		end
 		
 		-- Reset tracking when local player's character is removed (death/respawn)
 		local localPlayer = Players.LocalPlayer
-		local characterRemovedConnection
-		if localPlayer.Character then
-			characterRemovedConnection = localPlayer.CharacterRemoving:Connect(function()
-				wasDamagedByPlayer = false
-				lastDamageTime = 0
-			end)
-		end
+		table.insert(connections, localPlayer.CharacterRemoving:Connect(function()
+			wasDamagedByPlayer = false
+			lastDamageTime = 0
+		end))
 		
 		-- Update loop for visibility and scaling
 		local RunService = game:GetService("RunService")
 		local camera = workspace.CurrentCamera
 		
-		local visibilityConnection
-		visibilityConnection = RunService.Heartbeat:Connect(function()
-			if not head or not head.Parent then
-				visibilityConnection:Disconnect()
-				if damageConnection then
-					damageConnection:Disconnect()
-				end
-				if characterRemovedConnection then
-					characterRemovedConnection:Disconnect()
-				end
+		table.insert(connections, RunService.Heartbeat:Connect(function()
+			-- Cleanup check: if entity or head is gone, cleanup everything
+			if not head or not head.Parent or not entity or not entity.Parent then
+				cleanup()
 				return
 			end
 			
@@ -246,19 +252,22 @@ local function setupEntity(entity: Model, dataSource: Instance)
 			
 			ui.Size = UDim2.fromScale(4 * scaleFactor, 1.5 * scaleFactor)
 			ui.StudsOffset = OFFSET * scaleFactor
-		end)
+		end))
 		
 		if healthFill then
 			updateHealthBar(humanoid, healthFill)
 			
-			humanoid.HealthChanged:Connect(function()
+			table.insert(connections, humanoid.HealthChanged:Connect(function()
 				updateHealthBar(humanoid, healthFill)
-			end)
+			end))
 			
-			humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+			table.insert(connections, humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
 				updateHealthBar(humanoid, healthFill)
-			end)
+			end))
 		end
+		
+		-- Also cleanup when humanoid dies
+		table.insert(connections, humanoid.Died:Connect(cleanup))
 	end
 end
 

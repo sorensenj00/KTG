@@ -6,6 +6,7 @@
     - Modern Red Laser style.
     - High visibility and smooth fade out.
     - Object pooling to prevent GC thrashing.
+    - Single update loop for ALL lasers (prevents connection spam during rapid fire).
     
     Author: System
     Last Updated: 2025-12-02
@@ -26,6 +27,11 @@ local COLOR_GLOW = ColorSequence.new(Color3.fromRGB(255, 0, 0))     -- Red glow
 local FADE_TIME = 0.5 -- Seconds (Increased from 0.2 for better visibility)
 local CORE_WIDTH = 0.15
 local GLOW_WIDTH = 0.6
+
+-- === ACTIVE LASERS TRACKING ===
+-- Single update loop manages all active lasers instead of per-laser connections
+local activeLasers = {} -- {container, startTime, coreBeam, glowBeam}
+local updateLoopRunning = false
 
 -- === OBJECT POOL SETUP ===
 
@@ -109,6 +115,63 @@ end
 -- Initialize pool
 local laserPool = PartPool.new(createLaserTemplate(), 20)
 
+-- Single update loop for ALL active lasers
+local function updateAllLasers()
+	local currentTime = tick()
+	
+	-- Iterate backwards to safely remove completed lasers
+	for i = #activeLasers, 1, -1 do
+		local laserData = activeLasers[i]
+		local elapsed = currentTime - laserData.startTime
+		local alpha = math.clamp(elapsed / FADE_TIME, 0, 1)
+		
+		if alpha >= 1 then
+			-- Laser complete - return to pool and remove from tracking
+			laserPool:Return(laserData.container)
+			table.remove(activeLasers, i)
+		else
+			-- Update fade
+			local coreBeam = laserData.coreBeam
+			local glowBeam = laserData.glowBeam
+			
+			coreBeam.Transparency = NumberSequence.new(alpha)
+			
+			local glowAlpha = 0.4 + (0.6 * alpha)
+			glowBeam.Transparency = NumberSequence.new(glowAlpha)
+			
+			-- Shrink width slightly
+			local widthScale = 1 - (alpha * 0.5)
+			coreBeam.Width0 = CORE_WIDTH * widthScale
+			coreBeam.Width1 = CORE_WIDTH * widthScale
+			glowBeam.Width0 = GLOW_WIDTH * widthScale
+			glowBeam.Width1 = GLOW_WIDTH * widthScale
+		end
+	end
+	
+	-- Stop the loop if no active lasers (saves CPU when not shooting)
+	if #activeLasers == 0 then
+		updateLoopRunning = false
+		return true -- Signal to disconnect
+	end
+	
+	return false
+end
+
+-- Start update loop if not already running
+local updateConnection = nil
+local function ensureUpdateLoopRunning()
+	if updateLoopRunning then return end
+	
+	updateLoopRunning = true
+	updateConnection = RunService.Heartbeat:Connect(function()
+		local shouldStop = updateAllLasers()
+		if shouldStop and updateConnection then
+			updateConnection:Disconnect()
+			updateConnection = nil
+		end
+	end)
+end
+
 local function createLaserBeam(startPosition, endPosition)
 	-- Get pooled instance
 	local container = laserPool:Get()
@@ -117,8 +180,7 @@ local function createLaserBeam(startPosition, endPosition)
 	container.Position = startPosition
 	container.Parent = Workspace
 
-	-- Get references to children
-	--local att0 = container:FindFirstChild("Att0")
+	-- Get references to children (cached for update loop)
 	local att1 = container:FindFirstChild("Att1")
 	local coreBeam = container:FindFirstChild("CoreBeam")
 	local glowBeam = container:FindFirstChild("GlowBeam")
@@ -152,38 +214,22 @@ local function createLaserBeam(startPosition, endPosition)
 		endFlash.Range = 8
 	end
 
-	-- Fade out lights quickly
+	-- Fade out lights quickly (tweens are fine - they're managed by TweenService)
 	TweenService:Create(startFlash, TweenInfo.new(0.2), {Brightness = 0, Range = 0}):Play()
 	if endFlash then
 		TweenService:Create(endFlash, TweenInfo.new(0.2), {Brightness = 0, Range = 0}):Play()
 	end
 
-	-- Fade animation
-	local startTime = tick()
-	local connection
-	connection = RunService.Heartbeat:Connect(function()
-		local elapsed = tick() - startTime
-		local alpha = math.clamp(elapsed / FADE_TIME, 0, 1)
-		
-		if alpha >= 1 then
-			connection:Disconnect()
-			laserPool:Return(container)
-			return
-		end
-
-		-- Fade out beams
-		coreBeam.Transparency = NumberSequence.new(alpha)
-		
-		local glowAlpha = 0.4 + (0.6 * alpha)
-		glowBeam.Transparency = NumberSequence.new(glowAlpha)
-		
-		-- Shrink width slightly
-		local widthScale = 1 - (alpha * 0.5)
-		coreBeam.Width0 = CORE_WIDTH * widthScale
-		coreBeam.Width1 = CORE_WIDTH * widthScale
-		glowBeam.Width0 = GLOW_WIDTH * widthScale
-		glowBeam.Width1 = GLOW_WIDTH * widthScale
-	end)
+	-- Add to active lasers list (single loop handles all)
+	table.insert(activeLasers, {
+		container = container,
+		startTime = tick(),
+		coreBeam = coreBeam,
+		glowBeam = glowBeam,
+	})
+	
+	-- Ensure the update loop is running
+	ensureUpdateLoopRunning()
 end
 
 return createLaserBeam

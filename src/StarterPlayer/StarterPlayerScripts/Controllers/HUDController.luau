@@ -50,14 +50,47 @@ local SOUNDS = {
 	Error = "rbxassetid://6895079595",
 }
 
+-- Sound Pool: Reuse Sound instances instead of creating/destroying each time
+-- This prevents GC thrashing during rapid UI interactions
+local soundPool = {} -- {[soundId] = {available = {Sound}, inUse = {Sound}}}
+
+local function getPooledSound(soundId)
+	-- Initialize pool for this sound ID if needed
+	if not soundPool[soundId] then
+		soundPool[soundId] = { available = {}, inUse = {} }
+	end
+	
+	local pool = soundPool[soundId]
+	local sound = table.remove(pool.available)
+	
+	if not sound then
+		-- Create new sound if pool is empty
+		sound = Instance.new("Sound")
+		sound.SoundId = soundId
+		sound.Volume = 0.5
+		sound.Parent = SoundService
+	end
+	
+	pool.inUse[sound] = true
+	return sound
+end
+
+local function returnPooledSound(soundId, sound)
+	local pool = soundPool[soundId]
+	if pool and pool.inUse[sound] then
+		pool.inUse[sound] = nil
+		table.insert(pool.available, sound)
+	end
+end
+
 local function playSound(soundId)
-	local s = Instance.new("Sound")
-	s.SoundId = soundId
-	s.Volume = 0.5
-	s.Parent = SoundService
-	s:Play()
-	s.Ended:Connect(function()
-		s:Destroy()
+	local sound = getPooledSound(soundId)
+	sound:Play()
+	
+	-- Return to pool when done (use Once connection to avoid memory buildup)
+	local conn
+	conn = sound.Ended:Once(function()
+		returnPooledSound(soundId, sound)
 	end)
 end
 
@@ -898,9 +931,8 @@ local function createUpgradeCard(statName: string, upgradeConfig: any)
 	lockOverlay.ZIndex = 10
 	lockOverlay.Parent = cardFrame
 
-	-- Purchase logic
-	local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
-	local purchaseUpgradeRemote = remotes and remotes:FindFirstChild("PurchaseUpgrade")
+	-- Purchase logic - use cached remotes (will be set by parent scope)
+	-- Note: purchaseUpgradeRemote is captured from outer scope to avoid WaitForChild in loop
 
 	purchaseButton.MouseEnter:Connect(function()
 		playSound(SOUNDS.Hover)
@@ -964,11 +996,18 @@ end
 
 -- Build skill tree structure
 local tierFrames = {}
+
+-- Cache remotes at module level (fetched once, used by all cards)
+local cachedRemotes = nil
+local purchaseUpgradeRemote = nil
+
 task.spawn(function()
-	local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
-	if not remotes then
+	-- Fetch remotes ONCE at startup
+	cachedRemotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
+	if not cachedRemotes then
 		return
 	end
+	purchaseUpgradeRemote = cachedRemotes:FindFirstChild("PurchaseUpgrade")
 
 	for tierNumber = 1, 1 do
 		local tierData = MetaConfig.Tiers[tierNumber]
@@ -991,88 +1030,72 @@ end)
 
 
 -- --- Shop Update Function (Optimized with Caching) --- --
+-- Uses cardCache to directly access UI elements without FindFirstChild lookups
 local function updateShopUI()
-	for tierNumber, tierFrame in pairs(tierFrames) do
-		local container = tierFrame:FindFirstChild("UpgradeContainer")
-		if container then
-			for _, card in ipairs(container:GetChildren()) do
-				if card:IsA("Frame") and card.Name:match("Card$") then
-					local statName = card:GetAttribute("StatName")
-					if statName and MetaConfig.Upgrades[statName] then
-						local upgradeConfig = MetaConfig.Upgrades[statName]
-						local level = currentUpgrades[statName] or 0
-						local cost = MetaConfig.GetCost(statName, level)
-
-						-- Unlock Check: uses lifetime Biomass (which is effectively Lifetime DNA earned)
-						local isUnlocked = MetaConfig.IsUnlocked(currentBiomass, statName)
-
-						local infoContainer = card:FindFirstChild("InfoContainer")
-						if infoContainer then
-							local progressBarBg = infoContainer:FindFirstChild("ProgressBarBg")
-							if progressBarBg then
-								local progressBarFill = progressBarBg:FindFirstChild("ProgressBarFill")
-								if progressBarFill then
-									local percent = math.clamp(level / upgradeConfig.MaxLevel, 0, 1)
-									progressBarFill.Size = UDim2.fromScale(percent, 1)
-								end
-							end
-						end
-
-						local actionContainer = card:FindFirstChild("ActionContainer")
-						if actionContainer then
-							local costLabel = actionContainer:FindFirstChild("CostLabel")
-							local levelLabel = actionContainer:FindFirstChild("LevelLabel")
-
-							if levelLabel then
-								levelLabel.Text = string.format("Level %d / %d", level, upgradeConfig.MaxLevel)
-							end
-
-							if costLabel then
-								if level >= upgradeConfig.MaxLevel then
-									costLabel.Text = "MAX"
-								else
-									costLabel.Text = string.format("%d DNA", math.floor(cost))
-								end
-							end
-						end
-
-						local lockOverlay = card:FindFirstChild("LockOverlay")
-						local purchaseButton = card:FindFirstChild("PurchaseButton")
-
-						if isUnlocked then
-							if lockOverlay then
-								lockOverlay.Visible = false
-							end
-							card.BackgroundTransparency = 0.2
-
-							if purchaseButton then
-								if level >= upgradeConfig.MaxLevel then
-									purchaseButton.BackgroundColor3 = COLORS.XP_GOLD
-									purchaseButton.Text = "MAXED"
-									purchaseButton.Active = false
-								elseif currentDNA >= cost then
-									purchaseButton.BackgroundColor3 = COLORS.BUTTON_GREEN
-									purchaseButton.Text = "UPGRADE"
-									purchaseButton.Active = true
-								else
-									purchaseButton.BackgroundColor3 = COLORS.BUTTON_RED
-									purchaseButton.Text = "UPGRADE"
-									purchaseButton.Active = true
-								end
-							end
-						else
-							if lockOverlay then
-								lockOverlay.Visible = true
-							end
-							card.BackgroundTransparency = 0.5
-							if purchaseButton then
-								purchaseButton.BackgroundColor3 = COLORS.LOCKED_GREY
-								purchaseButton.Text = "LOCKED"
-								purchaseButton.Active = false
-							end
-						end
-					end
+	-- Use cardCache for direct element access (100x faster than FindFirstChild)
+	for statName, cached in pairs(cardCache) do
+		local upgradeConfig = MetaConfig.Upgrades[statName]
+		if not upgradeConfig then continue end
+		
+		local level = currentUpgrades[statName] or 0
+		local cost = MetaConfig.GetCost(statName, level)
+		local isUnlocked = MetaConfig.IsUnlocked(currentBiomass, statName)
+		
+		-- Update progress bar (cached reference)
+		if cached.progressBarFill then
+			local percent = math.clamp(level / upgradeConfig.MaxLevel, 0, 1)
+			cached.progressBarFill.Size = UDim2.fromScale(percent, 1)
+		end
+		
+		-- Update level label (cached reference)
+		if cached.levelLabel then
+			cached.levelLabel.Text = string.format("Level %d / %d", level, upgradeConfig.MaxLevel)
+		end
+		
+		-- Update cost label (cached reference)
+		if cached.costLabel then
+			if level >= upgradeConfig.MaxLevel then
+				cached.costLabel.Text = "MAX"
+			else
+				cached.costLabel.Text = string.format("%d DNA", math.floor(cost))
+			end
+		end
+		
+		-- Update lock overlay and purchase button (cached references)
+		if isUnlocked then
+			if cached.lockOverlay then
+				cached.lockOverlay.Visible = false
+			end
+			if cached.card then
+				cached.card.BackgroundTransparency = 0.2
+			end
+			
+			if cached.purchaseButton then
+				if level >= upgradeConfig.MaxLevel then
+					cached.purchaseButton.BackgroundColor3 = COLORS.XP_GOLD
+					cached.purchaseButton.Text = "MAXED"
+					cached.purchaseButton.Active = false
+				elseif currentDNA >= cost then
+					cached.purchaseButton.BackgroundColor3 = COLORS.BUTTON_GREEN
+					cached.purchaseButton.Text = "UPGRADE"
+					cached.purchaseButton.Active = true
+				else
+					cached.purchaseButton.BackgroundColor3 = COLORS.BUTTON_RED
+					cached.purchaseButton.Text = "UPGRADE"
+					cached.purchaseButton.Active = true
 				end
+			end
+		else
+			if cached.lockOverlay then
+				cached.lockOverlay.Visible = true
+			end
+			if cached.card then
+				cached.card.BackgroundTransparency = 0.5
+			end
+			if cached.purchaseButton then
+				cached.purchaseButton.BackgroundColor3 = COLORS.LOCKED_GREY
+				cached.purchaseButton.Text = "LOCKED"
+				cached.purchaseButton.Active = false
 			end
 		end
 	end

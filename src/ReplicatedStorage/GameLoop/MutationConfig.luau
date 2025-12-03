@@ -178,15 +178,12 @@ MutationConfig.Mutations = {
     },
 }
 
-function MutationConfig.GetUpgradeCost(rarity, level)
-    -- Scaling Cost: 100 * (Level ^ 1.5)
-    -- Lvl 1 -> 2: 100
-    -- Lvl 2 -> 3: ~280
-    -- Lvl 3 -> 4: ~520
-    -- Lvl 4 -> 5: ~800
+function MutationConfig.GetUpgradeCost(rarity, currentLevel)
+    -- Scaling Cost: Base * TargetLevel (Linear)
+    -- Matches MetaConfig.luau logic
     local base = 100
-    local multiplier = math.pow(level, 1.5)
-    return math.floor(base * multiplier)
+    local targetLevel = currentLevel + 1
+    return math.floor(base * targetLevel)
 end
 
 MutationConfig.REROLL_COST = 250 -- DNA per reroll

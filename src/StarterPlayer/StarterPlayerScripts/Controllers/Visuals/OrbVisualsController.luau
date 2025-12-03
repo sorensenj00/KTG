@@ -274,15 +274,24 @@ end
 function OrbVisualsController.Start()
 	print("🌟 OrbVisualsController: Starting client-side orb rendering...")
 	
-	-- Networking Discovery
-    local networking = ReplicatedStorage:WaitForChild("Networking", 10)
-    if not networking then warn("❌ Missing ReplicatedStorage.Networking") return end
+	-- Remote Discovery - Match XPOrbService which uses Blaster.Remotes
+	local blaster = ReplicatedStorage:WaitForChild("Blaster", 10)
+	if not blaster then 
+		warn("❌ OrbVisualsController: Missing ReplicatedStorage.Blaster") 
+		return 
+	end
+	
+	local remotes = blaster:WaitForChild("Remotes", 10)
+	if not remotes then 
+		warn("❌ OrbVisualsController: Missing Blaster.Remotes") 
+		return 
+	end
 
-	orbEvents = networking:WaitForChild("OrbEvents", 10) :: RemoteEvent
-	collectOrbRemote = networking:WaitForChild("CollectOrb", 10) :: RemoteEvent
+	orbEvents = remotes:WaitForChild("OrbEvents", 10) :: RemoteEvent
+	collectOrbRemote = remotes:WaitForChild("CollectOrb", 10) :: RemoteEvent
 	
 	if not orbEvents or not collectOrbRemote then
-		warn("❌ OrbVisualsController: Failed to find orb remotes!")
+		warn("❌ OrbVisualsController: Failed to find orb remotes in Blaster.Remotes!")
 		return
 	end
 	

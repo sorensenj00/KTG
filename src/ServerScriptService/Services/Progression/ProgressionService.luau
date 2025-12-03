@@ -262,19 +262,37 @@ for _, player in ipairs(Players:GetPlayers()) do
 end
 
 -- Bot Handling (Listen for new bots)
-CollectionService:GetInstanceAddedSignal("BotAI"):Connect(function(bot)
+-- Setup reactive scaling via attribute signals for bots (same as players)
+local function setupBotScaling(bot: Model)
 	-- Initialize bot attributes if missing
 	if not bot:GetAttribute("Level") then bot:SetAttribute("Level", 1) end
 	if not bot:GetAttribute("Biomass") then bot:SetAttribute("Biomass", 0) end
 	
-	-- Setup scaling enforcement loop for this bot? 
-	-- Or just rely on the main loop below?
-	-- Main loop is safer for now.
-end)
+	-- Setup reactive scaling via attribute signals (replaces expensive polling)
+	local function onBotStatsChanged()
+		enforceEntityStats(bot, bot)
+	end
+	
+	bot:GetAttributeChangedSignal("Level"):Connect(onBotStatsChanged)
+	bot:GetAttributeChangedSignal("Biomass"):Connect(onBotStatsChanged)
+	
+	-- Also trigger on spawn
+	task.spawn(function()
+		local humanoid = bot:WaitForChild("Humanoid", 10)
+		if humanoid then
+			-- Clear cache to force initial update
+			lastUpdateCache[bot] = nil
+			enforceEntityStats(bot, bot)
+		end
+	end)
+end
 
--- Main Game Loop (1s Heartbeat)
--- Enforces stats and scaling periodically
+CollectionService:GetInstanceAddedSignal("BotAI"):Connect(setupBotScaling)
 
+-- Initialize existing bots
+for _, bot in ipairs(CollectionService:GetTagged("BotAI")) do
+	setupBotScaling(bot)
+end
 
 function ProgressionManager.Start()
 	print("--- Starting ProgressionManager ---")
@@ -327,26 +345,13 @@ function ProgressionManager.Start()
 			print("✅ ProgressionManager: Hooked into Blaster Elimination")
 		end
 	end)
+	
+	-- NOTE: The 1-second polling loop has been REMOVED.
+	-- Scaling is now handled reactively via attribute change signals:
+	-- - Players: setupPlayerScaling() connects to Level/XP/Biomass changes
+	-- - Bots: setupBotScaling() connects to Level/Biomass changes
+	-- This eliminates redundant CPU usage and prevents duplicate updates.
+	print("✅ ProgressionManager: Using event-driven scaling (no polling)")
 end
-
--- Main Game Loop (1s Heartbeat)
--- Enforces stats and scaling periodically
-task.spawn(function()
-	while true do
-		task.wait(1)
-		
-		-- 1. Players
-		for _, player in ipairs(Players:GetPlayers()) do
-			if player.Character then
-				enforceEntityStats(player, player.Character)
-			end
-		end
-		
-		-- 2. Bots
-		for _, bot in ipairs(CollectionService:GetTagged("BotAI")) do
-			enforceEntityStats(bot, bot)
-		end
-	end
-end)
 
 return ProgressionManager
