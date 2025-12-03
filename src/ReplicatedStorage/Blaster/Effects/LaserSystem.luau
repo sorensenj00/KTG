@@ -163,13 +163,18 @@ local function ensureUpdateLoopRunning()
 	if updateLoopRunning then return end
 	
 	updateLoopRunning = true
-	updateConnection = RunService.Heartbeat:Connect(function()
+	local thisConnection
+	thisConnection = RunService.Heartbeat:Connect(function()
 		local shouldStop = updateAllLasers()
-		if shouldStop and updateConnection then
-			updateConnection:Disconnect()
-			updateConnection = nil
+		if shouldStop then
+			-- Only disconnect if we're still the active connection (prevents race condition)
+			if updateConnection == thisConnection then
+				updateConnection = nil
+			end
+			thisConnection:Disconnect()
 		end
 	end)
+	updateConnection = thisConnection
 end
 
 local function createLaserBeam(startPosition, endPosition)

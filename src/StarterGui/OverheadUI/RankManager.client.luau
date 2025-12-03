@@ -14,7 +14,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 -- Config
-local VISIBILITY_RANGE = 100
+local VISIBILITY_RANGE = 200
 local COMBAT_RANGE = 600
 local COMBAT_DURATION = 10
 local FADE_START = 0.8
