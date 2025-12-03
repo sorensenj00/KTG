@@ -15,7 +15,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
+
 
 local SafeZoneConfig = require(ReplicatedStorage.GameLoop.SafeZoneConfig)
 
@@ -34,7 +34,7 @@ local function createZoneVisuals()
         part.Position = pos
         part.Anchored = true
         part.CanCollide = false
-        part.Transparency = 0.8
+        part.Transparency = 0.5
         part.Color = Color3.fromRGB(0, 255, 100)
         part.Material = Enum.Material.ForceField
         part.CastShadow = false

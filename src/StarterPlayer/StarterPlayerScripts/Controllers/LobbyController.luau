@@ -325,7 +325,7 @@ function LobbyController.Start()
 		-- ============================================
 		local howToPlayFrame = Instance.new("Frame")
 		howToPlayFrame.Name = "HowToPlayFrame"
-		howToPlayFrame.Size = UDim2.new(0, 320, 0, 140)
+		howToPlayFrame.Size = UDim2.new(0, 340, 0, 190)
 		howToPlayFrame.Position = UDim2.new(0, 20, 0, 155) -- Below stats frame
 		howToPlayFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 		howToPlayFrame.BackgroundTransparency = 0.6
@@ -364,8 +364,9 @@ function LobbyController.Start()
 			"🔹 Pick up orbs to sustain yourself",
 			"🔹 Hunt players & bots for real Biomass gains",
 			"🔹 Buy Mutations in the shop to get stronger",
-			"🔹 Reach Level 50 to WIN and earn a huge DNA reward!",
-			"🔹 Use the Yeetcannons around to map to get yeeted!"
+			"🔹 Reach Level 50 to WIN and earn a huge DNA",
+			"🔹 Use Yeetcannons around the map to get yeeted!",
+			"🔹 Mutations persist between sessions!",
 		}
 
 		for i, tip in ipairs(tipsList) do

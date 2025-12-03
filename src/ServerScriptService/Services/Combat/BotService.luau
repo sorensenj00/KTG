@@ -198,11 +198,19 @@ local function moveToward(bot, s, targetPos, usePath)
 		return
 	end
 
-	-- Direct movement check
+	-- Direct movement check (multiple heights to detect obstacles)
 	rayParams.FilterDescendantsInstances = { bot, orbFolder }
-	local blocked = Workspace:Raycast(root.Position + Vector3.yAxis * 2, dir.Unit * math.min(dist, 15), rayParams)
-	if blocked and blocked.Normal.Y > 0.4 then
-		blocked = nil
+	local rayDist = math.min(dist, 15)
+	local rayDir = dir.Unit * rayDist
+	local blocked = nil
+
+	-- Check at multiple heights: feet (0.5), waist (2), head (4)
+	for _, heightOffset in { 0.5, 2, 4 } do
+		local hit = Workspace:Raycast(root.Position + Vector3.yAxis * heightOffset, rayDir, rayParams)
+		if hit and hit.Normal.Y <= 0.4 then -- Not a ramp/slope
+			blocked = hit
+			break
+		end
 	end
 
 	if not blocked or dist < 10 then
@@ -212,17 +220,25 @@ local function moveToward(bot, s, targetPos, usePath)
 		return
 	end
 
-	-- Fallback: sidestep/jump
+	-- Fallback: sidestep/jump then pathfind quickly
 	s.pathFails = (s.pathFails or 0) + 1
-	if s.pathFails <= 3 then
-		local right = Vector3.new(-dir.Unit.Z, 0, dir.Unit.X)
-		moveTo(hum, s, root.Position + (s.pathFails % 2 == 0 and right or -right) * 20 + dir.Unit * 10, false)
-		return
-	elseif s.pathFails <= 5 then
+	if s.pathFails == 1 then
+		-- First fail: try jumping forward
 		hum.Jump = true
 		moveTo(hum, s, targetPos, false)
 		return
+	elseif s.pathFails == 2 then
+		-- Second fail: sidestep right
+		local right = Vector3.new(-dir.Unit.Z, 0, dir.Unit.X)
+		moveTo(hum, s, root.Position + right * 25, false)
+		return
+	elseif s.pathFails == 3 then
+		-- Third fail: sidestep left
+		local right = Vector3.new(-dir.Unit.Z, 0, dir.Unit.X)
+		moveTo(hum, s, root.Position - right * 25, false)
+		return
 	end
+	-- After 3 fails, immediately try pathfinding (handled below)
 
 	-- Pathfinding
 	if usePath and not s.pathfinding and os.clock() - s.lastPathTime > 0.5 then
@@ -339,13 +355,25 @@ local function handleStuck(bot, s, hum, root, now, moved)
 		if now - s.stuckSince > STUCK_TIME then
 			s.stuckAttempts = (s.stuckAttempts or 0) + 1
 			hum.Jump = true
-			local randDir = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5).Unit
-			moveTo(hum, s, root.Position + randDir * (s.stuckAttempts <= 2 and 25 or 50), true)
-			if s.stuckAttempts > 4 then
+
+			-- Escalating escape: random direction, then bigger jumps, then full reset
+			if s.stuckAttempts <= 2 then
+				local randDir = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5).Unit
+				moveTo(hum, s, root.Position + randDir * 30, true)
+			elseif s.stuckAttempts <= 4 then
+				-- Try moving backwards from current target
+				local escapeDir = s.wanderDest and (root.Position - s.wanderDest).Unit
+					or Vector3.new(math.random() - 0.5, 0, math.random() - 0.5).Unit
+				moveTo(hum, s, root.Position + escapeDir * 50, true)
+			else
+				-- Fully reset and pick distant destination
 				clearState(s)
+				s.wanderDest = pickWanderDest(bot)
+				s.stuckAttempts = 0
 			end
 			s.stuckSince = nil
 			s.path = nil
+			s.pathFails = 0
 			return true
 		end
 	else
@@ -362,6 +390,7 @@ local function handleStuck(bot, s, hum, root, now, moved)
 		end
 		s.path = nil
 		s.pathfinding = false
+		s.pathFails = 0
 		if s.mode == "ORB" and s.target and s.target.ID then
 			s.orbBlacklist[s.target.ID] = now
 		end
