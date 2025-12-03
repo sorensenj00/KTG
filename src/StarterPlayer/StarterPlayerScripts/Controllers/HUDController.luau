@@ -32,7 +32,7 @@ function HUDController.Start()
 			success, _ = pcall(function()
 				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
 				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false) -- Disabled for custom leaderboard
-				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, true)
+				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, false)
 			end)
 			if not success then
 				task.wait(0.5)
