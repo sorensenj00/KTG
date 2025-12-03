@@ -24,12 +24,12 @@ local XPOrbConfig = require(ReplicatedStorage.GameLoop.XPOrbConfig)
 -- Types
 type OrbData = XPOrbConfig.OrbData
 type OrbVisual = {
-    part: Part,
-    hitbox: Part,
-    data: XPOrbConfig.OrbEvent, -- Using Event data which is partial OrbData
-    startTime: number,
-    baseY: number,
-    isDrop: boolean
+	part: Part,
+	hitbox: Part,
+	data: XPOrbConfig.OrbEvent, -- Using Event data which is partial OrbData
+	startTime: number,
+	baseY: number,
+	isDrop: boolean,
 }
 
 local OrbVisualsController = {}
@@ -37,7 +37,7 @@ local OrbVisualsController = {}
 local player = Players.LocalPlayer
 
 -- Part Pool
-local orbPool: {Part} = {}
+local orbPool: { Part } = {}
 local activeOrbs: { [number]: OrbVisual } = {}
 
 -- OrbsFolder
@@ -66,16 +66,16 @@ local function getOrbsFolder()
 end
 
 local function createOrbTemplate(): Part
-    local orb = Instance.new("Part")
-    orb.Name = "XPOrb"
-    orb.Shape = Enum.PartType.Ball
-    orb.Material = Enum.Material.Glass
-    orb.Transparency = 0.4
-    orb.Reflectance = 0.3
-    orb.Anchored = true
-    orb.CanCollide = false
-    orb.CastShadow = false
-    return orb
+	local orb = Instance.new("Part")
+	orb.Name = "XPOrb"
+	orb.Shape = Enum.PartType.Ball
+	orb.Material = Enum.Material.Glass
+	orb.Transparency = 0.4
+	orb.Reflectance = 0.3
+	orb.Anchored = true
+	orb.CanCollide = false
+	orb.CastShadow = false
+	return orb
 end
 
 local function getOrbPart(): Part
@@ -83,7 +83,7 @@ local function getOrbPart(): Part
 	if not orb then
 		orb = createOrbTemplate()
 	end
-	return orb
+	return orb :: Part
 end
 
 local function returnOrbPart(orb: Part)
@@ -104,15 +104,17 @@ end
 ]]
 
 local function spawnOrbVisual(orbData: XPOrbConfig.OrbEvent)
-    if not orbData.Position or not orbData.Tier then return end
+	if not orbData.Position or not orbData.Tier then
+		return
+	end
 
 	local orb = getOrbPart()
-	
+
 	-- Set properties
 	orb.Size = orbData.Tier.Size
 	orb.Color = orbData.Tier.Color
 	orb.Position = orbData.Position
-	
+
 	-- Create hitbox (3x size for easier pickup)
 	local hitbox = Instance.new("Part")
 	hitbox.Name = "Hitbox"
@@ -123,14 +125,14 @@ local function spawnOrbVisual(orbData: XPOrbConfig.OrbEvent)
 	hitbox.Anchored = true
 	hitbox.CastShadow = false
 	hitbox.Parent = orb
-	
+
 	-- Add PointLight
 	local light = Instance.new("PointLight")
 	light.Color = orbData.Tier.Color
 	light.Range = orbData.Tier.Size.Y * 1.5
 	light.Brightness = 2
 	light.Parent = orb
-	
+
 	-- Add Particles
 	local particles = Instance.new("ParticleEmitter")
 	particles.Name = "Sparkles"
@@ -138,7 +140,7 @@ local function spawnOrbVisual(orbData: XPOrbConfig.OrbEvent)
 	particles.Color = ColorSequence.new(orbData.Tier.Color)
 	particles.Size = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.5),
-		NumberSequenceKeypoint.new(1, 0)
+		NumberSequenceKeypoint.new(1, 0),
 	})
 	particles.Lifetime = NumberRange.new(0.5, 1)
 	particles.Rate = 20
@@ -147,42 +149,44 @@ local function spawnOrbVisual(orbData: XPOrbConfig.OrbEvent)
 	particles.Drag = 2
 	particles.LightEmission = 1
 	particles.Parent = orb
-	
+
 	orb.Parent = getOrbsFolder()
-	
+
 	activeOrbs[orbData.Id] = {
 		part = orb,
 		hitbox = hitbox,
 		data = orbData,
 		startTime = tick(),
 		baseY = orbData.Position.Y,
-		isDrop = orbData.IsDrop or false
+		isDrop = orbData.IsDrop or false,
 	}
-	
+
 	-- Touch detection
 	local collected = false
 	hitbox.Touched:Connect(function(hit)
-		if collected then return end
-		
+		if collected then
+			return
+		end
+
 		local character = hit.Parent
-		if character == player.Character then
-			local humanoid = character:FindFirstChild("Humanoid")
+		if character and character == player.Character then
+			local humanoid = character:FindFirstChild("Humanoid") :: Humanoid?
 			if humanoid and humanoid.Health > 0 then
 				collected = true
 				collectOrbRemote:FireServer(orbData.Id)
 			end
 		end
 	end)
-	
+
 	-- Drop animation
 	if orbData.IsDrop then
 		local targetPos = orbData.Position
-		
+
 		task.spawn(function()
 			local t = 0
 			local startPos = orbData.Position + Vector3.new(0, 10, 0)
 			orb.Position = startPos
-			
+
 			while t < 1 and orb.Parent and activeOrbs[orbData.Id] do
 				t += 0.1
 				local linear = startPos:Lerp(targetPos, t)
@@ -191,7 +195,7 @@ local function spawnOrbVisual(orbData: XPOrbConfig.OrbEvent)
 				hitbox.CFrame = orb.CFrame
 				task.wait(0.03)
 			end
-			
+
 			if activeOrbs[orbData.Id] then
 				activeOrbs[orbData.Id].baseY = orb.Position.Y
 			end
@@ -212,15 +216,15 @@ local function growOrbVisual(orbId: number, newSize: Vector3?)
 	if orbData and newSize then
 		local orb = orbData.part
 		local hitbox = orbData.hitbox
-		
+
 		-- Tween size
 		local info = TweenInfo.new(0.5, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out)
-		
-		TweenService:Create(orb, info, {Size = newSize}):Play()
+
+		TweenService:Create(orb, info, { Size = newSize }):Play()
 		if hitbox then
-			TweenService:Create(hitbox, info, {Size = newSize * 3}):Play()
+			TweenService:Create(hitbox, info, { Size = newSize * 3 }):Play()
 		end
-		
+
 		-- Update light range
 		local light = orb:FindFirstChildOfClass("PointLight")
 		if light then
@@ -237,16 +241,16 @@ end
 
 local function updateOrbVisuals(dt: number)
 	local currentTime = tick()
-	
+
 	for orbId, orbData in pairs(activeOrbs) do
 		local orb = orbData.part
 		local hitbox = orbData.hitbox
-		
+
 		if not orb.Parent then
 			activeOrbs[orbId] = nil
 			continue
 		end
-		
+
 		local elapsed = currentTime - orbData.startTime
 
 		-- Magnetism (Client Prediction)
@@ -254,26 +258,28 @@ local function updateOrbVisuals(dt: number)
 		if character and character:FindFirstChild("HumanoidRootPart") then
 			local root = character.HumanoidRootPart :: BasePart
 			local dist = (root.Position - orb.Position).Magnitude
-			
+
 			if dist < XPOrbConfig.MAGNET_RADIUS then
 				local direction = (root.Position - orb.Position).Unit
 				local speedAlpha = 1 - math.clamp(dist / XPOrbConfig.MAGNET_RADIUS, 0, 1)
-				local currentSpeed = XPOrbConfig.MIN_MAGNET_SPEED + (XPOrbConfig.MAX_MAGNET_SPEED - XPOrbConfig.MIN_MAGNET_SPEED) * speedAlpha
-				
+				local currentSpeed = XPOrbConfig.MIN_MAGNET_SPEED
+					+ (XPOrbConfig.MAX_MAGNET_SPEED - XPOrbConfig.MIN_MAGNET_SPEED) * speedAlpha
+
 				local moveVec = direction * currentSpeed * dt
-				
+
 				orb.Position += moveVec
 				orbData.baseY += moveVec.Y
 			end
 		end
-		
+
 		-- Floating
 		local floatOffset = math.sin(elapsed * XPOrbConfig.FLOAT_SPEED) * XPOrbConfig.FLOAT_AMPLITUDE
-		orb.Position = Vector3.new(orb.Position.X, orbData.baseY + floatOffset + XPOrbConfig.FLOAT_AMPLITUDE, orb.Position.Z)
-		
+		orb.Position =
+			Vector3.new(orb.Position.X, orbData.baseY + floatOffset + XPOrbConfig.FLOAT_AMPLITUDE, orb.Position.Z)
+
 		-- Rotation
 		orb.Orientation = Vector3.new(0, elapsed * 60, 0)
-		
+
 		if hitbox and hitbox.Parent then
 			hitbox.CFrame = orb.CFrame
 		end
@@ -298,37 +304,37 @@ end
 
 function OrbVisualsController.Start()
 	print("🌟 OrbVisualsController: Starting client-side orb rendering...")
-	
+
 	-- Remote Discovery - Match XPOrbService which uses Blaster.Remotes
 	local blaster = ReplicatedStorage:WaitForChild("Blaster", 10)
-	if not blaster then 
-		warn("❌ OrbVisualsController: Missing ReplicatedStorage.Blaster") 
-		return 
+	if not blaster then
+		warn("❌ OrbVisualsController: Missing ReplicatedStorage.Blaster")
+		return
 	end
-	
+
 	local remotes = blaster:WaitForChild("Remotes", 10)
-	if not remotes then 
-		warn("❌ OrbVisualsController: Missing Blaster.Remotes") 
-		return 
+	if not remotes then
+		warn("❌ OrbVisualsController: Missing Blaster.Remotes")
+		return
 	end
 
 	orbEvents = remotes:WaitForChild("OrbEvents", 10) :: RemoteEvent
 	collectOrbRemote = remotes:WaitForChild("CollectOrb", 10) :: RemoteEvent
-	
+
 	if not orbEvents or not collectOrbRemote then
 		warn("❌ OrbVisualsController: Failed to find orb remotes in Blaster.Remotes!")
 		return
 	end
-	
+
 	-- Pre-populate pool
 	for i = 1, XPOrbConfig.POOL_SIZE do
 		table.insert(orbPool, createOrbTemplate())
 	end
-	
+
 	-- Listeners
 	orbEvents.OnClientEvent:Connect(onOrbEvent)
 	RunService.RenderStepped:Connect(updateOrbVisuals)
-	
+
 	print("✅ OrbVisualsController: Ready (Pool size:", XPOrbConfig.POOL_SIZE, ")")
 end
 
