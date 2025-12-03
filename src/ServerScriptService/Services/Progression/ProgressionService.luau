@@ -1,3 +1,16 @@
+--[[
+    Module: ProgressionManager
+    Description: Handles player/bot leveling and stat progression.
+    
+    NAMING CONVENTION:
+    - "Biomass" is the canonical term for progression currency (displayed to players)
+    - "XP" is used in legacy code/config (ScalingConfig.GetXPRequired) for backwards compatibility
+    - Both refer to the same underlying value stored in the "Biomass" attribute
+    
+    Author: System
+    Last Updated: 2025-01-20
+]]
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -5,8 +18,6 @@ local CollectionService = game:GetService("CollectionService")
 
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 local ScalingEngine = require(ServerScriptService.Services.World.ScalingEngineService)
--- local DamageTracker = require(ServerScriptService.Services.World.DamageTrackerService)
--- local XPOrbService = require(ServerScriptService.Services.World.XPOrbService) -- Lazy loaded to avoid cycle
 
 local ProgressionManager = {}
 
@@ -37,13 +48,13 @@ local function enforceEntityStats(entity: Instance, character: Model)
 	end
 
 	local level = entity:GetAttribute("Level") or 1
-	local xp = entity:GetAttribute("XP") or 0
-	local xpReq = ScalingConfig.GetXPRequired(level)
+	local biomass = entity:GetAttribute("Biomass") or 0
+	local biomassRequired = ScalingConfig.GetXPRequired(level) -- Config uses "XP" naming for legacy compatibility
 	
-	-- Calculate Effective Level (Float)
+	-- Calculate Effective Level (Float) based on progress toward next level
 	local progress = 0
-	if xpReq > 0 then
-		progress = math.clamp(xp / xpReq, 0, 0.99)
+	if biomassRequired > 0 then
+		progress = math.clamp(biomass / biomassRequired, 0, 0.99)
 	end
 	local effectiveLevel = level + progress
 	
@@ -87,8 +98,7 @@ local function setupPlayerScaling(player: Player)
 	end
 
 	player:GetAttributeChangedSignal("Level"):Connect(onStatsChanged)
-	player:GetAttributeChangedSignal("XP"):Connect(onStatsChanged)
-	player:GetAttributeChangedSignal("Biomass"):Connect(onStatsChanged) -- CRITICAL: Listen for Biomass changes
+	player:GetAttributeChangedSignal("Biomass"):Connect(onStatsChanged)
 end
 
 -- Helper: Initialize Data
@@ -181,7 +191,7 @@ function ProgressionManager.AddBiomass(target: Instance, amount: number)
 			break
 		end
 
-		local biomassRequired = ScalingConfig.GetXPRequired(currentLevel) -- Config still uses "XP" naming for math
+		local biomassRequired = ScalingConfig.GetXPRequired(currentLevel) -- Config uses "XP" naming for legacy compatibility
 		if totalBiomass >= biomassRequired then
 			totalBiomass = totalBiomass - biomassRequired
 			currentLevel = currentLevel + 1
@@ -230,8 +240,10 @@ function ProgressionManager.AddBiomass(target: Instance, amount: number)
 	end
 end
 
--- Alias for backwards compatibility if needed, but we should switch callers
-function ProgressionManager.AddXP(target, amount)
+-- Deprecated: Use AddBiomass instead
+-- Kept for backwards compatibility with existing callers
+function ProgressionManager.AddXP(target: Instance, amount: number)
+	warn("ProgressionManager.AddXP is deprecated, use AddBiomass instead")
 	ProgressionManager.AddBiomass(target, amount)
 end
 
@@ -316,30 +328,30 @@ function ProgressionManager.Start()
 				local victim = resolveEntity(victimArg)
 				
 				if killer and victim then
-					-- Calculate XP Reward
+					-- Calculate Biomass Reward
 					local victimLevel = victim:GetAttribute("Level") or 1
-					local baseXP = 100
-					local xpReward = baseXP * victimLevel
+					local baseBiomass = 100
+					local biomassReward = baseBiomass * victimLevel
 					
 					-- 50% Direct Award
-					local directXP = math.floor(xpReward * 0.5)
-					ProgressionManager.AddBiomass(killer, directXP)
+					local directBiomass = math.floor(biomassReward * 0.5)
+					ProgressionManager.AddBiomass(killer, directBiomass)
 					
 					-- 50% Dropped as Orbs
-					local dropXP = xpReward - directXP
+					local dropBiomass = biomassReward - directBiomass
                     
                     if victimArg:IsA("Model") and victimArg.PrimaryPart then
-                        ServiceBus.Get("SpawnXPOrbs"):Fire(victimArg.PrimaryPart.Position, dropXP)
+                        ServiceBus.Get("SpawnXPOrbs"):Fire(victimArg.PrimaryPart.Position, dropBiomass)
                     elseif victimArg:IsA("Model") then
                         -- Fallback if no PrimaryPart
                         local hrp = victimArg:FindFirstChild("HumanoidRootPart")
                         if hrp then
-                            ServiceBus.Get("SpawnXPOrbs"):Fire(hrp.Position, dropXP)
+                            ServiceBus.Get("SpawnXPOrbs"):Fire(hrp.Position, dropBiomass)
                         end
                     end
 					
-					print(string.format("⚔️ %s killed %s! (+%d XP Direct, +%d XP Orbs)", 
-						killer.Name, victim.Name, directXP, dropXP))
+					print(string.format("⚔️ %s killed %s! (+%d Biomass Direct, +%d Biomass Orbs)", 
+						killer.Name, victim.Name, directBiomass, dropBiomass))
 				end
 			end)
 			print("✅ ProgressionManager: Hooked into Blaster Elimination")

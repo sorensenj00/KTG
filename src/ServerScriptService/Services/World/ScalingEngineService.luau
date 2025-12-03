@@ -20,12 +20,29 @@ local ScalingEngine = {}
 
 -- Lazy load MetaProgressionManager to avoid circular dependency
 local MetaManager = nil
+local metaLoadAttempted = false
+
 local function getMeta()
-	if not MetaManager then
-		pcall(function()
-			MetaManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
-		end)
+	if MetaManager then
+		return MetaManager
 	end
+	
+	-- Only attempt to load once to avoid repeated failures
+	if metaLoadAttempted then
+		return nil
+	end
+	
+	metaLoadAttempted = true
+	local success, result = pcall(function()
+		return require(ServerScriptService.Services.Progression.MetaProgressionService)
+	end)
+	
+	if success then
+		MetaManager = result
+	else
+		warn("ScalingEngine: Failed to load MetaProgressionService:", result)
+	end
+	
 	return MetaManager
 end
 
