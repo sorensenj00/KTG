@@ -34,7 +34,7 @@ local function createZoneVisuals()
         part.Position = pos
         part.Anchored = true
         part.CanCollide = false
-        part.Transparency = 0.8
+        part.Transparency = 0.98
         part.Color = Color3.fromRGB(0, 255, 100)
         part.Material = Enum.Material.ForceField
         part.CastShadow = false
@@ -72,20 +72,23 @@ local function onAttributeChanged(attribute: string)
             -- Could add a screen notification here
             print("Entered Safe Zone")
 
-            -- Optional: Client-side ForceField visual if Server one is invisible
+            -- Optional: Client-side Highlight visual if Server one is invisible
             local char = player.Character
             if char then
-                local ff = char:FindFirstChild("VisualFF") or Instance.new("ForceField")
-                ff.Name = "VisualFF"
-                ff.Parent = char
+                local hl = char:FindFirstChild("VisualHighlight") or Instance.new("Highlight")
+                hl.Name = "VisualHighlight"
+                hl.FillColor = Color3.fromRGB(0, 255, 100)
+                hl.FillTransparency = 0.9
+                hl.OutlineTransparency = 0.9
+                hl.Parent = char
             end
         else
             -- Disable Visuals
             print("Left Safe Zone")
              local char = player.Character
             if char then
-                local ff = char:FindFirstChild("VisualFF")
-                if ff then ff:Destroy() end
+                local hl = char:FindFirstChild("VisualHighlight")
+                if hl then hl:Destroy() end
             end
         end
     end

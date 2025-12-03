@@ -20,6 +20,7 @@ local cardsContainer = nil
 local timerLabel = nil
 
 local mutationConfig = require(ReplicatedStorage.GameLoop.MutationConfig)
+local MetaConfig = require(ReplicatedStorage.GameLoop.MetaConfig)
 
 local closeCallback = nil
 local nextRotationTime = 0
@@ -141,7 +142,7 @@ local function createCard(name, data, index)
         
         local dna, upgrades = reqFunc:InvokeServer()
         local lvl = upgrades[name] or 0
-        local cost = mutationConfig.GetUpgradeCost(data.Rarity, lvl)
+        local cost = MetaConfig.GetCost(name, lvl)
         costLabel.Text = "COST: " .. cost .. " DNA"
 
         -- Update Level Bar

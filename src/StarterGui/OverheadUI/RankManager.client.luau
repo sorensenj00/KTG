@@ -39,9 +39,9 @@ local CONFIG = {
 	MIN_COMBAT_SCALE = 1.5, -- Minimum scale when damaged
 	MAX_SCALE = 20, -- Cap to prevent massive UI at extreme distances
 
-	-- Timeouts
-	WAIT_FOR_HEAD_TIMEOUT = 60,
-	WAIT_FOR_HUMANOID_TIMEOUT = 60,
+	-- Timeouts (shorter since we have retry logic)
+	WAIT_FOR_HEAD_TIMEOUT = 5,
+	WAIT_FOR_HUMANOID_TIMEOUT = 5,
 	WAIT_FOR_REMOTE_TIMEOUT = 10,
 }
 
@@ -340,6 +340,38 @@ local function onBotAdded(bot: Instance)
 	end
 end
 
+-- Track which bots we've attempted to setup (to avoid spamming retries)
+local setupAttempts: { [Instance]: number } = {}
+local MAX_SETUP_ATTEMPTS = 5
+
+-- Ensure a bot has overhead UI, with retry logic
+local function ensureBotHasOverhead(bot: Instance)
+	if not bot:IsA("Model") or not bot.Parent then
+		return
+	end
+
+	local head = bot:FindFirstChild("Head")
+	if not head then
+		-- Head not loaded yet, will retry on next sweep
+		return
+	end
+
+	-- Already has overhead UI
+	if head:FindFirstChild("RankOverhead") then
+		setupAttempts[bot] = nil -- Clear attempts tracking
+		return
+	end
+
+	-- Track attempts to avoid infinite retries
+	local attempts = setupAttempts[bot] or 0
+	if attempts >= MAX_SETUP_ATTEMPTS then
+		return -- Give up after max attempts
+	end
+
+	setupAttempts[bot] = attempts + 1
+	task.spawn(setupEntity, bot, bot)
+end
+
 -- Initialize for all players
 for _, player in ipairs(Players:GetPlayers()) do
 	onPlayerAdded(player)
@@ -357,3 +389,28 @@ end
 
 CollectionService:GetInstanceAddedSignal("BotAI"):Connect(onBotAdded)
 CollectionService:GetInstanceAddedSignal("DisplayBot"):Connect(onBotAdded)
+
+-- Periodic sweep to catch any bots that missed overhead UI setup
+-- This handles race conditions, streaming, and edge cases
+task.spawn(function()
+	while true do
+		task.wait(2) -- Check every 2 seconds
+
+		-- Check all BotAI tagged entities
+		for _, bot in ipairs(CollectionService:GetTagged("BotAI")) do
+			ensureBotHasOverhead(bot)
+		end
+
+		-- Check all DisplayBot tagged entities
+		for _, bot in ipairs(CollectionService:GetTagged("DisplayBot")) do
+			ensureBotHasOverhead(bot)
+		end
+
+		-- Clean up attempts tracking for dead bots
+		for bot in pairs(setupAttempts) do
+			if not bot.Parent then
+				setupAttempts[bot] = nil
+			end
+		end
+	end
+end)

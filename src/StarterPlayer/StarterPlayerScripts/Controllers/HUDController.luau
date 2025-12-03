@@ -223,22 +223,24 @@ function HUDController.Start()
 		statsHeader.Text = "Stats (without mutations)"
 		statsHeader.TextColor3 = ARCADE_THEME.TEXT_GRAY
 		statsHeader.TextSize = 14
-		statsHeader.Font = Enum.Font.GothamBold
+		statsHeader.Font = Enum.Font.GothamBlack
 		statsHeader.TextXAlignment = Enum.TextXAlignment.Left
+		statsHeader.TextStrokeTransparency = 0.8
 		statsHeader.Parent = statsFrame
 
 		local function createStatLabel(name, order)
 			local label = Instance.new("TextLabel")
 			label.Name = name .. "Label"
-			label.Size = UDim2.new(1, 0, 0, 15)
-			label.Position = UDim2.new(0, 0, 0, 20 + (order * 15))
+			label.Size = UDim2.new(1, 0, 0, 18)
+			label.Position = UDim2.new(0, 0, 0, 22 + (order * 18))
 			label.BackgroundTransparency = 1
 			label.Text = name .. ": -"
 			label.TextColor3 = ARCADE_THEME.TEXT_WHITE
-			label.TextSize = 12
-			label.Font = Enum.Font.Gotham
+			label.TextSize = 16
+			label.Font = Enum.Font.GothamBlack
 			label.TextXAlignment = Enum.TextXAlignment.Left
-			label.TextStrokeTransparency = 0.5
+			label.TextStrokeTransparency = 0
+			label.TextStrokeColor3 = Color3.new(0, 0, 0)
 			label.Parent = statsFrame
 			return label
 		end
