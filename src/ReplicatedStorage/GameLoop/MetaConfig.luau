@@ -15,6 +15,7 @@ local MutationConfig = require(script.Parent.MutationConfig)
 MetaConfig.RarityWeights = MutationConfig.RarityWeights
 MetaConfig.Mutations = MutationConfig.Mutations
 MetaConfig.ROLL_COST = MutationConfig.ROLL_COST
+MetaConfig.REROLL_COST = MutationConfig.REROLL_COST
 
 -- Define Tiers for UI Grouping and Unlocks
 -- Unlocks are based on TOTAL LIFETIME DNA EARNED (or Biomass Harvested),

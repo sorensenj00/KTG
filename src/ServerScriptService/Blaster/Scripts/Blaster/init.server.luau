@@ -48,14 +48,14 @@ task.spawn(function()
 	end
 end)
 
-local function onShoot(player, now, tool, originCF, tagged)
+local function onShoot(player, now, tool, originCF)
 	-- Validate before processing
 	if not AntiExploit.validateShot(player, now, originCF, tool) then
 		return -- Reject suspicious shot
 	end
 
 	-- 1. Validation
-	if not validateShootArguments(now, tool, originCF, tagged) then
+	if not validateShootArguments(now, tool, originCF) then
 		return
 	end
 

@@ -211,11 +211,23 @@ local function spawnBot()
 	-- Sometimes parts sleep in the air. This forces them to react to gravity.
 	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 	task.delay(0.5, function()
-		if rootPart and rootPart:IsA("BasePart") and rootPart:IsDescendantOf(Workspace) then
-			rootPart:SetNetworkOwner(nil)
+		if bot and bot.Parent then
+			-- Ensure EVERYTHING is unanchored before setting network owner
+			for _, desc in ipairs(bot:GetDescendants()) do
+				if desc:IsA("BasePart") then
+					desc.Anchored = false
+				end
+			end
+			
+			if rootPart and rootPart:IsA("BasePart") and rootPart:IsDescendantOf(Workspace) then
+				rootPart:SetNetworkOwner(nil)
+			end
 		end
+		
 		-- Reset to running so they can move
-		humanoid:ChangeState(Enum.HumanoidStateType.Running)
+		if humanoid then
+			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+		end
 	end)
 
 	-- Respawn Logic

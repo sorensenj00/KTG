@@ -3,17 +3,11 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local validateInstance = require(ServerScriptService.Utility.TypeValidation.validateInstance)
 local validateNumber = require(ServerScriptService.Utility.TypeValidation.validateNumber)
 local validateCFrame = require(ServerScriptService.Utility.TypeValidation.validateCFrame)
-local validateSimpleTable = require(ServerScriptService.Utility.TypeValidation.validateSimpleTable)
-
-local function taggedValidator(instance)
-	return validateInstance(instance, "Humanoid")
-end
 
 local function validateShootArguments(
 	timestamp,
 	blaster,
-	origin,
-	tagged
+	origin
 )
 	if not validateNumber(timestamp) then
 		return false
@@ -22,9 +16,6 @@ local function validateShootArguments(
 		return false
 	end
 	if not validateCFrame(origin) then
-		return false
-	end
-	if not validateSimpleTable(tagged, "string", taggedValidator) then
 		return false
 	end
 

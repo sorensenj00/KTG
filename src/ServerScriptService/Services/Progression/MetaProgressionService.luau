@@ -33,6 +33,9 @@ local PlayerDrafts = {}
 -- Pending Saves: { [Player] = true }
 local pendingSaves = {}
 
+-- Draft Purchases: { [Player] = { [Index] = true } }
+local PlayerDraftPurchases = {}
+
 -- Shop Rotation State
 local ShopRotation = {
     Items = {}, -- { "MutationName1", "MutationName2", ... }
@@ -247,7 +250,7 @@ function MetaProgressionManager.RequestDraft(player)
     local attempts = 0
     while #draft < 3 and attempts < 50 do
         attempts = attempts + 1
-        local rarity = getRandomRarity(1, rng) -- Allow Commons
+        local rarity = getRandomRarity(2, rng) -- Exclude Commons (Min Rarity 2)
         local mutation = getRandomMutationOfRarity(rarity, draft, rng)
 
         if mutation then
@@ -267,6 +270,7 @@ function MetaProgressionManager.RequestDraft(player)
     -- Current fix: Just return what we have. Client loops through it.
 
     PlayerDrafts[player] = draft
+    PlayerDraftPurchases[player] = {} -- Reset purchases for new draft
 
     -- Return draft AND the next rotation time for the timer
     -- Return draft AND the next rotation time for the timer
@@ -279,19 +283,28 @@ function MetaProgressionManager.SelectMutation(player, index)
     local draft = PlayerDrafts[player]
     if not draft or not draft[index] then return false end
 
+    local data = PlayerMeta[player]
+    if not data then return false, "No data" end
+
     -- Calculate Dynamic Cost
     local mutationName = draft[index]
     local currentLevel = data.Upgrades[mutationName] or 0
-    local cost = MetaConfig.GetUpgradeCost(MetaConfig.Mutations[mutationName].Rarity, currentLevel)
+    local cost = MetaConfig.GetCost(mutationName, currentLevel)
 
     if data.DNA < cost then return false, "Not enough DNA" end
+
+    -- Check if already purchased
+    if PlayerDraftPurchases[player] and PlayerDraftPurchases[player][index] then
+        return false, "Already purchased"
+    end
 
     -- Deduct Cost
     data.DNA = data.DNA - cost
     data.Upgrades[mutationName] = currentLevel + 1
 
-    -- Clear Draft
-    PlayerDrafts[player] = nil
+    -- Mark as Purchased
+    if not PlayerDraftPurchases[player] then PlayerDraftPurchases[player] = {} end
+    PlayerDraftPurchases[player][index] = true
 
     -- Save & Notify
     scheduleSave(player) -- Schedule save on purchase
@@ -358,6 +371,41 @@ function MetaProgressionManager.PurchaseUpgrade(player, statName)
     end)
 
     print(player.Name .. " purchased upgrade: " .. statName .. " (Lvl " .. (currentLevel + 1) .. ")")
+    return true
+end
+
+function MetaProgressionManager.ResetUpgrades(player)
+    local data = PlayerMeta[player]
+    if not data then return false, "No data" end
+
+    -- Reset Upgrades
+    data.Upgrades = {}
+    
+    -- Reset DNA? (Optional, but "Reset Mutations" usually implies just mutations/upgrades)
+    -- If we want a full wipe, we'd reset DNA too.
+    -- User said "remove all mutations". Let's keep DNA for now or ask?
+    -- "Remove all mutations" -> implies clearing the inventory.
+    -- I'll just clear Upgrades.
+    
+    -- Save & Notify
+    scheduleSave(player)
+    UpdateMetaEvent:FireClient(player, data)
+    
+    -- Also fire UpdateMetaStats for HUDController
+    task.spawn(function()
+        local blaster = ReplicatedStorage:FindFirstChild("Blaster")
+        if blaster then
+            local remotes = blaster:FindFirstChild("Remotes")
+            if remotes then
+                local updateMetaRemote = remotes:FindFirstChild("UpdateMetaStats")
+                if updateMetaRemote then
+                    updateMetaRemote:FireClient(player, data.DNA, data.Upgrades, 0)
+                end
+            end
+        end
+    end)
+    
+    print(player.Name .. " reset all upgrades")
     return true
 end
 
@@ -475,6 +523,7 @@ function MetaProgressionManager.RequestReroll(player)
     -- The user wants a REROLL. 
     -- Let's clear the current draft and call RequestDraft again.
     PlayerDrafts[player] = nil
+    PlayerDraftPurchases[player] = {}
     
     -- Update Client DNA
     UpdateMetaEvent:FireClient(player, data)
@@ -537,7 +586,7 @@ task.spawn(function()
             end
 
             -- RerollFunc
-            RerollFunc.Parent = remotes
+            -- RerollFunc.Parent = remotes -- MOVED: Keep in ReplicatedStorage for MutationShopController
             
             -- PurchaseUpgrade: Client requests to buy an upgrade
             local purchaseUpgradeFunc = remotes:WaitForChild("PurchaseUpgrade", 10)

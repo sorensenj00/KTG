@@ -94,15 +94,32 @@ local function createCard(name, data, index)
     desc.TextSize = 16 -- Increased from 14
     desc.TextYAlignment = Enum.TextYAlignment.Top
     desc.Parent = card
+
+    -- Level Bar Container
+    local barContainer = Instance.new("Frame")
+    barContainer.Name = "LevelBar"
+    barContainer.Size = UDim2.new(0.8, 0, 0, 6)
+    barContainer.Position = UDim2.new(0.1, 0, 0.48, 0) -- Between Icon and Desc
+    barContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    barContainer.BorderSizePixel = 0
+    barContainer.Parent = card
+
+    local barCorner = Instance.new("UICorner")
+    barCorner.CornerRadius = UDim.new(1, 0)
+    barCorner.Parent = barContainer
+
+    local barLayout = Instance.new("UIListLayout")
+    barLayout.FillDirection = Enum.FillDirection.Horizontal
+    barLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    barLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    barLayout.Padding = UDim.new(0, 2)
+    barLayout.Parent = barContainer
+
     
     -- Cost Label
     local costLabel = Instance.new("TextLabel")
     costLabel.Name = "CostLabel"
-    -- Cost Label
-    local costLabel = Instance.new("TextLabel")
-    costLabel.Name = "CostLabel"
     -- Calculate Cost
-    local currentLvl = 0 -- We need to know current level to show cost. 
     -- Ideally we pass current level in 'data' or fetch it.
     -- For now, let's assume data has it or we default to 0 (Cost for Lvl 1)
     -- The server passes 'draft' which is just names.
@@ -117,14 +134,44 @@ local function createCard(name, data, index)
     -- Async fetch cost? Or just calculate if we know our level.
     -- Let's assume we can get our level.
     task.spawn(function()
-        local func = ReplicatedStorage:WaitForChild("RequestMetaData")
-        local _, upgrades = func:InvokeServer()
+        local blaster = ReplicatedStorage:WaitForChild("Blaster")
+        local remotes = blaster:WaitForChild("Remotes")
+        local reqFunc = remotes:WaitForChild("RequestMetaData")
+        
+        local dna, upgrades = reqFunc:InvokeServer()
         local lvl = upgrades[name] or 0
         local cost = mutationConfig.GetUpgradeCost(data.Rarity, lvl)
         costLabel.Text = "COST: " .. cost .. " DNA"
+
+        -- Update Level Bar
+        local maxLevel = data.MaxLevel or 5
+        -- Clear existing segments (if any)
+        for _, child in ipairs(barContainer:GetChildren()) do
+            if child:IsA("GuiObject") then child:Destroy() end
+        end
+        
+        -- Create Segments
+        -- Adjust for padding: We have (maxLevel - 1) paddings of 2px.
+        -- It's easier to just use Scale and let UIListLayout handle it, but with padding it might overflow if we use 1/N.
+        -- Let's use a simple calculation or just rely on layout with a small size.
+        -- Actually, better to use a fixed size per segment or calculate it.
+        -- Let's try to fit them.
+        
+        for i = 1, maxLevel do
+            local segment = Instance.new("Frame")
+            segment.Name = "Segment" .. i
+            segment.BackgroundColor3 = (i <= lvl) and (mutationConfig.RarityColors[data.Rarity] or Color3.new(1,1,1)) or Color3.fromRGB(60, 60, 70)
+            segment.Size = UDim2.new(1 / maxLevel, -2, 1, 0) -- Rough fit
+            segment.BorderSizePixel = 0
+            segment.Parent = barContainer
+            
+            local segCorner = Instance.new("UICorner")
+            segCorner.CornerRadius = UDim.new(0, 2)
+            segCorner.Parent = segment
+        end
+
         
         -- Check affordability
-        local dna = ReplicatedStorage:WaitForChild("Blaster").Remotes.RequestMetaData:InvokeServer()
         if dna < cost then
             costLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
         else
@@ -164,21 +211,42 @@ local function createCard(name, data, index)
     end)
 
     -- Selection Logic
+    -- Selection Logic
+    local isPurchased = false
     card.MouseButton1Click:Connect(function()
+        if isPurchased then return end
+
         local func = ReplicatedStorage:WaitForChild("SelectMutation")
-        local success = func:InvokeServer(index)
+        local success, msg = func:InvokeServer(index)
 
         if success then
-            gui.Enabled = false
-            pcall(function() RunService:UnbindFromRenderStep("UnlockMouseForMutationShop") end)
-
-            -- If we have a parent menu callback, use it to return smoothly
-            if closeCallback then
-                 closeCallback()
-            else
-                 -- Fallback: Just lock mouse and resume game
-                 UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+            -- Mark as Purchased
+            isPurchased = true
+            
+            -- Visual Update
+            card.AutoButtonColor = false
+            card.ImageColor3 = Color3.fromRGB(100, 100, 100) -- Darken
+            cardStroke.Color = Color3.fromRGB(100, 100, 100)
+            
+            -- Update Text
+            local costLabel = card:FindFirstChild("CostLabel")
+            if costLabel then
+                costLabel.Text = "PURCHASED"
+                costLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
             end
+            
+            local title = card:FindFirstChild("Title")
+            if title then
+                title.TextColor3 = Color3.fromRGB(150, 150, 150)
+            end
+            
+            -- Disable Hover
+            card.Active = false
+            
+            -- Play Sound? (Optional)
+        else
+            -- Failed (e.g. Not enough DNA)
+            warn("Purchase failed:", msg)
         end
     end)
 
@@ -189,7 +257,6 @@ function MutationShopController.Open()
     if gui.Enabled then return true end
 
     -- Request Draft
-    local func = ReplicatedStorage:WaitForChild("RequestDraft")
     -- Request Draft
     local func = ReplicatedStorage:WaitForChild("RequestDraft")
     local draft, rotationTime, rerolls = func:InvokeServer()
@@ -355,7 +422,7 @@ function MutationShopController.Start()
         if currentRerolls >= MAX_REROLLS then return end
         
         local func = ReplicatedStorage:WaitForChild("RequestReroll")
-        local draft, rotationTime, rerolls = func:InvokeServer()
+        local draft, _, rerolls = func:InvokeServer()
         
         if draft then
             -- Refresh UI

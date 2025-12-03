@@ -62,9 +62,6 @@
       "Services": {
         "$path": "src/ServerScriptService/Services"
       },
-      "GameLoop": {
-        "$path": "src/ServerScriptService/GameLoop"
-      },
       "Blaster": {
         "$path": "src/ServerScriptService/Blaster"
       },

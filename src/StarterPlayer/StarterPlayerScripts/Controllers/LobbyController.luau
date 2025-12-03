@@ -369,7 +369,14 @@ local function createLobby()
 	playBtn.TextColor3 = THEME.TEXT_WHITE
 	playBtn.Font = Enum.Font.GothamBlack
 	playBtn.TextSize = 20
+	playBtn.AutoButtonColor = false -- Disable auto color change
 	playBtn.Parent = playArea
+	
+	-- Start disabled (gray)
+	local isServerReady = false
+	playBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80) -- Gray
+	playBtn.Text = "LOADING..."
+	playBtn.TextTransparency = 0.5
 
 	local playStroke = Instance.new("UIStroke")
 	playStroke.Color = THEME.BUTTON_PLAY_STROKE
@@ -429,6 +436,23 @@ local function createLobby()
 		print("Role selector clicked (not yet implemented)")
 	end)
 
+	
+	-- Wait for server ready signal
+	task.spawn(function()
+		local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Blaster"):WaitForChild("Remotes", 30)
+		if remotes then
+			local serverReadyEvent = remotes:WaitForChild("ServerReady", 30)
+			if serverReadyEvent then
+				serverReadyEvent.OnClientEvent:Wait()
+				isServerReady = true
+				playBtn.BackgroundColor3 = THEME.BUTTON_PLAY
+				playBtn.Text = "QUICK PLAY"
+				playBtn.TextTransparency = 0
+				print("✅ LobbyController: Server ready, Quick Play enabled")
+			end
+		end
+	end)
+	
 	-- Play Button Logic
 	playBtn.MouseEnter:Connect(function()
 		-- Ensure mouse stays unlocked even on hover
@@ -443,6 +467,11 @@ local function createLobby()
 	end)
 	
 	playBtn.MouseButton1Click:Connect(function()
+		-- Check if server is ready
+		if not isServerReady then
+			warn("❌ Quick Play: Server not ready yet!")
+			return
+		end
 		-- Hide Lobby and re-enable HUD
 		screenGui.Enabled = false
 		disableViewmodel()

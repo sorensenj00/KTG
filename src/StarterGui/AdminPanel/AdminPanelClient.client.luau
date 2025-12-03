@@ -245,6 +245,25 @@ local removeMutCorner = Instance.new("UICorner")
 removeMutCorner.CornerRadius = UDim.new(0, 6)
 removeMutCorner.Parent = removeMutationBtn
 
+-- Reset Mutations Button
+local resetContainer = Instance.new("Frame")
+resetContainer.Size = UDim2.new(1, 0, 0, 35)
+resetContainer.BackgroundTransparency = 1
+resetContainer.LayoutOrder = 5
+resetContainer.Parent = frame
+
+local resetBtn = Instance.new("TextButton")
+resetBtn.Text = "RESET ALL MUTATIONS"
+resetBtn.Size = UDim2.new(1, 0, 1, 0)
+resetBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+resetBtn.TextColor3 = Color3.new(1, 1, 1)
+resetBtn.Font = Enum.Font.GothamBold
+resetBtn.TextSize = 13
+resetBtn.Parent = resetContainer
+local resetCorner = Instance.new("UICorner")
+resetCorner.CornerRadius = UDim.new(0, 6)
+resetCorner.Parent = resetBtn
+
 -- Buttons
 local addXPBtn = createButton("+1000 XP", 6)
 local addGlobalXPBtn = createButton("+1000 GlobalXP", 7)
@@ -406,6 +425,11 @@ removeMutationBtn.MouseButton1Click:Connect(function()
 	else
 		print("❌ Please enter a mutation name")
 	end
+end)
+
+resetBtn.MouseButton1Click:Connect(function()
+	print("🖱️ Reset Mutations clicked")
+	remotes.ResetMutations:FireServer()
 end)
 
 -- Update Stats Loop

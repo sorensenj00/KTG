@@ -141,16 +141,13 @@ function BlasterController:shoot()
 		rayDirections[index] = direction * range
 	end
 	local rayResults = castRays(player, origin.Position, rayDirections, rayRadius)
-	-- Rather than passing the entire table of rayResults to the server, we'll pass the shot origin and a list of tagged humanoids.
-	-- The server will then recalculate the ray directions from the origin and validate the tagged humanoids.
-	-- Strings are used for the indices since non-contiguous arrays do not get passed over the network correctly.
-	-- (This may be non-contiguous in the case of firing a shotgun, where not all of the rays hit a target)
-	local tagged = {}
+	
+	-- Check if we hit anything to show hitmarker
 	local didTag = false
-	for index, rayResult in rayResults do
+	for _, rayResult in rayResults do
 		if rayResult.taggedHumanoid then
-			tagged[tostring(index)] = rayResult.taggedHumanoid
 			didTag = true
+			break
 		end
 	end
 	if didTag then
@@ -158,7 +155,7 @@ function BlasterController:shoot()
 		-- Play hit marker sound immediately (no server wait)
 		self.audioController:playHitMarkerSound()
 	end
-	shootRemote:FireServer(now, self.blaster, origin, tagged)
+	shootRemote:FireServer(now, self.blaster, origin)
 
 	local muzzlePosition = self.viewModelController:getMuzzlePosition()
 

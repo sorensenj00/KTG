@@ -28,6 +28,7 @@ local toggleInfiniteAmmoEvent = createEvent("ToggleInfiniteAmmo")
 local setSpeedEvent = createEvent("SetSpeed")
 local addMutationEvent = createEvent("AddMutation")
 local removeMutationEvent = createEvent("RemoveMutation")
+local resetMutationsEvent = createEvent("ResetMutations")
 
 print("👮 AdminService: Started")
 
@@ -200,6 +201,12 @@ removeMutationEvent.OnServerEvent:Connect(function(player, mutationName)
 	if updateEvent then
 		updateEvent:FireClient(player)
 	end
+end)
+
+-- Reset Mutations
+resetMutationsEvent.OnServerEvent:Connect(function(player)
+	print("👮 Admin:", player.Name, "reset all mutations")
+	MetaProgressionManager.ResetUpgrades(player)
 end)
 
 -- God Mode Protection (Heal if damaged while active)
