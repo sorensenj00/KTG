@@ -71,7 +71,7 @@ end)
 addXPEvent.OnServerEvent:Connect(function(player, amount)
 	if typeof(amount) ~= "number" then return end
 	print("👮 Admin:", player.Name, "added", amount, "XP")
-	ProgressionManager.AddXP(player, amount)
+	ProgressionManager.AddBiomass(player, amount)
 end)
 
 -- Add GlobalXP (and Biomass)

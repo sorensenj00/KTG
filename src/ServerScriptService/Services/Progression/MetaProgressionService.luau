@@ -510,25 +510,85 @@ function MetaProgressionManager.RequestReroll(player)
         return nil, "Not enough DNA"
     end
 
+    -- Store previous draft to exclude from new roll
+    local previousDraft = PlayerDrafts[player] or {}
+
     -- Deduct Cost
     data.DNA = data.DNA - MetaConfig.REROLL_COST
     
     -- Increment Count
     ShopRotation.RerollCounts[player.UserId] = rerolls + 1
     
-    -- Generate New Draft (Force new seed/shuffle)
-    -- We can just call RequestDraft but we need to force a refresh.
-    -- Actually RequestDraft uses `os.time() + player.UserId` which changes every second.
-    -- But we want to ensure it's different from the "Rotation" items if possible?
-    -- The user wants a REROLL. 
-    -- Let's clear the current draft and call RequestDraft again.
+    -- Clear current draft
     PlayerDrafts[player] = nil
     PlayerDraftPurchases[player] = {}
     
     -- Update Client DNA
     UpdateMetaEvent:FireClient(player, data)
     
-    return MetaProgressionManager.RequestDraft(player)
+    -- Generate new draft excluding previous mutations
+    return MetaProgressionManager.RequestDraftWithExclusions(player, previousDraft)
+end
+
+-- Internal: Generate draft with exclusions (for rerolls)
+function MetaProgressionManager.RequestDraftWithExclusions(player, excludeList)
+    local data = PlayerMeta[player]
+    if not data then return nil end
+
+    updateShopRotation()
+
+    local draft = {}
+    local rng = Random.new(os.time() + player.UserId + (ShopRotation.RerollCounts[player.UserId] or 0) * 1000)
+    
+    -- Build combined exclusion list (previous draft items)
+    local allExclusions = {}
+    for _, item in ipairs(excludeList or {}) do
+        allExclusions[item] = true
+    end
+
+    -- 1. Try to fill from Shop Rotation (Flash Deals) - but skip excluded items
+    for _, item in ipairs(ShopRotation.Items) do
+        if allExclusions[item] then continue end
+        
+        local currentLvl = data.Upgrades[item] or 0
+        local maxLvl = MetaConfig.Mutations[item].MaxLevel
+
+        local alreadyInDraft = false
+        for _, d in ipairs(draft) do if d == item then alreadyInDraft = true break end end
+
+        if currentLvl < maxLvl and not alreadyInDraft then
+            table.insert(draft, item)
+        end
+        if #draft >= 3 then break end
+    end
+
+    -- 2. Fill remaining slots with random mutations (excluding previous draft)
+    local attempts = 0
+    while #draft < 3 and attempts < 50 do
+        attempts = attempts + 1
+        local rarity = getRandomRarity(2, rng)
+        
+        -- Build exclusion list for this pick: previous draft + current draft
+        local pickExclusions = {}
+        for _, d in ipairs(draft) do table.insert(pickExclusions, d) end
+        for item, _ in pairs(allExclusions) do table.insert(pickExclusions, item) end
+        
+        local mutation = getRandomMutationOfRarity(rarity, pickExclusions, rng)
+
+        if mutation then
+            local currentLvl = data.Upgrades[mutation] or 0
+            local maxLvl = MetaConfig.Mutations[mutation].MaxLevel
+            if currentLvl < maxLvl then
+                table.insert(draft, mutation)
+            end
+        end
+    end
+
+    PlayerDrafts[player] = draft
+    PlayerDraftPurchases[player] = {}
+
+    local rerolls = ShopRotation.RerollCounts[player.UserId] or 0
+    return draft, ShopRotation.NextRotationTime, rerolls
 end
 
 -- Remote Functions

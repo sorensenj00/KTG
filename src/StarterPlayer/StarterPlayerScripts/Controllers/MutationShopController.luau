@@ -243,14 +243,32 @@ local function createCard(name, data, index)
             -- Update Level Bar (Immediate Feedback)
             local barContainer = card:FindFirstChild("LevelBar")
             if barContainer then
-                -- We need to know the new level. We can assume it's +1 from previous.
-                -- But we didn't store the previous level easily.
-                -- However, we can just light up the next inactive segment.
-                for _, segment in ipairs(barContainer:GetChildren()) do
-                    if segment:IsA("Frame") and segment.BackgroundColor3 == Color3.fromRGB(60, 60, 70) then
-                        -- Found the first inactive segment, light it up
-                        segment.BackgroundColor3 = mutationConfig.RarityColors[data.Rarity] or Color3.new(1,1,1)
-                        break -- Only light up one
+                -- Find segments by name order and light up the next unlit one
+                local segments = {}
+                for _, child in ipairs(barContainer:GetChildren()) do
+                    if child:IsA("Frame") and child.Name:match("^Segment%d+$") then
+                        local segNum = tonumber(child.Name:match("%d+"))
+                        if segNum then
+                            segments[segNum] = child
+                        end
+                    end
+                end
+                
+                -- Find first unlit segment (gray) using approximate color match
+                local grayColor = Color3.fromRGB(60, 60, 70)
+                local rarityColor = mutationConfig.RarityColors[data.Rarity] or Color3.new(1,1,1)
+                for i = 1, #segments do
+                    local seg = segments[i]
+                    if seg then
+                        -- Use approximate comparison (tolerance of 0.01)
+                        local c = seg.BackgroundColor3
+                        local isGray = math.abs(c.R - grayColor.R) < 0.05 
+                            and math.abs(c.G - grayColor.G) < 0.05 
+                            and math.abs(c.B - grayColor.B) < 0.05
+                        if isGray then
+                            seg.BackgroundColor3 = rarityColor
+                            break
+                        end
                     end
                 end
             end

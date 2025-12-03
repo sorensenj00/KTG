@@ -131,6 +131,7 @@ end
 -- Only issues a new MoveTo if position changed significantly or enough time passed
 local MOVE_TO_MIN_INTERVAL = 0.15 -- Minimum time between MoveTo calls
 local MOVE_TO_MIN_DISTANCE = 3 -- Minimum distance change to trigger new MoveTo
+local MOVE_TO_REFRESH_INTERVAL = 1.0 -- Force refresh MoveTo even for stationary targets
 
 local function throttledMoveTo(hum, state, targetPos)
 	local now = os.clock()
@@ -144,6 +145,9 @@ local function throttledMoveTo(hum, state, targetPos)
 		-- Check if target position changed significantly
 		local distChange = (targetPos - state.LastMoveToPos).Magnitude
 		if distChange > MOVE_TO_MIN_DISTANCE then
+			shouldMove = true
+		-- Force refresh for stationary targets to prevent bots from stopping
+		elseif now - state.LastMoveToTime > MOVE_TO_REFRESH_INTERVAL then
 			shouldMove = true
 		end
 	end
@@ -473,7 +477,7 @@ local function handleCombat(bot, state, now)
 
 					if hit.taggedHumanoid.Health <= 0 and eliminatedEvent then
 						eliminatedEvent:Fire(nil, bot, hit.taggedHumanoid.Parent, bot:FindFirstChildWhichIsA("Tool"))
-						ProgressionManager.AddXP(bot, 50)
+						ProgressionManager.AddBiomass(bot, 50)
 					end
 				end
 			end
