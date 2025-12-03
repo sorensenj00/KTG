@@ -15,11 +15,12 @@ local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 local ServerScriptService = game:GetService("ServerScriptService")
--- local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ScalingEngine = require(ServerScriptService.Services.World.ScalingEngineService)
-local GameConfig = require(game:GetService("ReplicatedStorage").GameLoop.GameConfig)
-local ScalingConfig = require(game:GetService("ReplicatedStorage").GameLoop.ScalingConfig)
+local GameConfig = require(ReplicatedStorage.GameLoop.GameConfig)
+local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
+local SafeZoneConfig = require(ReplicatedStorage.GameLoop.SafeZoneConfig)
 
 local BotSpawner = {}
 
@@ -28,7 +29,19 @@ local RESPAWN_DELAY = 3
 
 -- Bots spawn directly in Workspace (no folder)
 
--- Helper to get random X/Z coordinates on Baseplate
+-- Helper to check if a point is inside any safe zone
+local function isPointInSafeZone(x: number, z: number): boolean
+	for _, pos in ipairs(SafeZoneConfig.SAFE_ZONE_LOCATIONS) do
+		local size = SafeZoneConfig.SAFE_ZONE_SIZE
+		-- Simple AABB check (ignore Y since we only care about X/Z)
+		if math.abs(x - pos.X) <= size.X / 2 and math.abs(z - pos.Z) <= size.Z / 2 then
+			return true
+		end
+	end
+	return false
+end
+
+-- Helper to get random X/Z coordinates on Baseplate (avoiding safe zones)
 local function getRandomSpawnXZ()
 	-- Attempt to find the map/baseplate by common names
 	local baseplate = Workspace:FindFirstChild("Baseplate")
@@ -55,9 +68,20 @@ local function getRandomSpawnXZ()
 	local halfSizeZ = size.Z / 2
 
 	-- Keep them slightly away from the absolute edge
+	-- Retry up to 10 times to avoid safe zones
+	for _ = 1, 10 do
+		local x = math.random(-halfSizeX + 20, halfSizeX - 20)
+		local z = math.random(-halfSizeZ + 20, halfSizeZ - 20)
+		local worldX, worldZ = targetX + x, targetZ + z
+		
+		if not isPointInSafeZone(worldX, worldZ) then
+			return worldX, worldZ
+		end
+	end
+	
+	-- Fallback: return anyway if we couldn't find a non-safezone spot
 	local x = math.random(-halfSizeX + 20, halfSizeX - 20)
 	local z = math.random(-halfSizeZ + 20, halfSizeZ - 20)
-
 	return targetX + x, targetZ + z
 end
 

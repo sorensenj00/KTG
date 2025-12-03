@@ -22,6 +22,7 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
+local SafeZoneConfig = require(ReplicatedStorage.GameLoop.SafeZoneConfig)
 local ScalingEngine = require(ServerScriptService.Services.World.ScalingEngineService)
 local DamageTracker = require(ServerScriptService.Services.World.DamageTrackerService)
 local MetaProgressionManager = require(ServerScriptService.Services.Progression.MetaProgressionService)
@@ -202,6 +203,32 @@ local function updateNetworkOwnership(bot, target)
 			pcall(function() root:SetNetworkOwner(newOwner) end)
 		end
 	end
+end
+
+-- === Helper: Safe Zone Check ===
+-- Returns nil if not in safezone, or a position to move to if in safezone
+local function getEscapeSafeZoneTarget(position: Vector3): Vector3?
+	for _, zonePos in ipairs(SafeZoneConfig.SAFE_ZONE_LOCATIONS) do
+		local size = SafeZoneConfig.SAFE_ZONE_SIZE
+		local relX = position.X - zonePos.X
+		local relZ = position.Z - zonePos.Z
+		
+		-- Check if inside this zone (AABB)
+		if math.abs(relX) <= size.X / 2 and math.abs(relZ) <= size.Z / 2 then
+			-- Inside! Calculate escape direction (move away from zone center)
+			local escapeDir = Vector3.new(relX, 0, relZ)
+			if escapeDir.Magnitude < 1 then
+				-- Too close to center, pick random direction
+				escapeDir = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5)
+			end
+			escapeDir = escapeDir.Unit
+			
+			-- Target position: just outside the zone
+			local escapeDistance = math.max(size.X, size.Z) / 2 + 50
+			return position + escapeDir * escapeDistance
+		end
+	end
+	return nil -- Not in any safezone
 end
 
 -- === Helper: Spatial Orb Search ===
@@ -651,6 +678,15 @@ function BotController.Start()
 			end
 			state.LastPos = root.Position
 
+			-- Safe Zone Escape: Bots should not stay in safe zones
+			local escapeTarget = getEscapeSafeZoneTarget(root.Position)
+			if escapeTarget then
+				-- Bot is in a safe zone! Force it to leave
+				moveToPath(bot, state, escapeTarget)
+				state.State = "IDLE" -- Reset state while escaping
+				state.Target = nil
+				continue -- Skip normal AI this frame, focus on escaping
+			end
 			
 			-- Target Selection
 			if state.State == "COMBAT" then
