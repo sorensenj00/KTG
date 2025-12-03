@@ -77,7 +77,7 @@ local function enforceEntityStats(entity: Instance, character: Model)
 
 	-- Apply Meta Multipliers only for players
 	if entity:IsA("Player") and getMeta() then
-		speedMult = getMeta().GetStatMultiplier(entity, "Speed")
+		speedMult = getMeta().GetStatMultiplier(entity, "Adrenaline")
 	end
 
 	local finalSpeed = baseSpeed * speedMult

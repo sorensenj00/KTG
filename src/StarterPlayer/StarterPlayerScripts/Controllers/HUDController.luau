@@ -1041,6 +1041,7 @@ function HUDController.Start()
 		end
 		purchaseUpgradeRemote = cachedRemotes:FindFirstChild("PurchaseUpgrade")
 
+		-- Common Mutations Shop: Only show Common mutations (IsMutation = true, Tier = 1)
 		for tierNumber = 1, 1 do
 			local tierData = MetaConfig.Tiers[tierNumber]
 			if tierData then
@@ -1048,7 +1049,8 @@ function HUDController.Start()
 				tierFrames[tierNumber] = tierFrame
 
 				for statName, upgradeConfig in pairs(MetaConfig.Upgrades) do
-					if upgradeConfig.Tier == tierNumber then
+					-- Only show common mutations, not regular upgrades
+					if upgradeConfig.Tier == tierNumber and upgradeConfig.IsMutation then
 						local card = createUpgradeCard(statName, upgradeConfig)
 						local container = tierFrame:FindFirstChild("UpgradeContainer")
 						if container then

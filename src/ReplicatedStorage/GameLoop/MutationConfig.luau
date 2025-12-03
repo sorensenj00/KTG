@@ -29,6 +29,50 @@ MutationConfig.RarityWeights = {
 }
 
 MutationConfig.Mutations = {
+    -- ⚪ Common (Base Stats)
+    ["Sharp Claws"] = {
+        Rarity = 1,
+        MaxLevel = 50,
+        Description = "Increases damage dealt by 1% per level.",
+        ImageId = "rbxassetid://10468915",
+        GetStat = function(level) return level * 0.01 end,
+    },
+    ["Thick Skin"] = {
+        Rarity = 1,
+        MaxLevel = 50,
+        Description = "Increases max health by 1% per level.",
+        ImageId = "rbxassetid://7169354151",
+        GetStat = function(level) return level * 0.01 end,
+    },
+    ["Adrenaline"] = {
+        Rarity = 1,
+        MaxLevel = 20,
+        Description = "Increases movement speed by 0.5% per level.",
+        ImageId = "rbxassetid://1234752",
+        GetStat = function(level) return level * 0.005 end,
+    },
+    ["Magnet Range"] = {
+        Rarity = 1,
+        MaxLevel = 10,
+        Description = "Increases orb pickup range by 10% per level.",
+        ImageId = "rbxassetid://7493638708",
+        GetStat = function(level) return level * 0.1 end,
+    },
+    ["Health Regen"] = {
+        Rarity = 1,
+        MaxLevel = 5,
+        Description = "Regenerates 1% max health per second per level.",
+        ImageId = "rbxassetid://7169354151",
+        GetStat = function(level) return level * 0.01 end,
+    },
+    ["Magnetism"] = {
+        Rarity = 1,
+        MaxLevel = 10,
+        Description = "Increases range to automatically pick up loot (+2 studs per level).",
+        ImageId = "rbxassetid://7493638708",
+        GetStat = function(level) return level * 2 end,
+    },
+
     -- ⚪ Common (Adaptation)
     ["Aerodynamics"] = {
         Rarity = 1,

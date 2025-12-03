@@ -531,12 +531,38 @@ function LobbyController.Start()
 			if remotes then
 				local serverReadyEvent = remotes:WaitForChild("ServerReady", 30)
 				if serverReadyEvent then
-					serverReadyEvent.OnClientEvent:Wait()
+					-- Use a timeout to prevent waiting forever if event was missed
+					local connection
+					local readyReceived = false
+
+					connection = serverReadyEvent.OnClientEvent:Connect(function()
+						readyReceived = true
+						if connection then
+							connection:Disconnect()
+						end
+					end)
+
+					-- Wait up to 10 seconds for the event, then enable anyway
+					local waitTime = 0
+					while not readyReceived and waitTime < 10 do
+						task.wait(0.5)
+						waitTime = waitTime + 0.5
+					end
+
+					if connection then
+						connection:Disconnect()
+					end
+
 					isServerReady = true
 					playBtn.BackgroundColor3 = THEME.BUTTON_PLAY
 					playBtn.Text = "QUICK PLAY"
 					playBtn.TextTransparency = 0
-					print("✅ LobbyController: Server ready, Quick Play enabled")
+
+					if readyReceived then
+						print("✅ LobbyController: Server ready signal received, Quick Play enabled")
+					else
+						print("⚠️ LobbyController: Server ready timeout, enabling Quick Play anyway")
+					end
 				end
 			end
 		end)

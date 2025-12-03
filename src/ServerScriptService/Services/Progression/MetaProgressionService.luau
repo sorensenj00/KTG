@@ -188,24 +188,14 @@ function MetaProgressionManager.Initialize(player)
 		PlayerMeta[player] = getDefaultData()
 	end
 
-	UpdateMetaEvent:FireClient(player, PlayerMeta[player])
-
-	-- Also set the DNA attribute on the player for UI components that listen to attributes
+	-- Set the DNA attribute on the player for UI components that listen to attributes
+	-- This is set immediately so clients can read it via GetAttribute when they start
 	player:SetAttribute("DNA", PlayerMeta[player].DNA)
 
-	-- Fire UpdateMetaStats for HUD/Lobby to update
-	task.spawn(function()
-		local blaster = ReplicatedStorage:FindFirstChild("Blaster")
-		if blaster then
-			local remotes = blaster:FindFirstChild("Remotes")
-			if remotes then
-				local updateMetaRemote = remotes:FindFirstChild("UpdateMetaStats")
-				if updateMetaRemote then
-					updateMetaRemote:FireClient(player, PlayerMeta[player].DNA, PlayerMeta[player].Upgrades, 0)
-				end
-			end
-		end
-	end)
+	-- NOTE: We intentionally do NOT fire UpdateMetaEvent or UpdateMetaStats here.
+	-- The client scripts use RequestMetaData:InvokeServer() to pull initial data,
+	-- which avoids race conditions where FireClient is sent before the client is listening.
+	-- The events are still fired on subsequent updates (AddDNA, purchases, etc.)
 end
 
 function MetaProgressionManager.AddDNA(player, amount)

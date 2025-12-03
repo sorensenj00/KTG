@@ -386,13 +386,22 @@ function KillstreakManager.Start()
 
 	-- Track player deaths
 	Players.PlayerAdded:Connect(function(player)
-		-- Initialize killstreak to 0
+		-- Initialize killstreak to 0 (don't fire to client yet - they're not ready)
 		killstreaks[player] = 0
-		updateClientKillstreak(player, 0, false, false)
+		-- NOTE: We don't call updateClientKillstreak here because the client
+		-- isn't listening yet. The killstreak is 0 by default, and will be
+		-- sent when the first kill happens or when the player's character spawns.
 
 		player.CharacterAdded:Connect(function(character)
 			local humanoid = character:WaitForChild("Humanoid", 5)
 			if humanoid then
+				-- Send current killstreak when character spawns (client is ready by now)
+				task.delay(1, function()
+					if player.Parent then -- Still connected
+						updateClientKillstreak(player, killstreaks[player] or 0, false, false)
+					end
+				end)
+				
 				humanoid.Died:Connect(function()
 					onPlayerDeath(player)
 				end)
@@ -403,7 +412,7 @@ function KillstreakManager.Start()
 	-- Handle existing players
 	for _, player in ipairs(Players:GetPlayers()) do
 		killstreaks[player] = 0
-		updateClientKillstreak(player, 0, false, false)
+		-- Don't fire immediately - wait for character spawn
 
 		if player.Character then
 			local humanoid = player.Character:FindFirstChild("Humanoid")

@@ -170,10 +170,33 @@ function PlayerSpawner.Start()
 		end
 	end
 
+	-- Create ServerReady event FIRST (before any players can connect)
+	local serverReadyEvent
+	local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
+	if remotes then
+		serverReadyEvent = remotes:FindFirstChild("ServerReady")
+		if not serverReadyEvent then
+			serverReadyEvent = Instance.new("RemoteEvent")
+			serverReadyEvent.Name = "ServerReady"
+			serverReadyEvent.Parent = remotes
+			print("✅ PlayerSpawner: Created ServerReady event")
+		end
+	end
+
 	local function onPlayerAdded(player)
 		player.CharacterAdded:Connect(onCharacterAdded)
 		-- Initial spawn is handled by LobbyController (Quick Play)
 		-- player:LoadCharacter() -- Removed to prevent bypassing Lobby
+		
+		-- Fire ServerReady to this specific player after a short delay
+		-- This ensures the client's LobbyController has time to start listening
+		task.spawn(function()
+			task.wait(1) -- Wait for client scripts to initialize
+			if serverReadyEvent then
+				serverReadyEvent:FireClient(player)
+				print("✅ PlayerSpawner: Fired ServerReady to", player.Name)
+			end
+		end)
 	end
 
 	Players.PlayerAdded:Connect(onPlayerAdded)
@@ -190,21 +213,7 @@ function PlayerSpawner.Start()
 		end
 	end
 	
-	-- Fire ServerReady event to tell clients spawning is ready
-	task.spawn(function()
-		local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
-		if remotes then
-			local serverReadyEvent = remotes:FindFirstChild("ServerReady")
-			if not serverReadyEvent then
-				serverReadyEvent = Instance.new("RemoteEvent")
-				serverReadyEvent.Name = "ServerReady"
-				serverReadyEvent.Parent = remotes
-				print("✅ PlayerSpawner: Created ServerReady event")
-			end
-			serverReadyEvent:FireAllClients()
-			print("✅ PlayerSpawner: Server ready - clients can spawn")
-		end
-	end)
+	print("✅ PlayerSpawner: Server ready - clients can spawn")
 end
 
 return PlayerSpawner

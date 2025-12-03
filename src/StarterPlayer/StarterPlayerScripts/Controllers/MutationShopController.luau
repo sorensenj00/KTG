@@ -526,8 +526,8 @@ function MutationShopController.Start()
     -- Close/Back Button
     local closeButton = Instance.new("TextButton")
     closeButton.Name = "CloseButton"
-    closeButton.Text = "SHOP"
-    closeButton.Size = UDim2.new(0, 80, 0, 30)
+    closeButton.Text = "Common Mutation Shop"
+    closeButton.Size = UDim2.new(0, 200, 0, 30)
     closeButton.Position = UDim2.new(0, 10, 0, 10) -- Moved to left
     closeButton.AnchorPoint = Vector2.new(0, 0)
     closeButton.BackgroundColor3 = Color3.fromRGB(0, 255, 150) -- Green like shop

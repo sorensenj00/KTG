@@ -241,6 +241,23 @@ function MutationHUDController.Start()
 		updateMutationDisplay(metaData)
 	end)
 
+	-- Request initial data (fixes race condition where server fires before we're listening)
+	task.spawn(function()
+		local blaster = ReplicatedStorage:WaitForChild("Blaster", 10)
+		if blaster then
+			local remotes = blaster:WaitForChild("Remotes", 10)
+			if remotes then
+				local reqFunc = remotes:WaitForChild("RequestMetaData", 10)
+				if reqFunc then
+					local dna, upgrades = reqFunc:InvokeServer()
+					if upgrades then
+						updateMutationDisplay({ DNA = dna, Upgrades = upgrades })
+					end
+				end
+			end
+		end
+	end)
+
 	-- Keybind (M) to toggle HUD
 	local UserInputService = game:GetService("UserInputService")
 	UserInputService.InputBegan:Connect(function(input, processed)

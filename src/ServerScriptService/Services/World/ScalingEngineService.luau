@@ -95,7 +95,7 @@ function ScalingEngine.UpdateCharacter(character: Model, biomass: number)
 	-- player is already defined above
 	if player and getMeta() then
 		-- Apply base Health upgrade multiplier (Thick Skin)
-		local healthUpgradeMult = getMeta().GetStatMultiplier(player, "Health")
+		local healthUpgradeMult = getMeta().GetStatMultiplier(player, "Thick Skin")
 		healthMult = healthMult * healthUpgradeMult
 		
 		-- Dense Muscle: +5% Health per 100 Biomass

@@ -36,64 +36,8 @@ MetaConfig.Tiers = {
 
 -- Add "Tier" property to every upgrade
 -- REBALANCED: Higher base costs & exponents to crush inflation
+-- NOTE: Common upgrades (Damage, Health, Speed, etc.) moved to MutationConfig as Common mutations
 MetaConfig.Upgrades = {
-	-- TIER 1 (Survivor) - Accessible but scales moderately
-	Damage = {
-		Name = "Sharp Claws",
-		Description = "Increases damage dealt by 1% per level.",
-		Tier = 1,
-		BaseCost = 250, -- Up from 100
-		CostExponent = 1.6, -- Up from 1.5
-		Increment = 0.01,
-		MaxLevel = 50,
-	},
-	Health = {
-		Name = "Thick Skin",
-		Description = "Increases max health by 1% per level.",
-		Tier = 1,
-		BaseCost = 250, -- Up from 100
-		CostExponent = 1.6, -- Up from 1.5
-		Increment = 0.01,
-		MaxLevel = 50,
-	},
-	Speed = {
-		Name = "Adrenaline",
-		Description = "Increases movement speed by 0.5% per level.",
-		Tier = 1,
-		BaseCost = 500, -- Up from 200 (speed is powerful)
-		CostExponent = 1.8, -- Up from 1.6
-		Increment = 0.005,
-		MaxLevel = 20,
-	},
-	MagnetRange = {
-		Name = "Magnet Range",
-		Description = "Increases orb pickup range by 10% per level.",
-		Tier = 1,
-		BaseCost = 300, -- Up from 150
-		CostExponent = 1.6, -- Up from 1.5
-		Increment = 0.1,
-		MaxLevel = 10,
-	},
-	HealthRegen = {
-		Name = "Regeneration",
-		Description = "Regenerates 1% max health per second per level.",
-		Tier = 1,
-		BaseCost = 400, -- Up from 250
-		CostExponent = 1.9, -- Up from 1.8
-		Increment = 0.01,
-		MaxLevel = 5,
-	},
-
-	Magnetism = {
-		Name = "Magnetism",
-		Description = "Increases range to automatically pick up loot.",
-		Tier = 1,
-		BaseCost = 400, -- Up from 250
-		CostExponent = 1.7, -- Up from 1.6
-		Increment = 2, -- +2 Studs range per level
-		MaxLevel = 10,
-	},
-
 	-- TIER 2 (Hunter) - Steep ramp up
 	Ammo = {
 		Name = "Ammo Reserves",
@@ -181,22 +125,31 @@ MetaConfig.Upgrades = {
 		Increment = 0.01,
 		MaxLevel = 10,
 	},
-
 }
 
--- Merge Mutations into Upgrades
+-- Rarity-based mutation costs
+local MutationCostByRarity = {
+	[1] = { BaseCost = 100, CostExponent = 1.4 }, -- Common: 100, 264, 482, 741...
+	[2] = { BaseCost = 250, CostExponent = 1.5 }, -- Uncommon: 250, 707, 1299...
+	[3] = { BaseCost = 500, CostExponent = 1.6 }, -- Rare: 500, 1516, 2930...
+	[4] = { BaseCost = 1000, CostExponent = 1.8 }, -- Legendary: 1000, 3482, 7225...
+}
+
+-- Merge Mutations into Upgrades with rarity-based pricing
 for name, mutation in pairs(MutationConfig.Mutations) do
+	local costConfig = MutationCostByRarity[mutation.Rarity] or MutationCostByRarity[1]
 	MetaConfig.Upgrades[name] = {
 		Name = name,
 		Description = mutation.Description,
 		Tier = mutation.Rarity,
-		BaseCost = 100, -- Default base cost for mutations
-		CostExponent = 1.5, -- Default exponent
+		BaseCost = costConfig.BaseCost,
+		CostExponent = costConfig.CostExponent,
 		MaxLevel = mutation.MaxLevel,
 		Increment = 0, -- Handled by GetStat
 		IsMutation = true,
 		GetStat = mutation.GetStat,
-        ImageId = mutation.ImageId
+		ImageId = mutation.ImageId,
+		Rarity = mutation.Rarity,
 	}
 end
 
@@ -224,16 +177,11 @@ function MetaConfig.GetCost(stat: string, level: number): number
 		return math.huge
 	end
 
-	-- Polynomial cost: BaseCost * (level ^ CostExponent)
-	-- Note: level 0 -> cost 0 (technically), but we usually buy level 1.
-	-- If level is 0 (first purchase), we treat it as buying level 1.
+	-- Target level is current + 1 (buying next level)
 	local targetLevel = level + 1
-    
-    if upgrade.IsMutation then
-        -- Mutations might have linear scaling or fixed cost
-        return math.floor(upgrade.BaseCost * targetLevel)
-    end
 
+	-- All upgrades/mutations use: BaseCost * (targetLevel ^ CostExponent)
+	-- Rarity affects BaseCost and CostExponent for mutations
 	return math.floor(upgrade.BaseCost * (targetLevel ^ upgrade.CostExponent))
 end
 
@@ -251,20 +199,19 @@ function MetaConfig.GetMultiplier(stat: string, level: number): number
 end
 -- Specific Getter for Non-Multiplier stats (Flat values like Regen, Thorns)
 function MetaConfig.GetValue(stat: string, level: number): number
-    local upgrade = MetaConfig.Upgrades[stat]
+	local upgrade = MetaConfig.Upgrades[stat]
 	if not upgrade then
 		return 0
 	end
-    
-    if upgrade.GetStat then
-        return upgrade.GetStat(level)
-    end
 
-    -- For flat values, it's usually Base + (Level * Increment) or just Level * Increment
-    -- Based on the Increment logic above:
-    return level * upgrade.Increment
+	if upgrade.GetStat then
+		return upgrade.GetStat(level)
+	end
+
+	-- For flat values, it's usually Base + (Level * Increment) or just Level * Increment
+	-- Based on the Increment logic above:
+	return level * upgrade.Increment
 end
-
 
 -- Get the full upgrade config (for validation purposes)
 function MetaConfig.GetUpgradeConfig(statName: string)

@@ -92,7 +92,7 @@ local function onShoot(player, now, tool, originCF)
 
 	-- [META] Apply Damage Multiplier
 	if getMeta() then
-		local dmgMult = getMeta().GetStatMultiplier(player, "Damage")
+		local dmgMult = getMeta().GetStatMultiplier(player, "Sharp Claws")
 		damage = damage * dmgMult
 	end
 
