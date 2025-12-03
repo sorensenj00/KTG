@@ -573,6 +573,14 @@ function BotController.Start()
 				botStates[bot] = nil
 				continue
 			end
+			
+			-- Safety: Ensure humanoid is in Running state (fix stuck bots)
+			local humState = hum:GetState()
+			if humState == Enum.HumanoidStateType.Physics or humState == Enum.HumanoidStateType.None then
+				pcall(function()
+					hum:ChangeState(Enum.HumanoidStateType.Running)
+				end)
+			end
 
 			local state = getBotState(bot)
 

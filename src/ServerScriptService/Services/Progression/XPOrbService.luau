@@ -170,7 +170,8 @@ local function spawnOrbInternal(position: Vector3, isDrop: boolean?, forcedXP: n
             playerCount += 1
         end
         local avgLevel = playerCount > 0 and (totalLevel / playerCount) or 1
-        local scalingMult = 1 + (avgLevel * 0.5)
+        -- Only 10% bonus per average level, capped at 5x (anti-inflation)
+        local scalingMult = math.min(5, 1 + (avgLevel * 0.1))
         xpValue = math.floor(selectedTier.XP * scalingMult)
     end
 

@@ -81,11 +81,12 @@ export type OrbEvent = {
     -------------------------------------------------------------------------
 ]]
 
+-- Drastically reduced XP to prevent instant leveling (orbs are "snacks", kills are "meals")
 XPOrbConfig.TIERS = {
-    Common = { Name = "Common", XP = 150, Size = Vector3.new(3, 3, 3), Color = Color3.fromRGB(255, 215, 0), Chance = 70 },
-    Uncommon = { Name = "Uncommon", XP = 400, Size = Vector3.new(4, 4, 4), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
-    Rare = { Name = "Rare", XP = 1000, Size = Vector3.new(8, 8, 8), Color = Color3.fromRGB(163, 35, 35), Chance = 8 },
-    Legendary = { Name = "Legendary", XP = 5000, Size = Vector3.new(20, 20, 20), Color = Color3.fromRGB(197, 209, 28), Chance = 2 },
+    Common = { Name = "Common", XP = 10, Size = Vector3.new(1.5, 1.5, 1.5), Color = Color3.fromRGB(255, 215, 0), Chance = 75 },
+    Uncommon = { Name = "Uncommon", XP = 25, Size = Vector3.new(2, 2, 2), Color = Color3.fromRGB(0, 255, 255), Chance = 20 },
+    Rare = { Name = "Rare", XP = 100, Size = Vector3.new(4, 4, 4), Color = Color3.fromRGB(163, 35, 35), Chance = 4.5 },
+    Legendary = { Name = "Legendary", XP = 500, Size = Vector3.new(8, 8, 8), Color = Color3.fromRGB(197, 209, 28), Chance = 0.5 },
 } :: { [string]: OrbTier }
 
 XPOrbConfig.TIER_LIST = {

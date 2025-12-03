@@ -310,6 +310,68 @@ local function createLobby()
 	updateStats() -- Initial update
 
 	-- ============================================
+	-- 2c. How To Play Section (Below Stats)
+	-- ============================================
+	local howToPlayFrame = Instance.new("Frame")
+	howToPlayFrame.Name = "HowToPlayFrame"
+	howToPlayFrame.Size = UDim2.new(0, 320, 0, 140)
+	howToPlayFrame.Position = UDim2.new(0, 20, 0, 155) -- Below stats frame
+	howToPlayFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	howToPlayFrame.BackgroundTransparency = 0.6
+	howToPlayFrame.BorderSizePixel = 0
+	howToPlayFrame.Parent = screenGui
+
+	local howToPlayCorner = Instance.new("UICorner")
+	howToPlayCorner.CornerRadius = UDim.new(0, 8)
+	howToPlayCorner.Parent = howToPlayFrame
+
+	local howToPlayStroke = Instance.new("UIStroke")
+	howToPlayStroke.Color = THEME.ACCENT_GOLD
+	howToPlayStroke.Thickness = 1
+	howToPlayStroke.Transparency = 0.5
+	howToPlayStroke.Parent = howToPlayFrame
+
+	local howToPlayPadding = Instance.new("UIPadding")
+	howToPlayPadding.PaddingLeft = UDim.new(0, 12)
+	howToPlayPadding.PaddingRight = UDim.new(0, 12)
+	howToPlayPadding.PaddingTop = UDim.new(0, 10)
+	howToPlayPadding.PaddingBottom = UDim.new(0, 10)
+	howToPlayPadding.Parent = howToPlayFrame
+
+	local howToPlayTitle = Instance.new("TextLabel")
+	howToPlayTitle.Name = "Title"
+	howToPlayTitle.Size = UDim2.new(1, 0, 0, 22)
+	howToPlayTitle.BackgroundTransparency = 1
+	howToPlayTitle.Text = "HOW TO PLAY"
+	howToPlayTitle.TextColor3 = THEME.ACCENT_GOLD
+	howToPlayTitle.TextSize = 16
+	howToPlayTitle.Font = Enum.Font.GothamBlack
+	howToPlayTitle.TextXAlignment = Enum.TextXAlignment.Left
+	howToPlayTitle.Parent = howToPlayFrame
+
+	local tipsList = {
+		"🔹 Pick up orbs to sustain yourself",
+		"🔹 Hunt players & bots for real Biomass gains",
+		"🔹 Buy Mutations in the shop to get stronger",
+		"🔹 Reach Level 50 to WIN and earn a huge DNA reward!",
+	}
+
+	for i, tip in ipairs(tipsList) do
+		local tipLabel = Instance.new("TextLabel")
+		tipLabel.Name = "Tip" .. i
+		tipLabel.Size = UDim2.new(1, 0, 0, 22)
+		tipLabel.Position = UDim2.new(0, 0, 0, 22 + (i - 1) * 24)
+		tipLabel.BackgroundTransparency = 1
+		tipLabel.Text = tip
+		tipLabel.TextColor3 = THEME.TEXT_WHITE
+		tipLabel.TextSize = 13
+		tipLabel.Font = Enum.Font.Gotham
+		tipLabel.TextXAlignment = Enum.TextXAlignment.Left
+		tipLabel.TextWrapped = true
+		tipLabel.Parent = howToPlayFrame
+	end
+
+	-- ============================================
 	-- 3. Main Content (Empty for 3D View)
 	-- ============================================
 	local mainContent = Instance.new("Frame")

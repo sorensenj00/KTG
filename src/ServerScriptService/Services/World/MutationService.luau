@@ -271,9 +271,9 @@ local function checkEarthquake(player, character)
         shockwave.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, 0, math.rad(90))
         shockwave.Anchored = true
         shockwave.CanCollide = false
-        shockwave.Material = Enum.Material.Neon
+        shockwave.Material = Enum.Material.Plastic
         shockwave.Color = Color3.fromRGB(255, 200, 100)
-        shockwave.Transparency = 0.5
+        shockwave.Transparency = 0.8
         shockwave.Parent = workspace
         
         Debris:AddItem(shockwave, 0.3)

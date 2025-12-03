@@ -236,29 +236,47 @@ local function spawnBot()
 	-- Sometimes parts sleep in the air. This forces them to react to gravity.
 	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 	task.delay(0.5, function()
-		if bot and bot.Parent then
-			-- Ensure EVERYTHING is unanchored before setting network owner
-			for _, desc in ipairs(bot:GetDescendants()) do
-				if desc:IsA("BasePart") then
-					desc.Anchored = false
-				end
-			end
-			
-			if rootPart and rootPart:IsA("BasePart") and rootPart:IsDescendantOf(Workspace) then
-				rootPart:SetNetworkOwner(nil)
+		-- Verify bot still exists and is in workspace
+		if not bot or not bot.Parent then
+			return
+		end
+		
+		-- Re-fetch humanoid and rootPart to ensure they're still valid
+		local hum = bot:FindFirstChild("Humanoid")
+		local root = bot:FindFirstChild("HumanoidRootPart")
+		
+		if not hum or not root then
+			warn("BotSpawner: Bot missing Humanoid or RootPart after spawn delay:", bot.Name)
+			return
+		end
+		
+		-- Ensure EVERYTHING is unanchored before setting network owner
+		for _, desc in ipairs(bot:GetDescendants()) do
+			if desc:IsA("BasePart") then
+				desc.Anchored = false
 			end
 		end
 		
-		-- Reset to running so they can move
-		if humanoid then
-			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+		-- Set network ownership
+		if root:IsDescendantOf(Workspace) then
+			pcall(function()
+				root:SetNetworkOwner(nil)
+			end)
+		end
+		
+		-- CRITICAL: Reset to Running state so MoveTo works
+		-- This MUST succeed or the bot will be frozen
+		local stateSuccess, stateErr = pcall(function()
+			hum:ChangeState(Enum.HumanoidStateType.Running)
+		end)
+		
+		if not stateSuccess then
+			warn("BotSpawner: Failed to set Running state for", bot.Name, "-", stateErr)
+			return -- Don't add BotAI tag if state change failed
 		end
 		
 		-- NOW add the BotAI tag so BotController can start managing this bot
-		-- This ensures the bot is in Running state and ready for MoveTo commands
-		if bot and bot.Parent then
-			CollectionService:AddTag(bot, "BotAI")
-		end
+		CollectionService:AddTag(bot, "BotAI")
 	end)
 
 	-- Respawn Logic

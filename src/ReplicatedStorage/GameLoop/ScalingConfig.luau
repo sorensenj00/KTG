@@ -11,9 +11,9 @@ ScalingConfig.XP_EXPONENT = 2.1 -- Slightly easier leveling to reach mid-game
 ScalingConfig.BIOMASS_BASE_REQ = 150
 ScalingConfig.BIOMASS_EXPONENT = 2.2
 
--- Kill Rewards
+-- Kill Rewards (Boosted to make kills the primary XP source)
 ScalingConfig.KILL_BASE_REWARD = 50
-ScalingConfig.KILL_REWARD_MULTIPLIER = 50
+ScalingConfig.KILL_REWARD_MULTIPLIER = 100
 
 -- Health Constants (Geometric Progression)
 -- Goal: Lvl 1 = 50, Lvl 15 = ~250, Lvl 30 = 1500
@@ -51,13 +51,12 @@ end
 
 function ScalingConfig.GetXPReward(victimLevel: number): number
 	-- Exponential Scaling: Base * (Level ^ 1.8)
-	-- Level 1: 50
-	-- Level 10: 50 * 63 = 3150
-	-- Level 30: 50 * 450 = 22500
+	-- Killing a Lvl 1 = 150 Biomass (Instant Lvl 2)
+	-- Killing a Lvl 10 = ~6300 Biomass
 	local levelBonus = math.pow(victimLevel, 1.8) * ScalingConfig.KILL_REWARD_MULTIPLIER
 	
 	if victimLevel >= 20 then
-		levelBonus = levelBonus * 1.5 -- Boss Bonus
+		levelBonus = levelBonus * 2.0 -- Bigger Boss Bonus (was 1.5)
 	end
 	
 	return math.floor(ScalingConfig.KILL_BASE_REWARD + levelBonus)

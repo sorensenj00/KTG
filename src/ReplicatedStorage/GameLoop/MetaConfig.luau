@@ -35,14 +35,15 @@ MetaConfig.Tiers = {
 }
 
 -- Add "Tier" property to every upgrade
+-- REBALANCED: Higher base costs & exponents to crush inflation
 MetaConfig.Upgrades = {
-	-- TIER 1 (Survivor)
+	-- TIER 1 (Survivor) - Accessible but scales moderately
 	Damage = {
 		Name = "Sharp Claws",
 		Description = "Increases damage dealt by 1% per level.",
 		Tier = 1,
-		BaseCost = 100,
-		CostExponent = 1.5,
+		BaseCost = 250, -- Up from 100
+		CostExponent = 1.6, -- Up from 1.5
 		Increment = 0.01,
 		MaxLevel = 50,
 	},
@@ -50,8 +51,8 @@ MetaConfig.Upgrades = {
 		Name = "Thick Skin",
 		Description = "Increases max health by 1% per level.",
 		Tier = 1,
-		BaseCost = 100,
-		CostExponent = 1.5,
+		BaseCost = 250, -- Up from 100
+		CostExponent = 1.6, -- Up from 1.5
 		Increment = 0.01,
 		MaxLevel = 50,
 	},
@@ -59,8 +60,8 @@ MetaConfig.Upgrades = {
 		Name = "Adrenaline",
 		Description = "Increases movement speed by 0.5% per level.",
 		Tier = 1,
-		BaseCost = 200,
-		CostExponent = 1.6,
+		BaseCost = 500, -- Up from 200 (speed is powerful)
+		CostExponent = 1.8, -- Up from 1.6
 		Increment = 0.005,
 		MaxLevel = 20,
 	},
@@ -68,8 +69,8 @@ MetaConfig.Upgrades = {
 		Name = "Magnet Range",
 		Description = "Increases orb pickup range by 10% per level.",
 		Tier = 1,
-		BaseCost = 150,
-		CostExponent = 1.5,
+		BaseCost = 300, -- Up from 150
+		CostExponent = 1.6, -- Up from 1.5
 		Increment = 0.1,
 		MaxLevel = 10,
 	},
@@ -77,30 +78,29 @@ MetaConfig.Upgrades = {
 		Name = "Regeneration",
 		Description = "Regenerates 1% max health per second per level.",
 		Tier = 1,
-		BaseCost = 250,
-		CostExponent = 1.8,
+		BaseCost = 400, -- Up from 250
+		CostExponent = 1.9, -- Up from 1.8
 		Increment = 0.01,
 		MaxLevel = 5,
 	},
 
+	Magnetism = {
+		Name = "Magnetism",
+		Description = "Increases range to automatically pick up loot.",
+		Tier = 1,
+		BaseCost = 400, -- Up from 250
+		CostExponent = 1.7, -- Up from 1.6
+		Increment = 2, -- +2 Studs range per level
+		MaxLevel = 10,
+	},
 
-    Magnetism = {
-        Name = "Magnetism",
-        Description = "Increases range to automatically pick up loot.",
-        Tier = 1,
-        BaseCost = 250,
-        CostExponent = 1.6,
-        Increment = 2, -- +2 Studs range per level
-        MaxLevel = 10,
-    },
-
-	-- TIER 2 (Hunter)
+	-- TIER 2 (Hunter) - Steep ramp up
 	Ammo = {
 		Name = "Ammo Reserves",
 		Description = "Increases weapon magazine capacity by 5% per level.",
 		Tier = 2,
-		BaseCost = 600,
-		CostExponent = 1.7,
+		BaseCost = 1000, -- Up from 600
+		CostExponent = 2.0, -- Up from 1.7 (harder to max out)
 		Increment = 0.05,
 		MaxLevel = 10,
 	},
@@ -108,8 +108,8 @@ MetaConfig.Upgrades = {
 		Name = "Jump Boost",
 		Description = "Increases jump height by 5% per level.",
 		Tier = 2,
-		BaseCost = 500,
-		CostExponent = 1.6,
+		BaseCost = 800, -- Up from 500
+		CostExponent = 1.8, -- Up from 1.6
 		Increment = 0.05,
 		MaxLevel = 10,
 	},
@@ -117,30 +117,29 @@ MetaConfig.Upgrades = {
 		Name = "Rapid Fire",
 		Description = "Increases fire rate by 2% per level.",
 		Tier = 2,
-		BaseCost = 800,
-		CostExponent = 1.8,
+		BaseCost = 1200, -- Up from 800
+		CostExponent = 2.0, -- Up from 1.8
 		Increment = 0.02,
 		MaxLevel = 15,
 	},
 
-    Featherweight = {
-        Name = "Featherweight",
-        Description = "Reduces fall damage.",
-        Tier = 2,
-        BaseCost = 500,
-        CostExponent = 1.5,
-        Increment = 0.1, -- 10% reduction per level
-        MaxLevel = 10,
-    },
+	Featherweight = {
+		Name = "Featherweight",
+		Description = "Reduces fall damage.",
+		Tier = 2,
+		BaseCost = 800, -- Up from 500
+		CostExponent = 1.7, -- Up from 1.5
+		Increment = 0.1, -- 10% reduction per level
+		MaxLevel = 10,
+	},
 
-	-- TIER 3 (Apex)
-
+	-- TIER 3 (Apex) - Luxury Items
 	StartLevel = {
 		Name = "Born Big",
 		Description = "Start every life at Level 2 instead of Level 1.",
 		Tier = 3,
-		BaseCost = 10000,
-		CostExponent = 2.2,
+		BaseCost = 25000, -- Up from 10000
+		CostExponent = 2.5, -- Up from 2.2
 		Increment = 1,
 		MaxLevel = 1,
 	},
@@ -148,8 +147,8 @@ MetaConfig.Upgrades = {
 		Name = "Critical Strike",
 		Description = "1% chance to deal double damage per level.",
 		Tier = 3,
-		BaseCost = 3000,
-		CostExponent = 2.0,
+		BaseCost = 5000, -- Up from 3000
+		CostExponent = 2.2, -- Up from 2.0
 		Increment = 0.01,
 		MaxLevel = 20,
 	},
@@ -157,19 +156,19 @@ MetaConfig.Upgrades = {
 		Name = "Velocity",
 		Description = "Increases projectile speed by 5% per level.",
 		Tier = 3,
-		BaseCost = 2500,
-		CostExponent = 1.9,
+		BaseCost = 4000, -- Up from 2500
+		CostExponent = 2.0, -- Up from 1.9
 		Increment = 0.05,
 		MaxLevel = 10,
 	},
 
-	-- TIER 4 (Titan)
+	-- TIER 4 (Titan) - End-game aspirations
 	ExplosiveDeath = {
 		Name = "Explosive Demise",
 		Description = "Explode on death, dealing 50% max health damage per level.",
 		Tier = 4,
-		BaseCost = 25000,
-		CostExponent = 2.5,
+		BaseCost = 40000, -- Up from 25000
+		CostExponent = 2.7, -- Up from 2.5
 		Increment = 0.5,
 		MaxLevel = 5,
 	},
@@ -177,8 +176,8 @@ MetaConfig.Upgrades = {
 		Name = "Greed",
 		Description = "1% chance to gain double GXP from kills per level.",
 		Tier = 4,
-		BaseCost = 30000,
-		CostExponent = 2.8,
+		BaseCost = 50000, -- Up from 30000
+		CostExponent = 3.0, -- Up from 2.8
 		Increment = 0.01,
 		MaxLevel = 10,
 	},
