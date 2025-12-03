@@ -131,12 +131,36 @@ local function setupEntity(entity: Model, dataSource: Instance)
 		local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Blaster"):WaitForChild("Remotes")
 		local playerDamagedRemote = remotes:WaitForChild("PlayerDamagedEntity", 10)
 		
+		-- Helper to force UI fully visible instantly
+		local function forceUIVisible()
+			ui.Enabled = true
+			ui.MaxDistance = math.huge
+			
+			-- Force full opacity on all elements immediately
+			for _, child in ipairs(ui:GetDescendants()) do
+				if child:IsA("TextLabel") then
+					child.TextTransparency = 0
+					child.TextStrokeTransparency = 0.3
+				elseif child:IsA("Frame") then
+					if not child:GetAttribute("OriginalTransparency") then
+						child:SetAttribute("OriginalTransparency", child.BackgroundTransparency)
+					end
+					child.BackgroundTransparency = child:GetAttribute("OriginalTransparency")
+				elseif child:IsA("UIStroke") then
+					child.Transparency = 0
+				end
+			end
+		end
+		
 		local damageConnection
 		if playerDamagedRemote then
 			damageConnection = playerDamagedRemote.OnClientEvent:Connect(function(damagedEntity)
 				if damagedEntity == entity then
 					wasDamagedByPlayer = true
 					lastDamageTime = tick()
+					
+					-- IMMEDIATELY enable and show UI - don't wait for Heartbeat
+					forceUIVisible()
 				end
 			end)
 		end
