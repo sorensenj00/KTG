@@ -16,11 +16,13 @@ local ViewModelController = require(Blaster.Scripts.ViewModelController)
 local CharacterAnimationController = require(Blaster.Scripts.CharacterAnimationController)
 local HitmarkerController = require(Blaster.Scripts.HitmarkerController)
 local AudioController = require(Blaster.Audio.AudioController)
+local TutorialController = require(script.Parent.TutorialController)
 local disconnectAndClear = require(ReplicatedStorage.Utility.disconnectAndClear)
 local getRayDirections = require(Blaster.Utility.getRayDirections)
 local drawRayResults = require(Blaster.Utility.drawRayResults)
 local castRays = require(Blaster.Utility.castRays)
 local playSoundFromSource = require(Blaster.Utility.playSoundFromSource)
+
 
 local Player = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
@@ -122,6 +124,7 @@ function BlasterController:_shoot()
 	for _, result in results do
 		if result.taggedHumanoid then
 			didHit = true
+			TutorialController.OnEnemyHit()
 			break
 		end
 	end

@@ -13,18 +13,18 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local DataStoreService = game:GetService("DataStoreService")
+-- local DataStoreService = game:GetService("DataStoreService")
 
 local MetaConfig = require(ReplicatedStorage.GameLoop.MetaConfig)
 
 local MetaProgressionManager = {}
 
 -- Constants
-local DATA_STORE_KEY = "PlayerData_v1"
-local Store = DataStoreService:GetDataStore(DATA_STORE_KEY)
+-- local DATA_STORE_KEY = "PlayerData_v1"
+-- local Store = DataStoreService:GetDataStore(DATA_STORE_KEY)
 
 -- State
--- PlayerMeta[Player] = { DNA = 0, Upgrades = { ["Dense Muscle"] = 0, ... } }
+-- PlayerMeta[Player] = { Upgrades = { ["Dense Muscle"] = 0, ... } }
 local PlayerMeta = {}
 
 -- Draft State: { [Player] = { MutationName1, MutationName2, MutationName3 } }
@@ -61,7 +61,6 @@ HarvestFunc.Name = "Harvest"
 -- Default Data
 local function getDefaultData()
 	return {
-		DNA = 0,
 		Upgrades = {}, -- Dynamic now
 	}
 end
@@ -69,18 +68,8 @@ end
 -- === Internal Logic ===
 
 local function performSave(player)
-	local data = PlayerMeta[player]
-	if not data then
-		return
-	end
-
-	local success, err = pcall(function()
-		Store:SetAsync(player.UserId, data)
-	end)
-
-	if not success then
-		warn("Failed to save data for " .. player.Name .. ": " .. tostring(err))
-	end
+	-- Saving Disabled for session-based gameplay
+	return
 end
 
 local function scheduleSave(player)
@@ -168,63 +157,16 @@ local function updateShopRotation()
 	-- MutationShopEvent:FireAllClients("UpdateTimer", ShopRotation.NextRotationTime)
 end
 
--- === Public API ===
-
 function MetaProgressionManager.Initialize(player)
-	local success, data = pcall(function()
-		return Store:GetAsync(player.UserId)
-	end)
-
-	if success and data then
-		-- Merge with default to handle new fields
-		local default = getDefaultData()
-		for k, v in pairs(default) do
-			if data[k] == nil then
-				data[k] = v
-			end
-		end
-		PlayerMeta[player] = data
-	else
-		PlayerMeta[player] = getDefaultData()
-	end
-
-	-- Set the DNA attribute on the player for UI components that listen to attributes
-	-- This is set immediately so clients can read it via GetAttribute when they start
-	player:SetAttribute("DNA", PlayerMeta[player].DNA)
-
-	-- NOTE: We intentionally do NOT fire UpdateMetaEvent or UpdateMetaStats here.
-	-- The client scripts use RequestMetaData:InvokeServer() to pull initial data,
-	-- which avoids race conditions where FireClient is sent before the client is listening.
-	-- The events are still fired on subsequent updates (AddDNA, purchases, etc.)
+	PlayerMeta[player] = getDefaultData()
+	
+	-- DNA attribute is deprecated, but we keep it at 0 to avoid breaking UI scripts immediately
+	player:SetAttribute("DNA", 0)
 end
 
 function MetaProgressionManager.AddDNA(player, amount)
-	local data = PlayerMeta[player]
-	if not data then
-		return
-	end
-
-	data.DNA = data.DNA + amount
-
-	-- Set DNA attribute for UI listeners
-	player:SetAttribute("DNA", data.DNA)
-
-	-- Fire UpdateMetaEvent (for MutationHUDController)
-	UpdateMetaEvent:FireClient(player, data)
-
-	-- Also fire UpdateMetaStats (for HUDController)
-	task.spawn(function()
-		local blaster = ReplicatedStorage:FindFirstChild("Blaster")
-		if blaster then
-			local remotes = blaster:FindFirstChild("Remotes")
-			if remotes then
-				local updateMetaRemote = remotes:FindFirstChild("UpdateMetaStats")
-				if updateMetaRemote then
-					updateMetaRemote:FireClient(player, data.DNA, data.Upgrades, 0)
-				end
-			end
-		end
-	end)
+	-- DNA is removed in favor of session Biomass
+	return
 end
 
 -- Gacha: Start Draft
@@ -322,8 +264,9 @@ function MetaProgressionManager.SelectMutation(player, index)
 	local currentLevel = data.Upgrades[mutationName] or 0
 	local cost = MetaConfig.GetCost(mutationName, currentLevel)
 
-	if data.DNA < cost then
-		return false, "Not enough DNA"
+	local currentBiomass = player:GetAttribute("Biomass") or 0
+	if currentBiomass < cost then
+		return false, "Not enough Biomass"
 	end
 
 	-- Check if already purchased
@@ -331,9 +274,8 @@ function MetaProgressionManager.SelectMutation(player, index)
 		return false, "Already purchased"
 	end
 
-	-- Deduct Cost
-	data.DNA = data.DNA - cost
-	player:SetAttribute("DNA", data.DNA)
+	-- Deduct Cost from Biomass
+	player:SetAttribute("Biomass", currentBiomass - cost)
 	data.Upgrades[mutationName] = currentLevel + 1
 
 	-- Mark as Purchased
@@ -354,7 +296,7 @@ function MetaProgressionManager.SelectMutation(player, index)
 			if remotes then
 				local updateMetaRemote = remotes:FindFirstChild("UpdateMetaStats")
 				if updateMetaRemote then
-					updateMetaRemote:FireClient(player, data.DNA, data.Upgrades, 0)
+					updateMetaRemote:FireClient(player, data.Upgrades, player:GetAttribute("Biomass") or 0)
 				end
 			end
 		end
@@ -382,13 +324,13 @@ function MetaProgressionManager.PurchaseUpgrade(player, statName)
 	end
 
 	local cost = MetaConfig.GetCost(statName, currentLevel)
-	if data.DNA < cost then
-		return false, "Not enough DNA"
+	local currentBiomass = player:GetAttribute("Biomass") or 0
+	if currentBiomass < cost then
+		return false, "Not enough Biomass"
 	end
 
 	-- Deduct Cost
-	data.DNA = data.DNA - cost
-	player:SetAttribute("DNA", data.DNA)
+	player:SetAttribute("Biomass", currentBiomass - cost)
 
 	-- Increment Level
 	data.Upgrades[statName] = currentLevel + 1
@@ -405,7 +347,7 @@ function MetaProgressionManager.PurchaseUpgrade(player, statName)
 			if remotes then
 				local updateMetaRemote = remotes:FindFirstChild("UpdateMetaStats")
 				if updateMetaRemote then
-					updateMetaRemote:FireClient(player, data.DNA, data.Upgrades, 0)
+					updateMetaRemote:FireClient(player, data.Upgrades, player:GetAttribute("Biomass") or 0)
 				end
 			end
 		end
@@ -442,7 +384,7 @@ function MetaProgressionManager.ResetUpgrades(player)
 			if remotes then
 				local updateMetaRemote = remotes:FindFirstChild("UpdateMetaStats")
 				if updateMetaRemote then
-					updateMetaRemote:FireClient(player, data.DNA, data.Upgrades, 0)
+					updateMetaRemote:FireClient(player, data.Upgrades, player:GetAttribute("Biomass") or 0)
 				end
 			end
 		end
@@ -450,6 +392,15 @@ function MetaProgressionManager.ResetUpgrades(player)
 
 	print(player.Name .. " reset all upgrades")
 	return true
+end
+
+function MetaProgressionManager.ResetMutations(player)
+	local data = PlayerMeta[player]
+	if data then
+		data.Upgrades = {}
+		UpdateMetaEvent:FireClient(player, data)
+		print("🧬 Reset mutations for", player.Name)
+	end
 end
 
 function MetaProgressionManager.GetStatValue(player, statName)
@@ -473,34 +424,12 @@ function MetaProgressionManager.GetStatMultiplier(player, statName)
 end
 
 function MetaProgressionManager.GetDNA(player)
-	return PlayerMeta[player] and PlayerMeta[player].DNA or 0
+	return 0 -- Deprecated
 end
 
 function MetaProgressionManager.Harvest(player)
-	-- Validate Safe Zone
-	if not player:GetAttribute("SafeZone") then
-		return false, "Not in Safe Zone"
-	end
-
-	local biomass = player:GetAttribute("Biomass") or 0
-	if biomass <= 0 then
-		return false, "No Biomass to harvest"
-	end
-
-	-- Conversion Rate: 50% of Biomass converts to DNA (lose all, gain half)
-	local dnaGain = math.floor(biomass * 0.5)
-
-	-- Add DNA
-	MetaProgressionManager.AddDNA(player, dnaGain)
-
-	-- Reset Biomass (lose ALL biomass)
-	player:SetAttribute("Biomass", 0)
-	player:SetAttribute("Level", 1)
-	player:SetAttribute("XP", 0)
-
-	scheduleSave(player)
-
-	return true, "Harvested " .. dnaGain .. " DNA (50% of " .. biomass .. " Biomass)"
+	-- Harvest is disabled for session-based gameplay
+	return false, "Harvest is disabled"
 end
 
 function MetaProgressionManager.Start()
@@ -553,16 +482,16 @@ function MetaProgressionManager.RequestReroll(player)
 	end
 
 	-- Check Cost
-	if data.DNA < MetaConfig.REROLL_COST then
-		return nil, "Not enough DNA"
+	local currentBiomass = player:GetAttribute("Biomass") or 0
+	if currentBiomass < MetaConfig.REROLL_COST then
+		return nil, "Not enough Biomass"
 	end
 
 	-- Store previous draft to exclude from new roll
 	local previousDraft = PlayerDrafts[player] or {}
 
 	-- Deduct Cost
-	data.DNA = data.DNA - MetaConfig.REROLL_COST
-	player:SetAttribute("DNA", data.DNA)
+	player:SetAttribute("Biomass", currentBiomass - MetaConfig.REROLL_COST)
 
 	-- Increment Count
 	ShopRotation.RerollCounts[player.UserId] = rerolls + 1
@@ -700,10 +629,10 @@ task.spawn(function()
 				requestMetaFunc.OnServerInvoke = function(player)
 					local data = PlayerMeta[player]
 					if data then
-						-- Returns (dna, upgrades, biomass, nextRotationTime)
-						return data.DNA, data.Upgrades, 0, ShopRotation.NextRotationTime
+						-- Returns (upgrades, biomass, nextRotationTime)
+						return data.Upgrades, player:GetAttribute("Biomass") or 0, ShopRotation.NextRotationTime
 					end
-					return 0, {}, 0, 0
+					return {}, 0, 0
 				end
 				print("✅ MetaProgressionManager: RequestMetaData handler connected")
 			end

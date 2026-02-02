@@ -3,11 +3,11 @@ local MetaConfig = {}
 -- -- Economy Constants --
 
 -- Biomass (Size/XP) lost on death (Percentage)
-MetaConfig.DEATH_BIOMASS_LOSS_PCT = 0.8 -- Loses 80%
-MetaConfig.DEATH_BIOMASS_CONVERSION_PCT = 0.2 -- Converts 20% to DNA
+MetaConfig.DEATH_BIOMASS_LOSS_PCT = 1.0 -- Loses 100%
+MetaConfig.DEATH_BIOMASS_CONVERSION_PCT = 0 -- Converts 0% to DNA
 
--- DNA (Currency)
-MetaConfig.DNA_PER_KILL = 5 -- Flat DNA bonus per kill (optional small drip)
+-- Biomass (Currency)
+MetaConfig.DNA_PER_KILL = 0 -- Deprecated
 
 -- Import Mutation data from MutationConfig (for backward compatibility)
 -- These are defined in MutationConfig but referenced from MetaConfig in some scripts
@@ -18,12 +18,9 @@ MetaConfig.ROLL_COST = MutationConfig.ROLL_COST
 MetaConfig.REROLL_COST = MutationConfig.REROLL_COST
 
 -- Define Tiers for UI Grouping and Unlocks
--- Unlocks are based on TOTAL LIFETIME DNA EARNED (or Biomass Harvested),
--- but for now we track "Lifetime DNA" or "Highest DNA" for tiers?
--- The user request says "Biomass is converted into DNA".
--- Tiers are likely based on "Total DNA Spent" or "Total DNA Earned".
--- For simplicity, we will use CURRENT DNA (Wallet) or LIFETIME DNA.
--- Let's assume LIFETIME DNA for Tiers to prevent de-leveling when spending.
+-- Unlocks are based on TOTAL LIFETIME BIOMASS EARNED
+-- For simplicity, we will use total earned in session?
+-- Or just UnlockAmount = 0 for now as requested for simplification.
 -- Current code used 'Biomass' as the lifetime stat. We will rename 'Biomass' to 'LifetimeDNA' in logic,
 -- but the config can just say "UnlockAmount".
 

@@ -123,6 +123,10 @@ function YeetCannonController:onSeated(seat)
 	self:createHighlight()
 	self:toggleVisuals(true)
 	self:createViewModel()
+
+	-- Tutorial integration
+	local TutorialController = require(script.Parent.TutorialController)
+	TutorialController.OnYeetCannonEntered()
 end
 
 function YeetCannonController:onUnseated()

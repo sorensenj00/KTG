@@ -249,9 +249,9 @@ function MutationHUDController.Start()
 			if remotes then
 				local reqFunc = remotes:WaitForChild("RequestMetaData", 10)
 				if reqFunc then
-					local dna, upgrades = reqFunc:InvokeServer()
+					local upgrades, biomass = reqFunc:InvokeServer()
 					if upgrades then
-						updateMutationDisplay({ DNA = dna, Upgrades = upgrades })
+						updateMutationDisplay({ Upgrades = upgrades, Biomass = biomass })
 					end
 				end
 			end

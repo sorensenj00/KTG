@@ -140,10 +140,10 @@ local function createCard(name, data, index)
         local remotes = blaster:WaitForChild("Remotes")
         local reqFunc = remotes:WaitForChild("RequestMetaData")
         
-        local dna, upgrades = reqFunc:InvokeServer()
+        local upgrades, _biomass = reqFunc:InvokeServer()
         local lvl = upgrades[name] or 0
         local cost = MetaConfig.GetCost(name, lvl)
-        costLabel.Text = "COST: " .. cost .. " DNA"
+        costLabel.Text = "COST: " .. cost .. " Biomass"
 
         -- Update Level Bar
         local maxLevel = data.MaxLevel or 5
@@ -183,7 +183,9 @@ local function createCard(name, data, index)
 
         
         -- Check affordability
-        if dna < cost then
+        -- Check affordability (using Biomass now)
+        local currentBiomass = player:GetAttribute("Biomass") or 0
+        if currentBiomass < cost then
             costLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
         else
             costLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
@@ -289,7 +291,7 @@ local function createCard(name, data, index)
             
             -- Play Sound? (Optional)
         else
-            -- Failed (e.g. Not enough DNA)
+            -- Failed (e.g. Not enough Biomass)
             warn("Purchase failed:", msg)
         end
     end)
@@ -314,7 +316,7 @@ function MutationShopController.Open()
     end
 
     if not draft then
-        -- Notify "Not enough DNA" or error
+        -- Notify "Not enough Biomass" or error
         return false
     end
 
@@ -447,7 +449,7 @@ function MutationShopController.Start()
     -- Reroll Button
     local rerollButton = Instance.new("TextButton")
     rerollButton.Name = "RerollButton"
-    rerollButton.Text = "REROLL (250 DNA)"
+    rerollButton.Text = "REROLL (250 Biomass)"
     rerollButton.Size = UDim2.new(0, 150, 0, 30)
     rerollButton.Position = UDim2.new(0.5, 0, 0.92, 0) -- Bottom Center
     rerollButton.AnchorPoint = Vector2.new(0.5, 0)
@@ -483,17 +485,17 @@ function MutationShopController.Start()
             end
             
             if rerolls then currentRerolls = rerolls end
-            rerollButton.Text = "REROLL (250 DNA) [" .. currentRerolls .. "/3]"
+            rerollButton.Text = "REROLL (250 Biomass) [" .. currentRerolls .. "/3]"
             
             if currentRerolls >= MAX_REROLLS then
                 rerollButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
                 rerollButton.Text = "NO REROLLS LEFT"
             end
         else
-            -- Failed (No DNA?)
-            rerollButton.Text = "NOT ENOUGH DNA"
+            -- Failed (No Biomass?)
+            rerollButton.Text = "NOT ENOUGH BIOMASS"
             task.wait(1)
-            rerollButton.Text = "REROLL (250 DNA) [" .. currentRerolls .. "/3]"
+            rerollButton.Text = "REROLL (250 Biomass) [" .. currentRerolls .. "/3]"
         end
     end)
 
@@ -512,7 +514,7 @@ function MutationShopController.Start()
             
             -- Update Reroll Text
             if currentRerolls < MAX_REROLLS then
-                 rerollButton.Text = "REROLL (250 DNA) [" .. currentRerolls .. "/3]"
+                 rerollButton.Text = "REROLL (250 Biomass) [" .. currentRerolls .. "/3]"
                  rerollButton.BackgroundColor3 = Color3.fromRGB(255, 100, 50)
             else
                  rerollButton.Text = "NO REROLLS LEFT"

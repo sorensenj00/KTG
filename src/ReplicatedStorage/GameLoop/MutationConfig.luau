@@ -230,7 +230,7 @@ function MutationConfig.GetUpgradeCost(rarity, currentLevel)
     return math.floor(base * targetLevel)
 end
 
-MutationConfig.REROLL_COST = 250 -- DNA per reroll
+MutationConfig.REROLL_COST = 250 -- Biomass per reroll
 MutationConfig.ROLL_COST = 0 -- Initial roll is free (viewing shop)
 
 return MutationConfig

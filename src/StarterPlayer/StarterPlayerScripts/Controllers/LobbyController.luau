@@ -280,7 +280,7 @@ function LobbyController.Start()
 		statsFrame.Parent = screenGui
 
 		local statsLabels = {}
-		local statNames = { "BIOMASS", "DNA", "KILLS" }
+		local statNames = { "BIOMASS", "KILLS" }
 
 		for i, statName in ipairs(statNames) do
 			local label = Instance.new("TextLabel")
@@ -313,7 +313,7 @@ function LobbyController.Start()
 
 		-- Listen for attribute changes
 		player.AttributeChanged:Connect(function(attr)
-			if attr == "Biomass" or attr == "DNA" or attr == "Kills" then
+			if attr == "Biomass" or attr == "Kills" then
 				updateStats()
 			end
 		end)
@@ -327,9 +327,9 @@ function LobbyController.Start()
 			if remotes then
 				local reqRemote = remotes:WaitForChild("RequestMetaData", 10)
 				if reqRemote then
-					local dna, _upgrades, _biomass = reqRemote:InvokeServer()
-					if dna then
-						statsLabels["DNA"].Text = "DNA: " .. math.floor(dna)
+					local _upgrades, biomass = reqRemote:InvokeServer()
+					if biomass then
+						statsLabels["BIOMASS"].Text = "BIOMASS: " .. math.floor(biomass)
 					end
 				end
 			end
@@ -376,12 +376,11 @@ function LobbyController.Start()
 		howToPlayTitle.Parent = howToPlayFrame
 
 		local tipsList = {
-			"🔹 Pick up orbs to sustain yourself",
-			"🔹 Hunt players & bots for real Biomass gains",
-			"🔹 Buy Mutations in the shop to get stronger",
-			"🔹 Reach Level 50 to WIN and earn a huge DNA",
-			"🔹 Use Yeetcannons around the map to get yeeted!",
-			"🔹 DNA and Mutations persist between sessions!",
+			"🔹 Collect Biomass to Grow Your Character",
+			"🔹 Hunt bots & players for massive Biomass gains",
+			"🔹 Use your Biomass to evolve with Mutations",
+			"🔹 Reach Level 50 and defeat the map to WIN",
+			"🔹 All progress resets on death — grow fast!",
 		}
 
 		for i, tip in ipairs(tipsList) do

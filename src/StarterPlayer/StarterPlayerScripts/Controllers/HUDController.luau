@@ -19,6 +19,7 @@ function HUDController.Start()
 	local MetaConfig = require(ReplicatedStorage.GameLoop.MetaConfig)
 	local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
 	local MutationShopController = require(script.Parent.MutationShopController)
+	local TutorialController = require(script.Parent.TutorialController)
 
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
@@ -133,11 +134,10 @@ function HUDController.Start()
 	}
 
 	-- --- State --- --
-	local currentDNA = 0
-	local previousDNA = 0
 	local currentBiomass = 0
 	local currentUpgrades = {}
 	local currentMagazineSize = 0
+	local hud = nil
 
 	-- --- HUD Creation --- --
 	-- Shop UI element cache (100x faster updates)
@@ -178,25 +178,13 @@ function HUDController.Start()
 		sizeLabel.TextStrokeTransparency = 0
 		sizeLabel.Parent = topBar
 
-		-- DNA Label (Under Biomass)
-		local dnaLabel = Instance.new("TextLabel")
-		dnaLabel.Name = "DNALabel"
-		dnaLabel.Size = UDim2.new(0, 200, 0, 20)
-		dnaLabel.Position = UDim2.new(0, 10, 0, 30)
-		dnaLabel.BackgroundTransparency = 1
-		dnaLabel.Text = "DNA: 0"
-		dnaLabel.TextColor3 = COLORS.XP_GOLD
-		dnaLabel.TextSize = 18
-		dnaLabel.Font = Enum.Font.GothamBold
-		dnaLabel.TextXAlignment = Enum.TextXAlignment.Left
-		dnaLabel.TextStrokeTransparency = 0.5
-		dnaLabel.Parent = topBar
+		-- Removed DNALabel (Now uses Biomass for everything)
 
-		-- Kills Label (Under DNA)
+		-- Kills Label (Under Size)
 		local killsLabel = Instance.new("TextLabel")
 		killsLabel.Name = "KillsLabel"
 		killsLabel.Size = UDim2.new(0, 200, 0, 20)
-		killsLabel.Position = UDim2.new(0, 10, 0, 50)
+		killsLabel.Position = UDim2.new(0, 10, 0, 30)
 		killsLabel.BackgroundTransparency = 1
 		killsLabel.Text = "KILLS: 0"
 		killsLabel.TextColor3 = ARCADE_THEME.ACCENT_ORANGE
@@ -205,6 +193,26 @@ function HUDController.Start()
 		killsLabel.TextXAlignment = Enum.TextXAlignment.Left
 		killsLabel.TextStrokeTransparency = 0.5
 		killsLabel.Parent = topBar
+
+		-- Mutation Lab Button (For Mobile/Easy Access)
+		local labButton = Instance.new("TextButton")
+		labButton.Name = "LabButton"
+		labButton.Size = UDim2.new(0, 150, 0, 40)
+		labButton.Position = UDim2.new(1, -160, 0, 10)
+		labButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+		labButton.Text = "MUTATION LAB"
+		labButton.TextColor3 = Color3.new(1, 1, 1)
+		labButton.Font = Enum.Font.GothamBlack
+		labButton.TextSize = 16
+		labButton.Parent = screenGui
+
+		local labCorner = Instance.new("UICorner")
+		labCorner.CornerRadius = UDim.new(0, 8)
+		labCorner.Parent = labButton
+
+		labButton.MouseButton1Click:Connect(function()
+			MutationShopController.Open()
+		end)
 
 		-- ============================================
 		-- 0b. Stats (Without Mutations)
@@ -414,7 +422,7 @@ function HUDController.Start()
 		xpPopupText.Name = "XPPopupText"
 		xpPopupText.Size = UDim2.fromScale(1, 1)
 		xpPopupText.BackgroundTransparency = 1
-		xpPopupText.Text = "+0 DNA"
+		xpPopupText.Text = "+0 Biomass"
 		xpPopupText.TextColor3 = COLORS.XP_GOLD
 		xpPopupText.TextSize = 32
 		xpPopupText.Font = Enum.Font.GothamBold
@@ -484,20 +492,6 @@ function HUDController.Start()
 		biomassLostLabel.TextXAlignment = Enum.TextXAlignment.Left
 		biomassLostLabel.Parent = deathSummaryFrame
 
-		-- Earned DNA Label
-		local earnedDNALabel = Instance.new("TextLabel")
-		earnedDNALabel.Name = "EarnedDNALabel"
-		earnedDNALabel.Size = UDim2.new(1, -20, 0, 50)
-		earnedDNALabel.Position = UDim2.fromOffset(10, 150)
-		earnedDNALabel.BackgroundTransparency = 1
-		earnedDNALabel.Text = "CONVERTED: +0 DNA"
-		earnedDNALabel.TextColor3 = COLORS.XP_GOLD
-		earnedDNALabel.TextSize = 24
-		earnedDNALabel.Font = Enum.Font.GothamBold
-		earnedDNALabel.TextStrokeTransparency = 0.3
-		earnedDNALabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-		earnedDNALabel.TextXAlignment = Enum.TextXAlignment.Center
-		earnedDNALabel.Parent = deathSummaryFrame
 
 		-- OK Button
 		local okButton = Instance.new("TextButton")
@@ -537,51 +531,7 @@ function HUDController.Start()
 		respawnButton.Visible = false
 		-- Parent will be set to ShopMainFrame later
 
-		-- ============================================
-		-- 4c. HARVEST BUTTON (Safe Zone)
-		-- ============================================
-		local harvestButton = Instance.new("TextButton")
-		harvestButton.Name = "HarvestButton"
-		harvestButton.Size = UDim2.fromOffset(250, 80)
-		harvestButton.Position = UDim2.fromScale(0.5, 0.7)
-		harvestButton.AnchorPoint = Vector2.new(0.5, 0.5)
-		harvestButton.BackgroundColor3 = COLORS.BUTTON_GREEN
-		harvestButton.Visible = false -- Hidden until Safe
-		harvestButton.Text = ""
-		harvestButton.Parent = screenGui
-
-		local harvestCorner = Instance.new("UICorner")
-		harvestCorner.CornerRadius = UDim.new(0, 10)
-		harvestCorner.Parent = harvestButton
-
-		local harvestStroke = Instance.new("UIStroke")
-		harvestStroke.Color = Color3.fromRGB(200, 255, 200)
-		harvestStroke.Thickness = 3
-		harvestStroke.Parent = harvestButton
-
-		local harvestTitle = Instance.new("TextLabel")
-		harvestTitle.Name = "Title"
-		harvestTitle.Size = UDim2.new(1, 0, 0, 40)
-		harvestTitle.Position = UDim2.new(0, 0, 0, 5)
-		harvestTitle.BackgroundTransparency = 1
-		harvestTitle.Text = "PRESS H TO HARVEST"
-		harvestTitle.TextColor3 = ARCADE_THEME.TEXT_WHITE
-		harvestTitle.TextSize = 24
-		harvestTitle.Font = Enum.Font.GothamBlack
-		harvestTitle.TextStrokeTransparency = 0.5
-		harvestTitle.Parent = harvestButton
-
-		local harvestDesc = Instance.new("TextLabel")
-		harvestDesc.Name = "Desc"
-		harvestDesc.Size = UDim2.new(1, 0, 0, 30)
-		harvestDesc.Position = UDim2.new(0, 0, 0, 45)
-		harvestDesc.BackgroundTransparency = 1
-		harvestDesc.Text = "Convert Biomass to DNA"
-		harvestDesc.TextColor3 = Color3.fromRGB(200, 255, 200)
-		harvestDesc.TextSize = 16
-		harvestDesc.Font = Enum.Font.GothamBold
-		harvestDesc.TextStrokeTransparency = 0.5
-		harvestDesc.Parent = harvestButton
+		-- Removed Harvest Button
 
 		--bindButtonSounds(harvestButton, true)
 
@@ -704,7 +654,6 @@ function HUDController.Start()
 			ScreenGui = screenGui,
 			-- Top Widget
 			SizeLabel = sizeLabel,
-			DNALabel = dnaLabel,
 			KillsLabel = killsLabel,
 
 			-- Stats Widget
@@ -737,15 +686,83 @@ function HUDController.Start()
 			DeathTitle = deathTitle,
 			KillsStatLabel = killsStatLabel,
 			BiomassLostLabel = biomassLostLabel,
-			EarnedDNALabel = earnedDNALabel,
 			OKButton = okButton,
-			HarvestButton = harvestButton,
-			HarvestDesc = harvestDesc,
 		}
 	end
 
+	-- --- Tutorial UI --- --
+	local function createTutorialUI(screenGui)
+		local frame = Instance.new("Frame")
+		frame.Name = "TutorialFrame"
+		frame.Size = UDim2.new(0, 300, 0, 100)
+		frame.Position = UDim2.new(0, 20, 0.5, -50)
+		frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		frame.BackgroundTransparency = 0.5
+		frame.BorderSizePixel = 0
+		frame.Visible = false
+		frame.Parent = screenGui
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = frame
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = ARCADE_THEME.ACCENT_ORANGE
+		stroke.Thickness = 2
+		stroke.Parent = frame
+
+		local title = Instance.new("TextLabel")
+		title.Name = "Title"
+		title.Size = UDim2.new(1, 0, 0, 30)
+		title.Position = UDim2.new(0, 0, 0, 5)
+		title.BackgroundTransparency = 1
+		title.Text = "MISSION"
+		title.TextColor3 = ARCADE_THEME.ACCENT_ORANGE
+		title.TextSize = 18
+		title.Font = Enum.Font.GothamBlack
+		title.Parent = frame
+
+		local description = Instance.new("TextLabel")
+		description.Name = "Description"
+		description.Size = UDim2.new(1, -20, 1, -40)
+		description.Position = UDim2.new(0, 10, 0, 35)
+		description.BackgroundTransparency = 1
+		description.Text = "Tutorial Mission Text"
+		description.TextColor3 = Color3.new(1, 1, 1)
+		description.TextSize = 16
+		description.Font = Enum.Font.GothamBold
+		description.TextWrapped = true
+		description.Parent = frame
+
+		return frame, description
+	end
+
 	-- Initialize HUD
-	local hud = createHUD()
+	hud = createHUD()
+
+	-- Initialize Tutorial UI
+	local tutorialFrame, tutorialLabel = createTutorialUI(hud.ScreenGui)
+
+	function HUDController.SetTutorialText(text)
+		if text == "" then
+			tutorialFrame.Visible = false
+		else
+			tutorialLabel.Text = text
+			tutorialFrame.Visible = true
+			
+			-- Subtle animation
+			tutorialFrame.Size = UDim2.new(0, 310, 0, 110)
+			TweenService:Create(tutorialFrame, TweenInfo.new(0.5, Enum.EasingStyle.Elastic), {
+				Size = UDim2.new(0, 300, 0, 100)
+			}):Play()
+		end
+	end
+
+	function HUDController.GetButton(name: string)
+		return hud[name]
+	end
+
+	TutorialController.Init(HUDController)
 
 	-- --- Shop Creation Functions --- --
 
@@ -789,7 +806,7 @@ function HUDController.Start()
 		tierNameLabel.Size = UDim2.new(1, -20, 1, 0)
 		tierNameLabel.Position = UDim2.new(0, 10, 0, 0)
 		tierNameLabel.BackgroundTransparency = 1
-		tierNameLabel.Text = tierData.Name .. " (Req: " .. tierData.UnlockAmount .. " DNA)"
+		tierNameLabel.Text = tierData.Name .. " (Req: " .. tierData.UnlockAmount .. " Biomass)"
 		tierNameLabel.TextColor3 = ARCADE_THEME.TEXT_WHITE
 		tierNameLabel.TextSize = 18
 		tierNameLabel.Font = Enum.Font.GothamBold
@@ -931,7 +948,7 @@ function HUDController.Start()
 		costLabel.Size = UDim2.new(1, 0, 0, 15)
 		costLabel.Position = UDim2.new(0, 0, 0, 15)
 		costLabel.BackgroundTransparency = 1
-		costLabel.Text = "100 DNA"
+		costLabel.Text = "100 Biomass"
 		costLabel.TextColor3 = COLORS.XP_GOLD
 		costLabel.TextSize = 16
 		costLabel.Font = Enum.Font.GothamBold
@@ -977,6 +994,7 @@ function HUDController.Start()
 			if purchaseUpgradeRemote then
 				local success, _message = purchaseUpgradeRemote:InvokeServer(statName)
 				if success then
+					TutorialController.OnMutationPurchased()
 					playSound(SOUNDS.Purchase)
 
 					-- Immediate Local Update (Optimistic)
@@ -999,7 +1017,7 @@ function HUDController.Start()
 						purchaseButton.Text = "MAXED"
 						purchaseButton.Active = false
 					else
-						costLabel.Text = string.format("%d DNA", math.floor(nextCost))
+						costLabel.Text = string.format("%d Biomass", math.floor(nextCost))
 						-- Button state will be re-evaluated on next updateShopUI or we can do it here
 						-- But simpler to just let the loop or next update handle the button color/active state based on DNA
 						-- For now, just update the text/bar which is the visual feedback requested.
@@ -1092,7 +1110,7 @@ function HUDController.Start()
 				if level >= upgradeConfig.MaxLevel then
 					cached.costLabel.Text = "MAX"
 				else
-					cached.costLabel.Text = string.format("%d DNA", math.floor(cost))
+					cached.costLabel.Text = string.format("%d Biomass", math.floor(cost))
 				end
 			end
 
@@ -1110,7 +1128,7 @@ function HUDController.Start()
 						cached.purchaseButton.BackgroundColor3 = COLORS.XP_GOLD
 						cached.purchaseButton.Text = "MAXED"
 						cached.purchaseButton.Active = false
-					elseif currentDNA >= cost then
+					elseif (player:GetAttribute("Biomass") or 0) >= cost then
 						cached.purchaseButton.BackgroundColor3 = COLORS.BUTTON_GREEN
 						cached.purchaseButton.Text = "UPGRADE"
 						cached.purchaseButton.Active = true
@@ -1149,12 +1167,12 @@ function HUDController.Start()
 	end
 
 	-- --- XP Popup Function --- --
-	local function showXPPopup(amount: number, isDNA: boolean?)
-		isDNA = isDNA or false
-		local prefix = if isDNA then "DNA" else "Biomass"
-		local color = if isDNA then COLORS.XP_GOLD else COLORS.XP_ORANGE
+	local function showXPPopup(amount: number)
+		local prefix = "Biomass"
+		local color = COLORS.XP_ORANGE
 
 		hud.XPPopupText.Text = string.format("+%d %s", amount, prefix)
+		TutorialController.OnOrbCollected()
 		hud.XPPopupText.TextColor3 = color
 		hud.XPPopup.Visible = true
 		hud.XPPopup.Position = UDim2.fromScale(0.5, 0.3)
@@ -1200,6 +1218,7 @@ function HUDController.Start()
 			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 			UserInputService.MouseIconEnabled = true
 			setUIInputSink(true)
+			TutorialController.OnShopOpened()
 			updateShopUI()
 
 			-- Enforce mouse unlock every frame to prevent other scripts from locking it
@@ -1266,7 +1285,7 @@ function HUDController.Start()
 			local originalText = hud.MutationsButton.Text
 			local originalColor = hud.MutationsButton.BackgroundColor3
 
-			hud.MutationsButton.Text = "NEED 250 DNA"
+			hud.MutationsButton.Text = "NEED 250 BIOMASS"
 			hud.MutationsButton.BackgroundColor3 = COLORS.BUTTON_RED
 
 			task.delay(1.5, function()
@@ -1404,90 +1423,23 @@ function HUDController.Start()
 		hud.AmmoLabel.Text = ammoText
 	end
 
-	-- Harvest Button Logic
-	local function updateHarvestButton()
-		local isSafe = player:GetAttribute("SafeZone") == true
-		hud.HarvestButton.Visible = isSafe
+		-- Removed updateHarvestButton
 
-		if isSafe then
-			-- Update text with current potential
-			local potentialDNA = math.floor(player:GetAttribute("Biomass") or 0)
-			hud.HarvestDesc.Text = "Convert Biomass to " .. potentialDNA .. " DNA"
-		end
-	end
-
-	-- Harvest Logic
-	local harvestDebounce = false
-	local function tryHarvest()
-		print("DEBUG: tryHarvest called")
-		if harvestDebounce then
-			print("DEBUG: Harvest debounced")
-			return
-		end
-
-		-- Client-side check: Must be in Safe Zone
-		local isSafe = player:GetAttribute("SafeZone")
-		print("DEBUG: SafeZone attribute:", isSafe)
-
-		if isSafe ~= true then
-			print("DEBUG: Not in Safe Zone (Attribute is " .. tostring(isSafe) .. ")")
-			return
-		end
-
-		harvestDebounce = true
-		print("DEBUG: Invoking Harvest remote...")
-
-		local remotes = ReplicatedStorage:WaitForChild("Blaster"):WaitForChild("Remotes", 10)
-		local harvestRemote = remotes and remotes:FindFirstChild("Harvest")
-
-		if harvestRemote then
-			local success, msg = harvestRemote:InvokeServer()
-			print("DEBUG: Harvest result:", success, msg)
-			if success then
-				playSound(SOUNDS.Purchase)
-			-- UI will update via attribute signals
-			else
-				warn("Harvest Failed:", msg)
-				playSound(SOUNDS.Error)
-			end
-		else
-			warn("DEBUG: Harvest remote not found!")
-		end
-
-		task.wait(1)
-		harvestDebounce = false
-	end
-
-	hud.HarvestButton.MouseButton1Click:Connect(tryHarvest)
-
-	-- Bind H key for harvesting
-	ContextActionService:BindAction("HarvestAction", function(_, inputState)
-		if inputState == Enum.UserInputState.Begin then
-			print("DEBUG: H key pressed")
-			tryHarvest()
-		end
-	end, false, Enum.KeyCode.H)
+	-- Removed tryHarvest
 
 	-- Meta Stats Update (from Server)
-	local function updateMetaStats(dna, upgrades, biomass)
-		previousDNA = currentDNA
-		currentDNA = dna or 0
-		currentBiomass = biomass or 0 -- This is Lifetime Biomass (Unlock Progress)
+	local function updateMetaStats(upgrades, biomass)
+		local gained = biomass - currentBiomass
+		currentBiomass = biomass or 0
 		currentUpgrades = upgrades or {}
 
-		if currentDNA > previousDNA then
-			local gained = currentDNA - previousDNA
-			if gained > 0 then
-				showXPPopup(gained, true)
-			end
+		if gained > 0 then
+			showXPPopup(gained)
 		end
 
-		if hud.ShopMainFrame.Visible then
+		if hud and hud.ShopMainFrame and hud.ShopMainFrame.Visible then
 			updateShopUI()
 		end
-
-		-- Update DNA Panel
-		hud.DNALabel.Text = "DNA: " .. tostring(math.floor(currentDNA))
 	end
 
 	-- --- Connections --- --
@@ -1515,7 +1467,7 @@ function HUDController.Start()
 		-- Initial Updates
 		updateXP()
 		updateKills()
-		updateHarvestButton()
+		-- updateHarvestButton removed
 
 		-- Connect Signals
 		-- Note: Attributes are on the Player, so these signals persist across characters,
@@ -1527,7 +1479,6 @@ function HUDController.Start()
 	-- Attribute Listeners (Persistent on Player)
 	player:GetAttributeChangedSignal("Biomass"):Connect(function()
 		updateXP()
-		updateHarvestButton()
 	end)
 
 	player:GetAttributeChangedSignal("Level"):Connect(function()
@@ -1546,12 +1497,7 @@ function HUDController.Start()
 	end)
 
 	player:GetAttributeChangedSignal("Kills"):Connect(updateKills)
-	player:GetAttributeChangedSignal("SafeZone"):Connect(updateHarvestButton)
-	player:GetAttributeChangedSignal("DNA"):Connect(function()
-		local dna = player:GetAttribute("DNA") or 0
-		hud.DNALabel.Text = "DNA: " .. math.floor(dna)
-		currentDNA = dna
-	end)
+	-- Removed SafeZone and DNA listeners
 
 	-- Tool Connections
 	local function onChildAdded(child)
@@ -1589,7 +1535,6 @@ function HUDController.Start()
 	if updateMetaRemote then
 		updateMetaRemote.OnClientEvent:Connect(updateMetaStats)
 	end
-
 	local showDeathSummaryRemote = remotes:WaitForChild("ShowDeathSummary", 10)
 	if showDeathSummaryRemote then
 		showDeathSummaryRemote.OnClientEvent:Connect(function(_sessionKills, _biomassLost, _earnedDNA)
@@ -1619,20 +1564,8 @@ function HUDController.Start()
 		setShopState(false, false)
 	end)
 
-	task.spawn(function()
-		local reqRemote = remotes:WaitForChild("RequestMetaData", 10)
-		if reqRemote then
-			local dna, upgrades, biomass = reqRemote:InvokeServer()
-			updateMetaStats(dna, upgrades, biomass)
-		end
-
-		-- Also read DNA attribute directly as backup (in case it's set but remote hasn't fired)
-		local attrDNA = player:GetAttribute("DNA")
-		if attrDNA and attrDNA > 0 then
-			hud.DNALabel.Text = "DNA: " .. math.floor(attrDNA)
-			currentDNA = attrDNA
-		end
-	end)
+	-- Start Tutorial
+	TutorialController.Start()
 
 	print("✅ HUDController: Started")
 end

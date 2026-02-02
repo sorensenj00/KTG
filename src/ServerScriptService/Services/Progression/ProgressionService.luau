@@ -184,6 +184,20 @@ local function getLevelFromBiomass(totalBiomass: number): number
 	return level
 end
 
+-- Public API: Reset Stats (Call on death)
+function ProgressionManager.ResetStats(target: Instance)
+	target:SetAttribute("Biomass", 0)
+	target:SetAttribute("Level", 1)
+	target:SetAttribute("XP", 0) -- For legacy compatibility
+	
+	-- If it's a player, also reset mutations in MetaProgressionService
+	if target:IsA("Player") and getMeta() then
+		getMeta().ResetMutations(target)
+	end
+	
+	print("♻️ Reset stats for", target.Name)
+end
+
 -- Public API: Add Biomass (Formerly XP)
 -- NOTE: Biomass is cumulative and NOT consumed on level up.
 -- Biomass only changes on harvest (gain) or death (lose).
@@ -346,7 +360,10 @@ function ProgressionManager.Start()
                         end
                     end
 					
-					print(string.format("⚔️ %s killed %s! (+%d Biomass Direct, +%d Biomass Orbs)", 
+					-- FULL RESET FOR VICTIM
+					ProgressionManager.ResetStats(victim)
+					
+					print(string.format("⚔️ %s killed %s! (+%d Biomass Direct, +%d Biomass Orbs). Victim Reset.", 
 						killer.Name, victim.Name, directBiomass, dropBiomass))
 				end
 			end)

@@ -12,7 +12,7 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local ScalingConfig = require(ReplicatedStorage.GameLoop.ScalingConfig)
-local SafeZoneConfig = require(ReplicatedStorage.GameLoop.SafeZoneConfig)
+-- Removed SafeZoneConfig
 local DamageTracker = require(ServerScriptService.Services.World.DamageTrackerService)
 local castRays = require(ServerScriptService.Utility.castRays)
 local ProgressionManager = require(ServerScriptService.Services.Progression.ProgressionService)
@@ -116,7 +116,8 @@ local function findEnemy(bot, range)
 	end
 	local best = nil
 	local bestDist = range
-	for _, other in CollectionService:GetTagged("BotAI") do
+	-- Check for bots
+	for _, other in ipairs(CollectionService:GetTagged("BotAI")) do
 		if other ~= bot and isValidTarget(other) then
 			local otherRoot = other.PrimaryPart
 			if otherRoot then
@@ -128,22 +129,26 @@ local function findEnemy(bot, range)
 			end
 		end
 	end
+
+	-- Check for players
+	for _, player in ipairs(Players:GetPlayers()) do
+		local char = player.Character
+		if char and isValidTarget(char) then
+			local otherRoot = char.PrimaryPart
+			if otherRoot then
+				local d = (otherRoot.Position - root.Position).Magnitude
+				if d < bestDist then
+					best = char
+					bestDist = d
+				end
+			end
+		end
+	end
+
 	return best
 end
 
-local function inSafeZone(pos)
-	for _, zone in SafeZoneConfig.SAFE_ZONE_LOCATIONS do
-		local size = SafeZoneConfig.SAFE_ZONE_SIZE
-		if math.abs(pos.X - zone.X) <= size.X / 2 and math.abs(pos.Z - zone.Z) <= size.Z / 2 then
-			local dir = Vector3.new(pos.X - zone.X, 0, pos.Z - zone.Z)
-			if dir.Magnitude < 1 then
-				dir = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5)
-			end
-			return pos + dir.Unit * (math.max(size.X, size.Z) / 2 + 50)
-		end
-	end
-	return nil
-end
+-- Removed inSafeZone helper
 
 local function pickWanderDest(bot)
 	local root = bot.PrimaryPart
@@ -457,15 +462,7 @@ function BotController.Start()
 				end
 			end
 
-			-- Safe zone escape
-			local escape = inSafeZone(root.Position)
-			if escape then
-				moveToward(bot, s, escape, false)
-				s.mode = "WANDER"
-				s.target = nil
-				s.wanderDest = escape
-				continue
-			end
+-- Removed Safe zone escape
 
 			-- Combat: continue if valid
 			if s.mode == "COMBAT" and isValidTarget(s.target) then
